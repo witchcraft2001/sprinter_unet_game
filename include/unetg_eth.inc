@@ -69,13 +69,9 @@ L4_IN_SCRATCH	EQU	30
 RX_HDR_BYTES	EQU	64
 NIC_CHUNK	EQU	40		; largest card transfer per DI portion (DI < 200 us)
 
-; Engine state in ctx.hwsm (IX-relative)
-HS_PHASE	EQU	0	; u8  card bring-up phase (card specific)
-HS_STEP		EQU	1	; u8  sub-step / table index
-HS_CNT		EQU	2	; u8  counter of the current sub-step
+; Engine state in ctx.hwsm (IX-relative); shared fields in unetg_hwsm.inc
+	INCLUDE	"unetg_hwsm.inc"
 HS_LFSR		EQU	3	; u8  3C509B ID sequence value
-HS_DL		EQU	4	; u32 deadline of the current wait
-HS_IO		EQU	8	; u16 0xC000 + io_base
 HS_MAC		EQU	10	; u8[6] station address
 HS_RXS		EQU	16	; u8  RX pipeline state (ERX_*)
 HS_RXLEN	EQU	17	; u16 frame length reported by the card
@@ -94,15 +90,13 @@ HS_TXKIND	EQU	39	; u8  ETK_*: who asked for the frame
 HS_WIN		EQU	40	; u8  3C509B: selected register window
 HS_RXSEG	EQU	41	; u16 transport segment length
 HS_TMP		EQU	43	; u16 card scratch
-HS_RES		EQU	45	; u8  result of the last portion
 HS_NOCHK	EQU	46	; u8  1: segment without checksum (UDP checksum 0)
 HS_PAR		EQU	47	; u8  1: the next segment byte has an odd offset
-HS_BDL		EQU	48	; u32 deadline of the whole bring-up
 HS_TXHSRC	EQU	52	; u16 header source of the frame being sent
 HS_RXPROTO	EQU	54	; u8  IPv4 protocol of the frame being received
 HS_NEXTPG	EQU	55	; u8  RTL8019AS: next-page field of the frame being read
 HS_SIZE		EQU	56
-	ASSERT	HS_SIZE <= 56
+	ASSERT	HS_SIZE <= HWSM_BYTES
 
 ERX_IDLE	EQU	0
 ERX_HDR		EQU	1	; header in scratch, not classified

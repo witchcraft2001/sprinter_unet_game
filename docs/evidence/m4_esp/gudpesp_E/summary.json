@@ -1,0 +1,37 @@
+{
+  "dll": "gudpesp",
+  "scenario": "E echo 300 bytes",
+  "wall_s": 4.3,
+  "info": {
+    "min_useful_budget_us": 500,
+    "empty_poll_us": 135,
+    "bus_busy_us": 80
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 159,
+    "steps_total": 288,
+    "steps_useful": 288,
+    "budget_yields": 266,
+    "max_step_gap_ms": 20,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.653,
+  "step": {
+    "max_us": 1215,
+    "mean_us": 884,
+    "steps": 288,
+    "over_budget": 288
+  },
+  "trivial_call_us": 179
+}

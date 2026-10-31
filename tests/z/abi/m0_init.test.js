@@ -191,7 +191,8 @@ for (const dll of DLLS) {
   if (hw === 'EL3') bad.push(['ID port 0x210', (c) => { c.id_port = 0x210; }], ['ID port 0x118', (c) => { c.id_port = 0x118; }]);
   if (hw === 'ESP') {
     bad.push(['UART divisor 0', (c) => { c.uart_divisor = 0; }], ['ESP-AT 2.2.1 profile', (c) => { c.esp_fw = 2; }],
-      ['FIFO trigger 5', (c) => { c.uart_rx_trigger = 5; }], ['ring 511 bytes', (c) => { c.hw_ring_len = 511; }]);
+      ['FIFO trigger 5', (c) => { c.uart_rx_trigger = 5; }], ['ring 511 bytes', (c) => { c.hw_ring_len = 511; }],
+      ['no UART ring (pointer 0)', (c) => { c.hw_ring_ptr = 0; }]);
   }
   if (hw !== 'LOOP' && s_transport(dll) === 'TCP') bad.push(['UDP on a TCP build', (c) => { c.transport = C.transport.UDP; }]);
   if (s_transport(dll) === 'UDP') bad.push(['TCP on a UDP build', (c) => { c.transport = C.transport.TCP; }]);

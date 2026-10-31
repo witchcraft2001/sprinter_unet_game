@@ -85,7 +85,11 @@ PROF_CPU_KHZ		EQU	21000
 	IFDEF	UGB_HW_LOOP
 PROF_STEP_BASE_US	EQU	140
 	ELSE
+	IFDEF	UGB_HW_ESP
+PROF_STEP_BASE_US	EQU	190	; ESP: no ARP / TCP timers (stand: "needed base reserve")
+	ELSE
 PROF_STEP_BASE_US	EQU	220
+	ENDIF
 	ENDIF
 ; A useful STEP must afford the fixed path plus the most expensive
 ; indivisible item, otherwise a pipeline waiting for that item never moves
@@ -102,7 +106,7 @@ PROF_MAX_ITEM_US	EQU	250	; COST_TX_BEGIN; UDP idle step + template (80 + 170)
 	IFDEF	UGB_HW_LOOP
 PROF_MAX_ITEM_US	EQU	210	; COST_LOOP_ITER + COST_LOOP_FIXED + a 16-byte portion
 	ELSE
-PROF_MAX_ITEM_US	EQU	100	; ESP: revised with its transport (M4)
+PROF_MAX_ITEM_US	EQU	300	; ESP: transport entry + job start + first command piece (90 + 70 + 140)
 	ENDIF
 	ENDIF
 PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + PROF_MAX_ITEM_US + PROF_MIN_RETURN_US
@@ -110,10 +114,10 @@ PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + PROF_MAX_ITEM_US + PROF_MIN_RETURN_US
 ; refused try-lock 73..76 us in all.  These miss the ТЗ §5.1 targets (empty
 ; poll <= 100 us, BUS_BUSY <= 25 us); they are published as measured.
 PROF_ISR_BASE_US	EQU	65	; prologue, budget, statistics, return
-	IFDEF	UGB_HW_ETH
-PROF_ISR_POLL_US	EQU	70	; lock + map + card status + unmap + release
-	ELSE
+	IFDEF	UGB_HW_LOOP
 PROF_ISR_POLL_US	EQU	0	; no card: nothing to poll
+	ELSE
+PROF_ISR_POLL_US	EQU	70	; lock + map + card status (ESP: one RX byte) + unmap + release
 	ENDIF
 PROF_MIN_RETURN_US	EQU	10
 PROF_ISR_MIN_US		EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US + PROF_MIN_RETURN_US

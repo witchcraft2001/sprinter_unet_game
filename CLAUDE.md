@@ -26,16 +26,17 @@ DLLs are built from ONE shared core: `GTCPESP`, `GUDPESP`, `GTCPRTL`,
 ```
 abi/        unetgame_abi.toml (source of truth)
 include/    UNETGAME.INC, unetg_ctx.inc (generated), unetg_internal.inc
-src/core/   ABI dispatch, config validation, scheduler, hwsm, lock, fallback,
-            slots, events, timers, lifecycle, stats
+src/core/   ABI dispatch, config validation, scheduler, hwdrv (hw_state machine
+            of every card), lock, fallback, slots, events, timers, lifecycle
 src/core/eth/  frame, arp, csum, tcp, udp   (RTL + 3C509B)
-src/core/esp/  AT sequencer, byte parser, passive TCP, active UDP
+src/core/esp/  AT byte parser, sequencer, TP_* of passive TCP / active UDP
 src/core/loop/ loopback transport
 src/hw/{esp,rtl,el3,loop}/  hardware access layer, one per card
 src/dll/    seven 20-line entry files: DEFINEs + ORG + INCLUDE core/main.inc
-sdk/        loader, gateway, time adapters, example/netdemo
+sdk/        loader, gateway, time adapters; example/ugtest.asm (M stand program)
 tools/      build.sh, size_report.py, gen_abi.py, check_names.py,
-            measure/ (Z80 cost probes), mame/, harness/ (Node Z80 stand)
+            measure/ (Z80 cost probes), harness/ (Node Z80 stand),
+            mame/ (M stand: holub MAME build + card patch, ugstand.lua, run_esp.py)
 tests/      z/ (Node stand scenarios, node:test), host/ (python unittest)
 docs/       spec, ABI, ARCHITECTURE, BUILD, TESTING, MEASUREMENTS, acceptance/
 ```
@@ -59,6 +60,8 @@ make test-host    # python: ABI sources vs generated files, block layouts,
                   # relocated L1 == direct assembly at 4 bases, vendored SHA-256
 make test-z       # Node Z80 stand: ABI vectors on all seven builds + hw scenarios
 make check        # everything above; run before every hand-off
+make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
+make test-m       # M stand: seven ESP scenarios in MAME (not part of check)
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -74,7 +77,10 @@ sprinter-mkdll inspect build/GTCP509B.DLL
 Tools: `sjasmplus` 1.22 and `sprinter-mkdll` in `/usr/local/bin`,
 `z88dk-ticks` in `/Users/dmitry/dev/zx/sprinter/z88dk/bin`, `node`, `python3`.
 Automated builds/tests are the agent's job: run `make check` yourself, do not
-ask the user to run them. Ask the user only for MAME/real-Sprinter runs.
+ask the user to run them. The M stand is automated too (`make test-m`, MAME
+from https://github.com/holub/mame built in `../../../mame-holub`); never
+touch the user's own MAME tree `../../../mame`. Ask the user only for
+real-Sprinter runs.
 
 ## Size limit (hard, checked on every build)
 
@@ -210,6 +216,32 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 
 ## Lessons that are now rules
 
+- `TAKE` clobbers A, DE, HL: a value in DE (ring tail, pointer) is pushed
+  around it.  `ET_IX`/`HWSM_IX`/`TP_IX` before `TAKE`, never between `TAKE`
+  and its `RET C` (the macros end in `ADD IX,DE`: a refusal turned into a
+  success built commands without budget in M4).
+- ESP parse rounds never contain an action: a line end, `>` or a payload
+  header byte leaves `ET_PEND`, performed by `ESP_PEND` as its own budget
+  item before the next round. Heavy actions (CH_FAIL) are deferred to the
+  sequencer (`ET_PFAIL`). Otherwise the round pays for bytes and refuses the
+  action that needs them, every STEP.
+- Passive TCP: the held count is lowered at the `+CIPRECVDATA:<n>,` header,
+  not at the `OK`: the module's next `+IPD` notice comes after the answer and
+  carries the new total (lowering at the OK zeroed it and stalled the read).
+  An empty answer zeroes it: no immediate retry (ABI §5).
+- SprinterESP: MCR is only ever 0x22 (AFE+RTS), 0x20 (explicit pause while
+  the parser is 64 bytes behind) or 0 (stop); OUT1/OUT2 are the module
+  RESET/PGM lines. The FIFO is reset once, before AFE is on. STEP_ISR only
+  samples LSR (moving bytes there does not fit 150 us).
+- The M stand shows MAME's memory waits: a STEP costs ~2x its Z model and
+  every STEP of the ESP builds exceeds 500 us real. Report M timings as
+  measured, never fold them into the Z constants; real costs come from Ж.
+- M stand program: turbo on through the SYS port (`OUT (#3C),3`); time from
+  an IM1 frame-tick hook (vector at `#0039`), durations from CTC2 in timer
+  mode chained into CTC3 and calibrated per frame. The Worms CTC counter
+  chain does not count at 875 kHz in this MAME. Scenario state lives in
+  WIN2 below `#C000`; at least `UNETG_SLOTS_MIN` (4) slots per direction.
+
 - IX-base macros (`TP_IX`, `HWSM_IX`, `ARP_IX`, `TXH_IX`, `TP_IX_HL`) preserve
   DE; helpers that clobber DE (`TX_BUF`, `RX_BUF`, `TX_*_PTR`, `IY_PTR`,
   `STAT_INC`) must be bracketed when DE/HL carry a value.
@@ -262,7 +294,8 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   `tools/dev/e2e.js` (end-to-end smoke), `tools/dev/sweep_loop.js` (GLOOP
   budget sweep), `tools/dev/portions.js` (card portion times),
   `tools/dev/di_find.js` (long DI sections), `tools/dev/throughput.js`,
-  `tools/dev/tcpcheck.js`, `tools/dev/watch.js` (write watch on context fields). Keep debug scripts in
+  `tools/dev/tcpcheck.js`, `tools/dev/watch.js` (write watch on context fields),
+  `tools/dev/esp_costs.js` (ESP layer routine costs). Keep debug scripts in
   `tools/dev/`, not in the session scratchpad.
 - Results are kept separate per stand: Z (model), M (MAME), Ж (real
   Sprinter). A scenario that was not run is «не проверено», never «пройдено».

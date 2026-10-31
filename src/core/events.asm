@@ -129,6 +129,10 @@ EV_FLUSH
 	CALL	ETH_TX_COPYING			; a slot is still being read by the card
 	JR	C,.rx_ready			; pipeline: outcomes stay held
 	ENDIF
+	IFDEF	UGB_HW_ESP
+	CALL	ESP_TX_COPYING			; a CIPSEND may still read its slot
+	JR	C,.rx_ready
+	ENDIF
 	BIT	3,(IY+CX_CALL_FLAGS)		; UCF_BUDGET: the scan itself costs
 	JR	Z,.tx_scan
 	LD	HL,COST_TXSCAN

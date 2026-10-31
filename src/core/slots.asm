@@ -587,6 +587,32 @@ RXR_ADVANCE
 	LD	(IY+CX_RX_USED+1),H
 	RET
 
+; RXR_COMMIT: publish BC bytes already written at the ring cursor, slot
+; piece by slot piece (the writer filled RXR_DEST spans).  Clobbers A, BC,
+; DE, HL.
+RXR_COMMIT
+.loop
+	LD	A,B
+	OR	C
+	RET	Z
+	PUSH	BC
+	CALL	RXR_DEST		; BC = bytes to the end of the slot
+	POP	HL			; HL = remaining
+	PUSH	HL
+	OR	A
+	SBC	HL,BC
+	JR	NC,.piece		; remaining >= span: publish the span
+	POP	BC
+	PUSH	BC
+.piece
+	POP	HL
+	OR	A
+	SBC	HL,BC
+	PUSH	HL
+	CALL	RXR_ADVANCE
+	POP	BC
+	JR	.loop
+
 ; RXR_PUT: copy BC bytes from HL into the ring (BC <= RXR_FREE) and
 ; publish them.  Clobbers A, BC, DE, HL.
 RXR_PUT

@@ -159,6 +159,17 @@ TAKE
 	SCF
 	RET
 
+; UNITS_REFUND: give HL units back (a reserve taken with BUDGET_BYTES that
+; the caller spends with its own TAKE).  Preserves BC, DE.  Clobbers A, HL.
+UNITS_REFUND
+	LD	A,(IY+CX_UNITS)
+	ADD	A,L
+	LD	(IY+CX_UNITS),A
+	LD	A,(IY+CX_UNITS+1)
+	ADC	A,H
+	LD	(IY+CX_UNITS+1),A
+	RET
+
 ; BUDGET_BYTES: size a copy portion from the remaining budget.
 ; In:  HL = fixed cost of the portion (units), A = log2 of the cost of one
 ;      byte (0: 1 unit/byte, 1: 2, 2: 4), DE = bytes wanted (> 0).

@@ -90,9 +90,12 @@ IMG_CTX_PTR
 	INCLUDE	"core/loop/loop.asm"
 	INCLUDE	"hw/none.asm"
 	ENDIF
+	IFNDEF	UGB_HW_LOOP
+	INCLUDE	"core/lock.asm"
+	INCLUDE	"core/hwdrv.asm"
+	ENDIF
 	IFDEF	UGB_HW_ETH
 	INCLUDE	"unetg_eth.inc"
-	INCLUDE	"core/lock.asm"
 	INCLUDE	"core/eth/csum.asm"
 	INCLUDE	"core/eth/engine.asm"
 	INCLUDE	"core/eth/arp.asm"
@@ -109,9 +112,12 @@ IMG_CTX_PTR
 	INCLUDE	"hw/rtl/rtl8019.asm"
 	ENDIF
 	ENDIF
-	IFDEF	UGB_HW_ESP			; M4: ESP layer not yet in place
-	INCLUDE	"core/tp_none.asm"
-	INCLUDE	"hw/none.asm"
+	IFDEF	UGB_HW_ESP
+	INCLUDE	"unetg_esp.inc"
+	INCLUDE	"hw/esp/uart.asm"
+	INCLUDE	"core/esp/esp_parse.asm"
+	INCLUDE	"core/esp/esp_seq.asm"
+	INCLUDE	"core/esp/tp_esp.asm"
 	ENDIF
 
 IMG_END

@@ -229,7 +229,7 @@ test('STEP deadline: none, OPEN deadline, 0xFFFE clip', () => {
   const t = boot();
   r = t.run();
   assert.equal(r.deadline, 0xffff, 'no protocol deadline');
-  const h = boot({}, 'gtcpesp');                       // no transport yet: OPEN only times out
+  const h = boot({}, 'gtcpesp');                       // no UART on this stand: the card FAULTs, OPEN only times out
   assert.equal(h.open().a, S.OK);
   r = h.run();
   assert.ok(r.deadline > 4900 && r.deadline <= 5000, `connect deadline ${r.deadline}`);

@@ -153,7 +153,7 @@ class Stand {
       uart_rx_trigger: hw === 'ESP' ? 8 : 0,
       connect_timeout_ms: 5000, retry_count: 4, retry_wait_ms: [500, 1000, 2000, 2000, 2000],
       send_stall_timeout_ms: 7500, close_timeout_ms: 2000, arp_ttl_ms: 60000,
-      worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: hw === 'RTL' || hw === 'EL3' ? 500 : 400, isr_budget_us: hw === 'RTL' || hw === 'EL3' ? 150 : 100,
+      worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: hw === 'LOOP' ? 400 : 500, isr_budget_us: hw === 'LOOP' ? 100 : 150,
       time_read_cost_us: 20,
       ctx_ptr: L.ctx, ctx_len: L.ctxLen,
       tx_slots_ptr: L.tx, tx_slot_size: L.slotSize, tx_slot_count: L.slots,

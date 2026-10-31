@@ -1,0 +1,314 @@
+diff --git a/scripts/src/bus.lua b/scripts/src/bus.lua
+index 09f9398b..b4f08b8d 100644
+--- a/scripts/src/bus.lua
++++ b/scripts/src/bus.lua
+@@ -3271,6 +3271,8 @@ if BUSES["ISA"] then
+ 		MAME_DIR .. "src/devices/bus/isa/xsu_cards.h",
+ 		MAME_DIR .. "src/devices/bus/isa/xtide.cpp",
+ 		MAME_DIR .. "src/devices/bus/isa/xtide.h",
++		MAME_DIR .. "src/devices/bus/isa/sprinter_esp.cpp",
++		MAME_DIR .. "src/devices/bus/isa/sprinter_esp.h",
+ 		MAME_DIR .. "src/devices/bus/isa/zxbus_adapter.cpp",
+ 		MAME_DIR .. "src/devices/bus/isa/zxbus_adapter.h",
+ 	}
+diff --git a/src/devices/bus/isa/isa_cards.cpp b/src/devices/bus/isa/isa_cards.cpp
+index fb7dffdf..56efb6ae 100644
+--- a/src/devices/bus/isa/isa_cards.cpp
++++ b/src/devices/bus/isa/isa_cards.cpp
+@@ -121,6 +121,7 @@
+ #include "hpblp.h"
+ #include "pcat512me.h"
+ */
++#include "sprinter_esp.h"
+ #include "zxbus_adapter.h"
+ 
+ 
+@@ -196,6 +197,7 @@ void pc_isa8_cards(device_slot_interface &device)
+ 	device.option_add("ibm_speech", ISA8_IBM_SPEECH);
+ */
+ 	device.option_add("zxbus_adapter", ISA8_ZXBUS);
++	device.option_add("sprinter_esp", ISA8_SPRINTER_ESP);
+ /*
+ 	device.option_add("ubpnic", ISA8_UBPNIC);
+ 	device.option_add("proga", ISA8_PROGA);
+diff --git a/src/devices/bus/isa/sprinter_esp.cpp b/src/devices/bus/isa/sprinter_esp.cpp
+new file mode 100644
+index 00000000..c1735a0e
+--- /dev/null
++++ b/src/devices/bus/isa/sprinter_esp.cpp
+@@ -0,0 +1,112 @@
++// license:BSD-3-Clause
++// copyright-holders:Roman Boykov, Dmitry
++/***************************************************************************
++
++    Sprinter-WiFi / Sprinter-ESP ISA card
++
++    The card decodes COM3 (0x03e8-0x03ef) and uses a TL16C550C UART clocked
++    by 14.7456 MHz (divisor 8 = 115200 bit/s).  The UART -OUT1 pin drives
++    the RESET input of the ESP8266 module: MCR bit 2 set holds the module
++    in reset.  -OUT2 drives the module's program-mode strap and is left
++    unconnected here.
++
++    TL16C550C auto-RTS (MCR bits 5 and 1) is modelled by the 16550 device:
++    RTS drops when the RX FIFO reaches its trigger level and returns once
++    the FIFO has been read empty.  Auto-CTS is not modelled.
++
++***************************************************************************/
++
++#include "emu.h"
++#include "sprinter_esp.h"
++
++#include "bus/rs232/esp8266_at.h"
++#include "bus/rs232/null_modem.h"
++#include "bus/rs232/rs232.h"
++#include "bus/rs232/terminal.h"
++#include "machine/ins8250.h"
++
++
++namespace {
++
++static void sprinter_esp_rs232_devices(device_slot_interface &device)
++{
++	device.option_add("esp8266_at", ESP8266_AT);
++	device.option_add("null_modem", NULL_MODEM);
++	device.option_add("terminal", SERIAL_TERMINAL);
++}
++
++static DEVICE_INPUT_DEFAULTS_START(sprinter_esp_rs232_defaults)
++	DEVICE_INPUT_DEFAULTS("RS232_TXBAUD", 0xff, RS232_BAUD_115200)
++	DEVICE_INPUT_DEFAULTS("RS232_RXBAUD", 0xff, RS232_BAUD_115200)
++	DEVICE_INPUT_DEFAULTS("RS232_DATABITS", 0xff, RS232_DATABITS_8)
++	DEVICE_INPUT_DEFAULTS("RS232_PARITY", 0xff, RS232_PARITY_NONE)
++	DEVICE_INPUT_DEFAULTS("RS232_STOPBITS", 0xff, RS232_STOPBITS_1)
++	DEVICE_INPUT_DEFAULTS("FLOW_CONTROL", 0x07, 0x01) // honour UART RTS when feeding bytes from the ESP side
++DEVICE_INPUT_DEFAULTS_END
++
++
++class isa8_sprinter_esp_device : public device_t, public device_isa8_card_interface
++{
++public:
++	isa8_sprinter_esp_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
++		device_t(mconfig, ISA8_SPRINTER_ESP, tag, owner, clock),
++		device_isa8_card_interface(mconfig, *this),
++		m_uart(*this, "uart"),
++		m_esp(*this, "esp")
++	{
++	}
++
++protected:
++	virtual void device_add_mconfig(machine_config &config) override ATTR_COLD;
++	virtual void device_start() override ATTR_COLD;
++
++private:
++	void out1_w(int state);
++
++	required_device<ns16550_device> m_uart;
++	required_device<rs232_port_device> m_esp;
++};
++
++
++void isa8_sprinter_esp_device::device_add_mconfig(machine_config &config)
++{
++	NS16550(config, m_uart, XTAL(14'745'600));
++	m_uart->set_auto_rts_capable(true); // TL16C550C: MCR bit 5 enables auto-RTS
++	m_uart->out_tx_callback().set(m_esp, FUNC(rs232_port_device::write_txd));
++	m_uart->out_dtr_callback().set(m_esp, FUNC(rs232_port_device::write_dtr));
++	m_uart->out_rts_callback().set(m_esp, FUNC(rs232_port_device::write_rts));
++	m_uart->out_out1_callback().set(FUNC(isa8_sprinter_esp_device::out1_w));
++
++	RS232_PORT(config, m_esp, sprinter_esp_rs232_devices, "esp8266_at");
++	m_esp->set_option_device_input_defaults("null_modem", DEVICE_INPUT_DEFAULTS_NAME(sprinter_esp_rs232_defaults));
++	m_esp->set_option_device_input_defaults("terminal", DEVICE_INPUT_DEFAULTS_NAME(sprinter_esp_rs232_defaults));
++	m_esp->rxd_handler().set(m_uart, FUNC(ins8250_uart_device::rx_w));
++	m_esp->dcd_handler().set(m_uart, FUNC(ins8250_uart_device::dcd_w));
++	m_esp->dsr_handler().set(m_uart, FUNC(ins8250_uart_device::dsr_w));
++	m_esp->ri_handler().set(m_uart, FUNC(ins8250_uart_device::ri_w));
++	m_esp->cts_handler().set(m_uart, FUNC(ins8250_uart_device::cts_w));
++}
++
++
++// -OUT1 low (MCR bit 2 set) holds the module in reset.
++void isa8_sprinter_esp_device::out1_w(int state)
++{
++	device_rs232_port_interface *const module = m_esp->get_card_device();
++	device_esp8266_rst_interface *rst = nullptr;
++	if (module && module->device().interface(rst))
++		rst->rst_w(state ? CLEAR_LINE : ASSERT_LINE);
++}
++
++
++void isa8_sprinter_esp_device::device_start()
++{
++	set_isa_device();
++	m_isa->install_device(0x03e8, 0x03ef,
++			read8sm_delegate(*m_uart, FUNC(ins8250_device::ins8250_r)),
++			write8sm_delegate(*m_uart, FUNC(ins8250_device::ins8250_w)));
++}
++
++} // anonymous namespace
++
++
++DEFINE_DEVICE_TYPE_PRIVATE(ISA8_SPRINTER_ESP, device_isa8_card_interface, isa8_sprinter_esp_device, "sprinter_esp", "Sprinter-WiFi ISA card (TL16C550C + ESP8266)")
+diff --git a/src/devices/bus/isa/sprinter_esp.h b/src/devices/bus/isa/sprinter_esp.h
+new file mode 100644
+index 00000000..74e49322
+--- /dev/null
++++ b/src/devices/bus/isa/sprinter_esp.h
+@@ -0,0 +1,12 @@
++// license:BSD-3-Clause
++// copyright-holders:Roman Boykov, Dmitry
++#ifndef MAME_BUS_ISA_SPRINTER_ESP_H
++#define MAME_BUS_ISA_SPRINTER_ESP_H
++
++#pragma once
++
++#include "isa.h"
++
++DECLARE_DEVICE_TYPE(ISA8_SPRINTER_ESP, device_isa8_card_interface)
++
++#endif // MAME_BUS_ISA_SPRINTER_ESP_H
+diff --git a/src/devices/machine/ins8250.cpp b/src/devices/machine/ins8250.cpp
+index 111e6599..5aba9f59 100644
+--- a/src/devices/machine/ins8250.cpp
++++ b/src/devices/machine/ins8250.cpp
+@@ -359,9 +359,9 @@ void ins8250_uart_device::ins8250_w(offs_t offset, u8 data)
+ 			}
+ 			break;
+ 		case 4:
+-			if ( ( m_regs.mcr & 0x1f ) != ( data & 0x1f ) )
++			if ( m_regs.mcr != ( data & mcr_mask() ) )
+ 			{
+-				m_regs.mcr = data & 0x1f;
++				m_regs.mcr = data & mcr_mask();
+ 
+ 				update_msr();
+ 
+@@ -385,10 +385,11 @@ void ins8250_uart_device::ins8250_w(offs_t offset, u8 data)
+ 					}
+ 					device_serial_interface::rx_w(m_rxd);
+ 					m_out_dtr_cb((m_regs.mcr & INS8250_MCR_DTR) ? 0 : 1);
+-					m_out_rts_cb((m_regs.mcr & INS8250_MCR_RTS) ? 0 : 1);
++					update_rts();
+ 					m_out_out1_cb((m_regs.mcr & INS8250_MCR_OUT1) ? 0 : 1);
+ 					m_out_out2_cb((m_regs.mcr & INS8250_MCR_OUT2) ? 0 : 1);
+ 				}
++				mcr_written();
+ 			}
+ 			break;
+ 		case 5:
+@@ -539,6 +540,7 @@ void ns16550_device::rcv_complete()
+ 	if(m_rnum >= m_rintlvl)
+ 		trigger_int(COM_INT_PENDING_RECEIVED_DATA_AVAILABLE);
+ 	set_timer();
++	afe_update();
+ }
+ 
+ void ns16550_device::tra_complete()
+@@ -719,6 +721,32 @@ void ins8250_uart_device::device_reset()
+ 	m_out_out2_cb(1);
+ }
+ 
++void ins8250_uart_device::update_rts()
++{
++	if (m_regs.mcr & INS8250_MCR_LOOPBACK)
++		return;
++	m_out_rts_cb(((m_regs.mcr & INS8250_MCR_RTS) && !rts_held()) ? 0 : 1);
++}
++
++void ns16550_device::afe_update()
++{
++	if (!m_afe_capable)
++		return;
++	bool const enabled = (m_regs.mcr & 0x22) == 0x22 && (m_regs.fcr & 1);
++	bool hold = m_afe_hold;
++	if (!enabled)
++		hold = false;
++	else if (m_rnum >= ((m_rintlvl == 14) ? 16 : m_rintlvl))
++		hold = true;
++	else if (m_rnum == 0)
++		hold = false;
++	if (hold != m_afe_hold)
++	{
++		m_afe_hold = hold;
++		update_rts();
++	}
++}
++
+ void ns16550_device::device_start()
+ {
+ 	m_timeout = timer_alloc(FUNC(ns16550_device::timeout_expired), this);
+@@ -732,6 +760,7 @@ void ns16550_device::device_start()
+ 	save_item(NAME(m_rnum));
+ 	save_item(NAME(m_thead));
+ 	save_item(NAME(m_ttail));
++	save_item(NAME(m_afe_hold));
+ }
+ 
+ void ns16550_device::device_reset()
+@@ -742,6 +771,7 @@ void ns16550_device::device_reset()
+ 	m_rhead = m_rtail = m_rnum = 0;
+ 	m_thead = m_ttail = 0;
+ 	m_timeout->adjust(attotime::never);
++	m_afe_hold = false;
+ 	ins8250_uart_device::device_reset();
+ }
+ 
+@@ -785,6 +815,7 @@ u8 ns16550_device::pop_rx()
+ 		m_timeout->adjust(attotime::never);
+ 		m_regs.lsr &= ~INS8250_LSR_DR;
+ 	}
++	afe_update();
+ 
+ 	return data;
+ }
+@@ -818,4 +849,5 @@ void ns16550_device::set_fcr(u8 data)
+ 	m_rintlvl = bytes_per_int[(data>>6)&3];
+ 	m_regs.iir |= 0xc0;
+ 	m_regs.fcr = data & 0xc9;
++	afe_update();
+ }
+diff --git a/src/devices/machine/ins8250.h b/src/devices/machine/ins8250.h
+index 922ac434..bef957e0 100644
+--- a/src/devices/machine/ins8250.h
++++ b/src/devices/machine/ins8250.h
+@@ -61,6 +61,12 @@ protected:
+ 	void trigger_int(int flag);
+ 	void clear_int(int flag);
+ 
++	// RTS output: MCR bit 1, unless a TL16C550C-style auto-RTS holds it off
++	virtual bool rts_held() const { return false; }
++	virtual u8 mcr_mask() const { return 0x1f; }
++	virtual void mcr_written() { }
++	void update_rts();
++
+ 	void update_baud_rate();
+ 
+ 	const dev_type m_device_type;
+@@ -114,7 +120,17 @@ class ns16550_device : public ins8250_uart_device
+ {
+ public:
+ 	ns16550_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
++
++	// TL16C550C auto flow: MCR bit 5 (AFE) with bit 1 enables auto-RTS.
++	// RTS is deasserted when the RX FIFO reaches the trigger level (the
++	// 16th character for trigger 14) and reasserted once reads of RBR have
++	// emptied the FIFO.  Auto-CTS is not modelled.
++	void set_auto_rts_capable(bool state) { m_afe_capable = state; }
+ protected:
++	virtual bool rts_held() const override { return m_afe_hold; }
++	virtual u8 mcr_mask() const override { return m_afe_capable ? 0x3f : 0x1f; }
++	virtual void mcr_written() override { afe_update(); }
++
+ 	virtual void device_start() override ATTR_COLD;
+ 	virtual void device_reset() override ATTR_COLD;
+ 
+@@ -134,6 +150,9 @@ private:
+ 	int m_rhead, m_rtail, m_rnum;
+ 	int m_thead, m_ttail;
+ 	emu_timer *m_timeout;
++	bool m_afe_capable = false;
++	bool m_afe_hold = false;
++	void afe_update();
+ };
+ 
+ class pc16552_device : public device_t

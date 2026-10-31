@@ -1,0 +1,37 @@
+{
+  "dll": "gudpesp",
+  "scenario": "S 8 KiB stream",
+  "wall_s": 5.9,
+  "info": {
+    "min_useful_budget_us": 500,
+    "empty_poll_us": 135,
+    "bus_busy_us": 80
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 1912,
+    "steps_total": 3148,
+    "steps_useful": 3148,
+    "budget_yields": 2782,
+    "max_step_gap_ms": 20,
+    "tx_frames": 16,
+    "rx_frames": 16,
+    "tx_bytes": 8192,
+    "rx_bytes": 8192
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.263,
+  "step": {
+    "max_us": 1259,
+    "mean_us": 944,
+    "steps": 3148,
+    "over_budget": 3148
+  },
+  "trivial_call_us": 179
+}

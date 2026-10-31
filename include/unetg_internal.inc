@@ -127,6 +127,13 @@ STACK_NEED_ISR	EQU	UNETG_STACK_ISR_MAX + 64
 	EI
 1
 	ENDM
+	MACRO	IFF_RESTORE_BC
+	POP	BC
+	BIT	2,C
+	JR	Z,1F
+	EI
+1
+	ENDM
 
 ; LDCFG16 reg-pair low, high, field: read a u16 INIT_CONFIG field (IX=cfg+CFGB)
 ; TX_SET_DONE: (HL) = outcome state A, and tell EV_FLUSH to scan the slots.

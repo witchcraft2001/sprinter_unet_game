@@ -17,6 +17,7 @@ const ua = s.layout().ctx + A.ctx.fields.units.offset;
 const syms = Object.entries(s.syms).filter(([k]) => !k.includes('.') && /^[A-Z]/.test(k)).map(([k, v]) => [s.base + 0x20 + v, k]).sort((a, b) => a[0] - b[0]);
 const owner = (pc) => { let b = '?'; for (const [a, k] of syms) { if (a <= pc) b = k; else break; } return b; };
 const pts = { [s.sym('TAKE')]: 'T', [s.sym('BUDGET_BYTES')]: 'B' };
+if ('PARSE_BUDGET' in s.syms) pts[s.sym('PARSE_BUDGET')] = 'P';   // ESP parser rounds (BC = -threshold)
 let n = 0, over = 0, baseMax = 0, baseAt = -1, needMax = 0, needAt = -1;
 const itemMax = {};                     // caller/cost -> [max real us, reserved]
 const run = (k) => { for (let i = 0; i < k; i++) {
@@ -27,8 +28,8 @@ const run = (k) => { for (let i = 0; i < k; i++) {
     if (prof) prof.hook(m, st);
     if (c0 === null) c0 = m.cycles;
     const l = pts[st.pc];
-    if (l) calls.push({ t: (m.cycles - (c0 ?? m.cycles)) / m.mhz, u: m.peek16(ua), cost: (st.h << 8) | st.l, who: owner(m.peek16(st.sp) - 3) + (l === 'B' ? '/bytes' : '') });
-    if (l) log.push(`${((m.cycles - c0) / m.mhz).toFixed(0)}us ${l}${(st.h << 8) | st.l}@${owner(m.peek16(st.sp) - 3)} left ${m.peek16(ua)}`);
+    if (l) calls.push({ t: (m.cycles - (c0 ?? m.cycles)) / m.mhz, u: m.peek16(ua), cost: (st.h << 8) | st.l, who: owner(m.peek16(st.sp) - 3) + (l === 'B' ? '/bytes' : l === 'P' ? '/round' : '') });
+    if (l) log.push(`${((m.cycles - c0) / m.mhz).toFixed(0)}us ${l}${l === 'P' ? (0x10000 - ((st.b << 8) | st.c)) + ' de' + ((st.d << 8) | st.e) : (st.h << 8) | st.l}@${owner(m.peek16(st.sp) - 3)} left ${m.peek16(ua)}`);
   } });
   s.pump();
   // base path = the whole call minus the work bought by successful budget

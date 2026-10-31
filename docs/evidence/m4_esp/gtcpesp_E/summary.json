@@ -1,0 +1,37 @@
+{
+  "dll": "gtcpesp",
+  "scenario": "E echo 300 bytes",
+  "wall_s": 5.2,
+  "info": {
+    "min_useful_budget_us": 500,
+    "empty_poll_us": 135,
+    "bus_busy_us": 80
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 188,
+    "steps_total": 340,
+    "steps_useful": 340,
+    "budget_yields": 318,
+    "max_step_gap_ms": 20,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.64,
+  "step": {
+    "max_us": 1167,
+    "mean_us": 875,
+    "steps": 340,
+    "over_budget": 340
+  },
+  "trivial_call_us": 167
+}

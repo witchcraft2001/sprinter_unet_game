@@ -1448,26 +1448,3 @@ TCP_RELEASE
 	LD	(IY+CX_TX_OFF+1),H
 	RET
 
-; RXR_COMMIT: publish BC bytes written at the ring cursor (slot pieces).
-RXR_COMMIT
-.loop
-	LD	A,B
-	OR	C
-	RET	Z
-	PUSH	BC
-	CALL	RXR_DEST		; BC = bytes to the end of the slot
-	POP	HL			; HL = remaining
-	PUSH	HL
-	OR	A
-	SBC	HL,BC
-	JR	NC,.piece		; remaining >= span: publish the span
-	POP	BC
-	PUSH	BC
-.piece
-	POP	HL
-	OR	A
-	SBC	HL,BC
-	PUSH	HL
-	CALL	RXR_ADVANCE
-	POP	BC
-	JR	.loop

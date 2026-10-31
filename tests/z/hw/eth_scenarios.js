@@ -1,10 +1,12 @@
-// eth_scenarios.js -- Ethernet scenarios shared by the 3C509B and
-// RTL8019AS builds (registered by tests/z/hw/<card>/*.test.js).
+// eth_scenarios.js -- scenarios shared by the card builds, registered by
+// tests/z/hw/<card>/*.test.js: transportScenarios() for every card
+// (RTL8019AS, 3C509B, SprinterESP), ethScenarios() adds the Ethernet ones.
 //
 // The stand checks every STEP for budget, DI <= 200 us, stack, ISA
-// discipline and the exact restore of #1FFD/#9FBD/#E2; the peer validates
-// the IPv4/TCP/UDP checksums of every frame the DLL sends.  POLL mode only
-// (v1 hardware profiles carry no qualified IRQ route).
+// discipline and the exact restore of #1FFD/#9FBD/#E2; the Ethernet peer
+// validates the IPv4/TCP/UDP checksums of every frame the DLL sends, the
+// ESP model every AT command and payload byte.  POLL mode only (v1
+// hardware profiles carry no qualified IRQ route).
 'use strict';
 
 const test = require('node:test');
@@ -70,28 +72,17 @@ function stream(s, data, piece) {
   return rx;
 }
 
-function ethScenarios(dll) {
-  test(`${dll}: configured MAC overrides the card address`, () => {
-    const mac = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
-    const s = boot(dll, { mac });
-    assert.deepEqual(s.cardMac(), mac);
-    clean(s);
-  });
+// Peer data for the DLL: a TCP segment / UDP datagram (Ethernet) or bytes
+// handed to the ESP module's link.
+function inject(s, dll, data) {
+  if (s.isEsp) s.peer.sendData(data);
+  else if (!isUdp(dll)) s.peer.sendData(data);
+  else s.peer.out.push(s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17,
+    [0x1b, 0x58, 0x1b, 0x59, 0, 8 + data.length, 0, 0, ...data]));
+  s.pump();
+}
 
-  test(`${dll}: answers ARP requests for its address while idle`, () => {
-    const s = boot(dll);
-    const req = [...[255, 255, 255, 255, 255, 255], ...s.peer.mac, 0x08, 0x06,
-      0, 1, 8, 0, 6, 4, 0, 1, ...s.peer.mac, ...s.peer.ip, 0, 0, 0, 0, 0, 0, 192, 168, 0, 10];
-    s.card.deliver(req);
-    s.run(100);
-    const reply = s.peer.sent.find((f) => f[12] === 8 && f[13] === 6 && f[21] === 2);
-    assert.ok(reply, 'ARP reply sent');
-    assert.deepEqual(reply.slice(0, 6), s.peer.mac);
-    assert.deepEqual(reply.slice(6, 12), s.cardMac());
-    assert.deepEqual(reply.slice(28, 32), [192, 168, 0, 10]);
-    clean(s);
-  });
-
+function transportScenarios(dll) {
   test(`${dll}: connect, echo 300 bytes both ways, close`, () => {
     const s = boot(dll);
     assert.equal(s.open().a, S.OK);
@@ -120,11 +111,13 @@ function ethScenarios(dll) {
     const d = bytes(isUdp(dll) ? 512 : 536, 9);
     assert.equal(s.send(d, 7).commit.a, S.OK);
     s.until((e) => has('RX_READY')(e) && has('TX_DONE')(e));
-    assert.deepEqual(s.drain().bytes, d);
+    const rx = s.drain().bytes;                    // ESP: passive reads come in pieces
+    for (let i = 0; i < 3000 && rx.length < d.length; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
+    assert.deepEqual(rx, d);
     clean(s);
   });
 
-  test(`${dll}: an 8 KiB stream both ways stays intact (card buffer wraps)`, () => {
+  test(`${dll}: an 8 KiB stream both ways stays intact`, () => {
     const s = boot(dll);
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -134,7 +127,69 @@ function ethScenarios(dll) {
     assert.deepEqual(rx, d);
     assert.deepEqual(peerGot(s, dll), d);
     const st = s.getStats().stats;
-    assert.equal(st.hw_overflow + st.drop_checksum + st.drop_size, 0);
+    assert.equal(st.hw_overflow + st.drop_checksum + st.drop_size + st.uart_overrun, 0);
+    clean(s);
+  });
+
+  test(`${dll}: STEP_ISR polls within any budget, GET_INFO covers the measured costs`, () => {
+    const s = boot(dll);
+    assert.equal(s.open().a, S.OK);
+    s.until(has('CONNECTED'));
+    s.run(300);                                    // quiet channel
+    s.events();
+    const info = s.getInfo().info;
+    let empty = 0;
+    for (const b of [40, 60, 100, 135, 150]) {
+      const r = s.stepIsr(C.src.TIMER, b);
+      assert.deepEqual(r.problems, [], `budget ${b}`);
+      assert.ok(r.a === S.IDLE || r.a === S.YIELD, `status ${r.a} on a quiet channel`);
+      if (r.a === S.IDLE) empty = Math.max(empty, r.us);
+    }
+    assert.ok(empty > 0 && empty <= info.empty_poll_us, `empty poll ${empty.toFixed(0)} <= published ${info.empty_poll_us}`);
+    // data found by the ISR poll is served by the next STEP
+    inject(s, dll, bytes(32, 8));
+    s.idle(s.isEsp ? 8 : 0);                       // ESP: the notice crosses the network and the UART line
+    const r = s.stepIsr(C.src.TIMER, 150);
+    assert.deepEqual(r.problems, []);
+    assert.equal(r.a, S.WORK, 'data waiting');
+    s.until(has('RX_READY'));
+    const rx = s.drain().bytes;
+    for (let i = 0; i < 1000 && rx.length < 32; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
+    assert.deepEqual(rx, bytes(32, 8));
+    // a held bus: BUS_BUSY, counted, still inside the budget and the
+    // published bound
+    const before = s.getStats().stats.bus_busy;
+    s.m.poke(s.layout().lock, C.lock.SOUND);
+    const b = s.stepIsr(C.src.TIMER, 150);
+    s.m.poke(s.layout().lock, C.lock.FREE);
+    assert.equal(b.a, S.BUS_BUSY);
+    assert.ok(b.us <= info.bus_busy_us, `BUS_BUSY ${b.us.toFixed(0)} <= published ${info.bus_busy_us}`);
+    assert.equal(s.getStats().stats.bus_busy - before, 1);
+    clean(s);
+  });
+}
+
+function ethScenarios(dll) {
+  transportScenarios(dll);
+
+  test(`${dll}: configured MAC overrides the card address`, () => {
+    const mac = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
+    const s = boot(dll, { mac });
+    assert.deepEqual(s.cardMac(), mac);
+    clean(s);
+  });
+
+  test(`${dll}: answers ARP requests for its address while idle`, () => {
+    const s = boot(dll);
+    const req = [...[255, 255, 255, 255, 255, 255], ...s.peer.mac, 0x08, 0x06,
+      0, 1, 8, 0, 6, 4, 0, 1, ...s.peer.mac, ...s.peer.ip, 0, 0, 0, 0, 0, 0, 192, 168, 0, 10];
+    s.card.deliver(req);
+    s.run(100);
+    const reply = s.peer.sent.find((f) => f[12] === 8 && f[13] === 6 && f[21] === 2);
+    assert.ok(reply, 'ARP reply sent');
+    assert.deepEqual(reply.slice(0, 6), s.peer.mac);
+    assert.deepEqual(reply.slice(6, 12), s.cardMac());
+    assert.deepEqual(reply.slice(28, 32), [192, 168, 0, 10]);
     clean(s);
   });
 
@@ -190,42 +245,6 @@ function ethScenarios(dll) {
     clean(s);
   });
 
-  test(`${dll}: STEP_ISR polls within any budget, GET_INFO covers the measured costs`, () => {
-    const s = boot(dll);
-    assert.equal(s.open().a, S.OK);
-    s.until(has('CONNECTED'));
-    s.run(300);                                    // quiet channel
-    s.events();
-    const info = s.getInfo().info;
-    let empty = 0;
-    for (const b of [40, 60, 100, 135, 150]) {
-      const r = s.stepIsr(C.src.TIMER, b);
-      assert.deepEqual(r.problems, [], `budget ${b}`);
-      assert.ok(r.a === S.IDLE || r.a === S.YIELD, `status ${r.a} on a quiet channel`);
-      if (r.a === S.IDLE) empty = Math.max(empty, r.us);
-    }
-    assert.ok(empty > 0 && empty <= info.empty_poll_us, `empty poll ${empty.toFixed(0)} <= published ${info.empty_poll_us}`);
-    // a frame found by the ISR poll is served by the next STEP
-    if (!isUdp(dll)) s.peer.sendData(bytes(32, 8));
-    else s.peer.out.push(s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17,
-      [0x1b, 0x58, 0x1b, 0x59, 0, 40, 0, 0, ...bytes(32, 8)]));
-    s.pump();
-    const r = s.stepIsr(C.src.TIMER, 150);
-    assert.equal(r.a, S.WORK, 'frame waiting');
-    s.until(has('RX_READY'));
-    assert.deepEqual(s.drain().bytes, bytes(32, 8));
-    // a held bus: BUS_BUSY, counted, still inside the budget and the
-    // published bound
-    const before = s.getStats().stats.bus_busy;
-    s.m.poke(s.layout().lock, C.lock.SOUND);
-    const b = s.stepIsr(C.src.TIMER, 150);
-    s.m.poke(s.layout().lock, C.lock.FREE);
-    assert.equal(b.a, S.BUS_BUSY);
-    assert.ok(b.us <= info.bus_busy_us, `BUS_BUSY ${b.us.toFixed(0)} <= published ${info.bus_busy_us}`);
-    assert.equal(s.getStats().stats.bus_busy - before, 1);
-    clean(s);
-  });
-
   if (!isUdp(dll)) {
     test(`${dll}: a segment with a bad TCP checksum is not delivered`, () => {
       const s = boot(dll);
@@ -258,4 +277,4 @@ function ethScenarios(dll) {
   }
 }
 
-module.exports = { DT, ethScenarios, boot, clean, has, bytes, stream, isUdp, peerGot, UHW_RUN };
+module.exports = { DT, ethScenarios, transportScenarios, boot, clean, has, bytes, stream, isUdp, peerGot, inject, UHW_RUN };
