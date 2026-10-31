@@ -1,0 +1,80 @@
+{
+  "prog": "netdemo",
+  "dll": "gudp509b",
+  "card": "EL3",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 21.9,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 30285",
+  "steps_per_period": 5,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 235,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 4100
+  },
+  "info": {
+    "min_useful_budget_us": 480,
+    "empty_poll_us": 90,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 1350,
+      "card": 0,
+      "main": 2650,
+      "service": 100
+    },
+    "cost_poll_us": 135,
+    "cost_step_us": 530,
+    "periods": 221,
+    "largest_period_debit_us": 4000,
+    "now_ms": 4422,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 1095,
+      "early": 2291,
+      "frames": 170,
+      "ticks": 2212,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 2142,
+    "polls_useful": 2,
+    "steps_total": 1095,
+    "steps_useful": 1095,
+    "budget_yields": 93,
+    "max_step_gap_ms": 6,
+    "arp_requests": 4,
+    "tx_frames": 5,
+    "rx_frames": 2,
+    "tx_bytes": 100,
+    "rx_bytes": 100
+  },
+  "timing_us": {
+    "tick_isr_max": 404,
+    "admitted_ug_step_max": 1064,
+    "largest_tick_gap": 2030,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 3.6 s)"
+}

@@ -5,3 +5,8 @@ distr/
 __pycache__/
 node_modules/
 .DS_Store
+# MAME run by-products: timestamps and local paths change on every run
+# (they stay in build/mame/; run_m.py --evidence copies only report.txt
+# and summary.json)
+docs/evidence/**/server.log
+docs/evidence/**/command.txt

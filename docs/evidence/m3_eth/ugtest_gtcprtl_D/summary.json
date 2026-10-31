@@ -1,0 +1,44 @@
+{
+  "prog": "ugtest",
+  "dll": "gtcprtl",
+  "card": "RTL",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 18.0,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 29107",
+  "info": {
+    "min_useful_budget_us": 500,
+    "empty_poll_us": 95,
+    "bus_busy_us": 25
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 128,
+    "polls_useful": 4,
+    "steps_total": 206,
+    "steps_useful": 206,
+    "budget_yields": 142,
+    "max_step_gap_ms": 20,
+    "arp_requests": 1,
+    "tx_frames": 4,
+    "rx_frames": 4,
+    "tx_bytes": 100,
+    "rx_bytes": 100
+  },
+  "clock": "CLOCK_RATE 0.000 now_ms per emulated ms, TICK_MS 109.714, FRAME_MS 20.480, STEP_CALLS_PER_S 0 (over 1.5 s)",
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.813,
+  "step": {
+    "max_us": 1233,
+    "mean_us": 884,
+    "steps": 206,
+    "over_budget": 206
+  },
+  "trivial_call_us": 163
+}

@@ -138,6 +138,13 @@ function transportScenarios(dll) {
     assert.deepEqual(peerGot(s, dll), d, 'peer received the payload');
     assert.equal(s.call('CLOSE').a, S.OK);
     s.until(has('CLOSED'));
+    if (!s.isEsp && !isUdp(dll)) {
+      // CLOSED means the last ACK is on the wire: the SHUTDOWN a game issues
+      // next must not cut it off (found in MAME: the peer resent its FIN)
+      const c = s.peer.tcp;
+      assert.equal(c.state, 'closed');
+      assert.equal(c.acked, c.snd, 'peer FIN acknowledged before CLOSED');
+    }
     const st = s.getStats().stats;
     assert.equal(st.drop_checksum + st.drop_size + st.drop_fragment + st.hw_overflow, 0);
     assert.ok(st.max_step_gap_ms > 0 && st.polls_total > 0);

@@ -1,0 +1,44 @@
+{
+  "prog": "ugtest",
+  "dll": "gudp509b",
+  "card": "EL3",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 22.3,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 42650",
+  "info": {
+    "min_useful_budget_us": 480,
+    "empty_poll_us": 90,
+    "bus_busy_us": 25
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 3681,
+    "polls_useful": 2,
+    "steps_total": 3817,
+    "steps_useful": 3817,
+    "budget_yields": 1946,
+    "max_step_gap_ms": 20,
+    "arp_requests": 4,
+    "tx_frames": 5,
+    "rx_frames": 2,
+    "tx_bytes": 100,
+    "rx_bytes": 100
+  },
+  "clock": "CLOCK_RATE 0.742 now_ms per emulated ms, TICK_MS 27.307, FRAME_MS 20.480, STEP_CALLS_PER_S 611 (over 6.1 s)",
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.25,
+  "step": {
+    "max_us": 1128,
+    "mean_us": 824,
+    "steps": 3817,
+    "over_budget": 3817
+  },
+  "trivial_call_us": 174
+}

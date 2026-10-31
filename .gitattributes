@@ -1,0 +1,2 @@
+# MAME reports are printed by DSS with CRLF; keep LF in the repository
+docs/evidence/**/*.txt text eol=lf

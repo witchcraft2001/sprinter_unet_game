@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 4.2,
+  "wall_s": 3.5,
   "info": {
     "min_useful_budget_us": 500,
     "empty_poll_us": 85,

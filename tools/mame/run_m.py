@@ -29,9 +29,11 @@ with the EXE and the DLL -> echo server -> MAME with the card and
 ugstand.lua -> report.  Exit status 0 only for "RESULT: PASS".
 
 Evidence (report, decoded statistics, server log, the command line) goes
-to build/mame/<prog>_<dll>_<scen>/ and, with --evidence, to
-docs/evidence/m4_esp/<dll>_<scen>/ (ESP, ugtest), docs/evidence/m5_sdk/
-<dll>_<scen>/ (ESP, netdemo) or docs/evidence/m3_eth/<prog>_<dll>_<scen>/.
+to build/mame/<prog>_<dll>_<scen>/; with --evidence the report and the
+statistics (not the timestamped server log nor the machine-specific
+command line) are copied to docs/evidence/m4_esp/<dll>_<scen>/ (ESP,
+ugtest), docs/evidence/m5_sdk/<dll>_<scen>/ (ESP, netdemo) or
+docs/evidence/m3_eth/<prog>_<dll>_<scen>/.
 
 Environment: MAME_HOLUB (binary, default ../../../mame-holub/sprinter),
 MAME_3C509B, MAME_NET_IF, MAME_NET_HOST, MAME_ASSETS (roms + IMG, default
@@ -42,6 +44,7 @@ import argparse
 import json
 import os
 import pathlib
+import random
 import shutil
 import subprocess
 import sys
@@ -158,7 +161,13 @@ def main():
     if not dll.exists():
         sys.exit(f'{dll} missing: run make dlls')
     peer = '127.0.0.1' if card == 'ESP' else NET_HOST
-    run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, a.dll, work / 'ugcfg.inc', peer)
+    # An emulated run is deterministic: the same local port and the same
+    # clock-based ISS every time.  The host still holds the previous
+    # connection on that 4-tuple (TIME_WAIT after P, ESTABLISHED after D:
+    # v1 sends no RST) and drops the new SYN, so every Ethernet run gets
+    # its own local port.
+    lport = '7001' if card == 'ESP' else str(random.randint(20000, 48999))
+    run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, a.dll, work / 'ugcfg.inc', peer, '7000', lport)
     run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', ROOT / 'sdk', '-I', work, '-I', LIBMAN,
         f'-DSCEN={ord(a.scen)}', f'-DUG_STEPS={a.steps}', f'--sym={work / (prog + ".sym")}',
         ROOT / 'sdk/example' / f'{prog}.asm', cwd=work, stdout=subprocess.DEVNULL)
@@ -218,7 +227,7 @@ def main():
     summary = {'prog': prog, 'dll': a.dll, 'card': card, 'mame': str(mame),
                'scenario': f'{a.scen} {SCENARIOS[a.scen]}', 'wall_s': round(wall, 1)}
     if card != 'ESP':
-        summary['network'] = 'none' if index is None else f'pcap {NET_IF} (index {index}), peer {NET_HOST}'
+        summary['network'] = 'none' if index is None else f'pcap {NET_IF} (index {index}), peer {NET_HOST}, local port {lport}'
     if prog == 'netdemo':
         summary['steps_per_period'] = a.steps
     for ln in lines:
@@ -279,7 +288,7 @@ def main():
         if ev.exists():
             shutil.rmtree(ev)
         ev.mkdir(parents=True)
-        for f in ('report.txt', 'summary.json', 'server.log', 'command.txt'):
+        for f in ('report.txt', 'summary.json'):
             if (work / f).exists():
                 shutil.copy2(work / f, ev / f)
     sys.exit(0 if ok else 1)

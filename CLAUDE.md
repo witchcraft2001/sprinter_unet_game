@@ -337,6 +337,14 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   (`ETH_AFFORD`), the TX completion is checked the STEP after the start, and
   an idle transport step with a prepared segment takes no budget: refused
   attempts cost base time too (found as STEP overruns at 20 ms).
+- TCP reports CLOSED only after its last segment (the ACK of the peer's
+  FIN) has left the TX pipeline: a game calls SHUTDOWN on CLOSED, and a
+  card stopped under that frame leaves the host in LAST_ACK, dropping the
+  next SYN on the same 4-tuple (found in MAME over pcap).
+- MAME Ethernet runs are deterministic (same ISS from `now_ms`, same
+  ports); `run_m.py` gives every run its own local port, otherwise a SYN
+  meets the host's previous connection (TIME_WAIT after P, ESTABLISHED
+  after D: v1 sends no RST) and the OPEN times out.
 - The vendored Z80 core applies DI one instruction late (`do_delayed_di`):
   stand code that injects interrupts must skip that state, as a real Z80
   takes none after DI.

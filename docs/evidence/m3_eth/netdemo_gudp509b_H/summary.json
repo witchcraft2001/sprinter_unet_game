@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 4.9,
-  "network": "none",
+  "wall_s": 2.9,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 29473",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -35,15 +35,15 @@
     "cost_step_us": 530,
     "periods": 7,
     "largest_period_debit_us": 4000,
-    "now_ms": 151,
+    "now_ms": 153,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 39,
-      "early": 80,
-      "frames": 6,
-      "ticks": 76,
+      "early": 79,
+      "frames": 7,
+      "ticks": 77,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -62,7 +62,7 @@
     "steps_total": 39,
     "steps_useful": 39,
     "budget_yields": 35,
-    "max_step_gap_ms": 4
+    "max_step_gap_ms": 6
   },
   "timing_us": {
     "tick_isr_max": 386,

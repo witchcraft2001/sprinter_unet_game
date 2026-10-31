@@ -568,6 +568,19 @@ TCP_CHOOSE
 	LD	A,(IX+TC_ST)
 	CP	TCS_DONE
 	RET	NZ
+	; the last ACK was only handed to the engine: report CLOSED once it is
+	; on the wire, or the SHUTDOWN that follows CLOSED stops the card under
+	; it (the peer then retransmits its FIN).  The engine's TX deadline
+	; bounds the wait; a card that is not running sends nothing.
+	LD	A,(IY+CX_HW_STATE)
+	CP	UHW_RUN
+	JR	NZ,.finished
+	LD	A,(IY+EX_TXKIND)
+	CP	ETK_TP
+	JR	NZ,.finished
+	LD	A,(IY+EX_TXS)
+	OR	A			; ETX_IDLE
+	RET	NZ
 	JR	.finished
 .pure_ack
 	SEQ_COPY TC_TXSEQ, TC_NXT
