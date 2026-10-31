@@ -11,7 +11,7 @@ DLLS=("${@:-${ALL_DLLS[@]}}")
 if command -v sprinter-mkdll >/dev/null 2>&1; then
   MKDLL=(sprinter-mkdll)
 else
-  src="${UNETG_LIBMAN_SRC:-../libman/src}"
+  src="${UNETG_LIBMAN_SRC:-third_party/libman/src}"
   [ -f "$src/sprinter_mkdll/cli.py" ] || { echo "error: sprinter-mkdll not found" >&2; exit 1; }
   MKDLL=(env "PYTHONPATH=$src" python3 -m sprinter_mkdll.cli)
 fi

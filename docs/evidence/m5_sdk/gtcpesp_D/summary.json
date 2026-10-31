@@ -1,0 +1,73 @@
+{
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 3.4,
+  "steps_per_period": 5,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 235,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 4650
+  },
+  "info": {
+    "min_useful_budget_us": 500,
+    "empty_poll_us": 135,
+    "bus_busy_us": 80
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 1800,
+      "card": 0,
+      "main": 2750,
+      "service": 100
+    },
+    "cost_poll_us": 180,
+    "cost_step_us": 550,
+    "periods": 42,
+    "largest_period_debit_us": 4550,
+    "now_ms": 847,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 209,
+      "early": 422,
+      "frames": 31,
+      "ticks": 424,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 313,
+    "steps_total": 209,
+    "steps_useful": 209,
+    "budget_yields": 199,
+    "max_step_gap_ms": 6,
+    "tx_frames": 1,
+    "tx_bytes": 100
+  },
+  "timing_us": {
+    "tick_isr_max": 466,
+    "admitted_ug_step_max": 1132,
+    "largest_tick_gap": 2053,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 0.691 now_ms per emulated ms, TICK_MS 2.909, FRAME_MS 20.480, STEP_CALLS_PER_S 160 (over 0.5 s)"
+}

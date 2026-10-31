@@ -101,15 +101,20 @@ DL_MERGE_DE
 ; at least 0: the return reserve is set aside once here, so TAKE and
 ; BUDGET_BYTES compare against the units directly.  Clobbers A, B, DE, HL.
 UNITS_FROM_BUDGET
+	CALL	UNITS_HL
+	LD	(IY+CX_UNITS),L
+	LD	(IY+CX_UNITS+1),H
+	RET
+
+; UNITS_HL: HL = the units of budget DE (as above), nothing stored.
+; Clobbers A, B, DE.
+UNITS_HL
 	LD	A,(IY+CX_CPU_F16)
 	CALL	MUL_F16
 	LD	DE,-PROF_MIN_RETURN_US
 	ADD	HL,DE
-	JR	C,.store
+	RET	C
 	LD	HL,0
-.store
-	LD	(IY+CX_UNITS),L
-	LD	(IY+CX_UNITS+1),H
 	RET
 
 ; MUL_F16: HL = (DE * A) / 16 for 0 <= A <= 31; A == 16 is the fast path.

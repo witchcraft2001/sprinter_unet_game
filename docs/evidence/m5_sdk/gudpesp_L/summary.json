@@ -1,0 +1,14 @@
+{
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "scenario": "L load, check and free the DLL",
+  "wall_s": 3.2,
+  "steps_per_period": 5,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 235,
+    "base": "0x4000"
+  }
+}

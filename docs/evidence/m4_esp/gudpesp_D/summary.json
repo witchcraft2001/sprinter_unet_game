@@ -1,7 +1,8 @@
 {
+  "prog": "ugtest",
   "dll": "gudpesp",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 4.8,
+  "wall_s": 3.3,
   "info": {
     "min_useful_budget_us": 500,
     "empty_poll_us": 135,
@@ -14,24 +15,25 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 220,
-    "steps_total": 318,
-    "steps_useful": 318,
-    "budget_yields": 251,
+    "polls_total": 174,
+    "steps_total": 272,
+    "steps_useful": 272,
+    "budget_yields": 228,
     "max_step_gap_ms": 20,
     "tx_frames": 1,
     "rx_frames": 1,
     "tx_bytes": 100,
     "rx_bytes": 100
   },
+  "clock": "CLOCK_RATE 0.352 now_ms per emulated ms, TICK_MS 54.857, FRAME_MS 20.480, STEP_CALLS_PER_S 177 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.667,
+  "ticks_missed_ratio": 0.627,
   "step": {
-    "max_us": 1160,
-    "mean_us": 878,
-    "steps": 318,
-    "over_budget": 318
+    "max_us": 1140,
+    "mean_us": 875,
+    "steps": 272,
+    "over_budget": 272
   },
   "trivial_call_us": 179
 }

@@ -440,6 +440,42 @@ EXP_STEP_ISR
 	BIT	2,(IY+CX_CFG_FLAGS)	; UNETG_CFGF_CBL_QUALIFIED
 	JP	Z,RET_STATE
 .src_ok
+	; Budget first, without touching the context: a call that cannot pay
+	; even the fixed path returns YIELD at once and leaves the fields of an
+	; interrupted main call alone.
+	PUSH	BC
+	CALL	UNITS_HL
+	LD	DE,PROF_ISR_BASE_US
+	OR	A
+	SBC	HL,DE
+	POP	BC
+	JR	NC,.paid
+	LD	HL,0			; flags byte 0
+	LD	A,UNETG_STATUS_YIELD
+	JP	RET_A
+.paid
+	EX	DE,HL			; DE = units left after the fixed path
+	; The network ISR may interrupt a main STEP between two portions (ABI
+	; §1): call flags (UCF_ISA_HELD!), work bits, budget units and the
+	; flags byte belong to that call.  Save them while a call is active
+	; (call_flags != 0 only inside STEP) and restore them on the way out.
+	; Stack: +8.
+	LD	A,(IY+CX_CALL_FLAGS)
+	OR	A
+	JR	Z,.fresh
+	LD	H,A
+	LD	L,(IY+CX_WORK)
+	PUSH	HL
+	LD	L,(IY+CX_UNITS)
+	LD	H,(IY+CX_UNITS+1)
+	PUSH	HL
+	LD	L,(IY+CX_FLAGS_OUT)
+	PUSH	HL
+	LD	A,1
+.fresh
+	PUSH	AF			; A = 1: a main call was interrupted
+	LD	(IY+CX_UNITS),E
+	LD	(IY+CX_UNITS+1),D
 	LD	A,C
 	RLCA				; bit 7 (pre-acquired) -> bit 0
 	AND	UCF_PREACQ
@@ -448,13 +484,6 @@ EXP_STEP_ISR
 	XOR	A
 	LD	(IY+CX_WORK),A
 	LD	(IY+CX_FLAGS_OUT),A
-	PUSH	BC
-	CALL	UNITS_FROM_BUDGET
-	LD	HL,PROF_ISR_BASE_US
-	CALL	TAKE
-	POP	BC
-	LD	A,UNETG_STATUS_YIELD
-	JR	C,.out			; not even the fixed path fits
 	PUSH	BC
 	LD	A,B
 	DEC	A
@@ -475,9 +504,26 @@ EXP_STEP_ISR
 	CALL	HW_ISR
 	CALL	WORK_STATUS
 .out
-	LD	L,(IY+CX_FLAGS_OUT)
-	LD	H,0
+	LD	C,(IY+CX_FLAGS_OUT)	; this call's flags byte
+	LD	B,A			; status
+	POP	AF
+	OR	A
+	JR	Z,.fresh_out
+	POP	HL
+	LD	(IY+CX_FLAGS_OUT),L
+	POP	HL
+	LD	(IY+CX_UNITS),L
+	LD	(IY+CX_UNITS+1),H
+	POP	HL
+	LD	(IY+CX_WORK),L
 	LD	(IY+CX_CALL_FLAGS),H
+	JR	.ret
+.fresh_out
+	LD	(IY+CX_CALL_FLAGS),A	; A = 0
+.ret
+	LD	A,B
+	LD	L,C
+	LD	H,0
 	POP	IY
 	POP	IX
 	RET

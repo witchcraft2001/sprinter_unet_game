@@ -31,11 +31,12 @@ function boot(dll, over = {}, opts = {}) {
   const cfg = s.defaultConfig({ step_budget_us: budget, ...over });
   assert.equal(s.initConfig(cfg).a, S.OK);
   s.probs = [];
-  s.run = (n, dt = DT) => { for (let i = 0; i < n; i++) s.probs.push(...s.tick(dt, budget).problems); };
+  s.stepOpts = {};
+  s.run = (n, dt = DT) => { for (let i = 0; i < n; i++) s.probs.push(...s.tick(dt, budget, s.stepOpts).problems); };
   s.until = (pred, max = 3000, dt = DT) => {
     const ev = [];
     for (let i = 0; i < max; i++) {
-      s.probs.push(...s.tick(dt, budget).problems);
+      s.probs.push(...s.tick(dt, budget, s.stepOpts).problems);
       ev.push(...s.events());
       if (pred(ev)) return ev;
     }
@@ -56,7 +57,7 @@ const peerGot = (s, dll) => (isUdp(dll) ? s.peer.udpIn.flat() : s.peer.received)
 
 // Send `data` in pieces of `piece` bytes as TX slots free up and collect the
 // echo; returns the received bytes.
-function stream(s, data, piece) {
+function stream(s, data, piece, dt = DT) {
   let off = 0, tag = 1;
   const rx = [];
   for (let i = 0; i < 20000 && (off < data.length || rx.length < data.length); i++) {
@@ -65,7 +66,7 @@ function stream(s, data, piece) {
       const x = s.send(data.slice(off, off + n), tag);
       if (x.res.a === S.OK) { assert.equal(x.commit.a, S.OK); off += n; tag = (tag + 1) & 0xffff || 1; }
     }
-    s.run(1);
+    s.run(1, dt);
     s.events();
     rx.push(...s.drain().bytes);
   }
@@ -80,6 +81,46 @@ function inject(s, dll, data) {
   else s.peer.out.push(s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17,
     [0x1b, 0x58, 0x1b, 0x59, 0, 8 + data.length, 0, 0, ...data]));
   s.pump();
+}
+
+// A network ISR that interrupts the main STEP (ABI §1: the network may
+// interrupt a main call): an IM1 stub in WIN0 switches to the ISR stack,
+// calls STEP_ISR(TIMER) without pre-acquire and returns with EI; RETI.
+// s.stepOpts makes every STEP take one such interrupt at a pseudo-random
+// instruction where IFF1 = 1 inside the image.
+const ISR_STUB = 0x0300, ISR_SAVE = 0x0380, ISR_LOG = 0x0382;
+function nestedIsr(s, seed = 12345) {
+  const m = s.m, L = s.layout(), top = L.istack + L.istackLen;
+  const e = s.entry('STEP_ISR');
+  m.pokeBytes(0x0038, [0xc3, ISR_STUB & 255, ISR_STUB >> 8]);
+  m.pokeBytes(ISR_STUB, [
+    0xed, 0x73, ISR_SAVE & 255, ISR_SAVE >> 8,     // LD (save),SP
+    0x31, top & 255, top >> 8,                      // LD SP,top
+    0xf5, 0xc5, 0xd5, 0xe5,                         // PUSH AF/BC/DE/HL
+    0x3e, C.src.TIMER, 0x11, 150, 0,                // LD A,TIMER : LD DE,150
+    0xcd, e & 255, e >> 8,                          // CALL STEP_ISR
+    0x32, ISR_LOG & 255, ISR_LOG >> 8,              // LD (log),A
+    0xe1, 0xd1, 0xc1, 0xf1,                         // POP HL/DE/BC/AF
+    0xed, 0x7b, ISR_SAVE & 255, ISR_SAVE >> 8,     // LD SP,(save)
+    0xfb, 0xed, 0x4d,                               // EI : RETI
+  ]);
+  let x = seed, taken = 0, insideIsr = false, c0 = 0;
+  const st = { taken: 0, statuses: [], maxUs: 0 };
+  s.stepOpts = {
+    slackUs: 200,                                   // the ISR runs inside the measured STEP
+    onStep: (mm, cpu) => {
+      if (cpu.pc === ISR_STUB) insideIsr = true;
+      if (insideIsr && cpu.pc === e) c0 = mm.cycles;
+      if (insideIsr && cpu.pc === ISR_STUB + 19) st.maxUs = Math.max(st.maxUs, (mm.cycles - c0) / mm.mhz);
+      if (insideIsr && cpu.pc === ISR_STUB + 30) { insideIsr = false; st.statuses.push(mm.peek(ISR_LOG)); }
+      if (taken > 0 || !cpu.iff1 || !mm.pcInImage()) return;
+      if (--x <= 0) { taken = 1; st.taken++; mm.cpu.interrupt(false, 0xff); }
+    },
+  };
+  const arm = () => { taken = 0; x = 1 + ((seed = (seed * 1103515245 + 12345) >>> 0) % 2500); };
+  arm();
+  s.armIsr = arm;
+  return st;
 }
 
 function transportScenarios(dll) {
@@ -129,6 +170,72 @@ function transportScenarios(dll) {
     const st = s.getStats().stats;
     assert.equal(st.hw_overflow + st.drop_checksum + st.drop_size + st.uart_overrun, 0);
     clean(s);
+  });
+
+  // The SDK gateway spreads STEPs over the budget period (ТЗ §7: 2 per
+  // 20 ms); GET_INFO allows gaps up to max_step_gap_ms = 20.  Found with the
+  // SDK (docs/MEASUREMENTS.md, DT=10|20 SCEN=stream tools/dev/overrun.js):
+  // GTCPRTL at 10 ms: a cumulative ACK of several slots makes COST_FINISH
+  // (240) cost ~305 us, needed base reserve 300 us; at 20 ms every TCP build
+  // fails: ESP's 512-byte CIPRECVDATA answer misses its command deadline at
+  // one UART portion per STEP (STREAM_ERROR), Ethernet TCP crawls at a few
+  // bytes per second with retransmissions.
+  const gapTodo = (gap) => (gap === 10 && dll === 'gtcprtl') || (gap === 20 && dll.startsWith('gtcp'));
+  for (const gap of [10, 20]) {
+    test(`${dll}: an 8 KiB stream with a STEP every ${gap} ms stays within budget`,
+      gapTodo(gap) ? { todo: 'core: TCP at long STEP gaps (budget of the ACK input, ESP read deadline, Ethernet rate)' } : {}, () => {
+        const s = boot(dll);
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        const d = bytes(8192, 11);
+        const rx = stream(s, d, isUdp(dll) ? 512 : 536, gap);
+        assert.deepEqual(rx, d);
+        clean(s);
+      });
+  }
+
+  test(`${dll}: STEP_ISR interrupting a STEP leaves the STEP state intact`, () => {
+    const s = boot(dll);
+    const st = nestedIsr(s);
+    const tick = s.tick;
+    s.tick = (...a) => { s.armIsr(); return tick(...a); };
+    assert.equal(s.open().a, S.OK);
+    s.until(has('CONNECTED'));
+    const d = bytes(4096, 5);
+    const rx = stream(s, d, isUdp(dll) ? 512 : 536);
+    assert.deepEqual(rx, d);
+    assert.deepEqual(peerGot(s, dll), d);
+    assert.ok(st.taken > 100, `interrupts taken ${st.taken}`);
+    assert.ok(st.maxUs <= 150, `nested STEP_ISR took ${st.maxUs.toFixed(1)} us, budget 150`);
+    assert.equal(s.m.peek(s.layout().lock), 0, 'ISA lock free');
+    assert.equal(s.ctx('call_flags'), 0);
+    assert.ok(st.statuses.every((a) => [S.OK, S.IDLE, S.WORK, S.BUS_BUSY].includes(a)), `STEP_ISR statuses ${[...new Set(st.statuses)]}`);
+    clean(s);
+  });
+
+  test(`${dll}: SHUTDOWN at any point of a send finishes, the slot outcome is published`, () => {
+    // a frame needs tens of STEPs at the minimum budget (MEASUREMENTS.md):
+    // SHUTDOWN lands before, inside and after its TX pipeline
+    for (const k of [0, 4, 8, 10, 12, 16, 20, 26, 32, 40]) {
+      const probe = boot(dll, {}, { noBoot: true });
+      const min = probe.getInfo().info.min_useful_budget_us;
+      const s = boot(dll, {}, { budget: min });
+      assert.equal(s.open().a, S.OK);
+      s.until(has('CONNECTED'));
+      assert.equal(s.send(bytes(isUdp(dll) ? 512 : 536, k), 0x77).commit.a, S.OK);
+      s.run(k);                                    // the frame is k STEPs into its pipeline
+      let r, n;
+      const ev = [];
+      for (n = 0; n < 1000; n++) {
+        r = s.call('SHUTDOWN');
+        if (r.a === S.OK) break;
+        s.run(1);
+        ev.push(...s.events());
+      }
+      assert.equal(r.a, S.OK, `SHUTDOWN after ${k} STEPs: ${r.a}`);
+      assert.ok(ev.some((e) => e.name === 'TX_DONE' && e.tag === 0x77), `TX_DONE after ${k} STEPs`);
+      clean(s);
+    }
   });
 
   test(`${dll}: STEP_ISR polls within any budget, GET_INFO covers the measured costs`, () => {

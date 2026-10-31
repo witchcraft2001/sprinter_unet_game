@@ -92,7 +92,8 @@ local function scenario()
   while now() - t0 < TIMEOUT do
     frames(1)
     if magic_ok() then
-      if sym.now_ms and (#clk == 0 or now() - clk[#clk][1] >= 0.5) then
+      local ticking = not sym.ticks or prog:read_u16(sym.ticks) > 0   -- NETDEMO ticks start after the DLL load
+      if sym.now_ms and ticking and (#clk == 0 or now() - clk[#clk][1] >= 0.5) then
         clk[#clk + 1] = { now(), prog:read_u32(sym.now_ms), sym.st_n and prog:read_u16(sym.st_n) or 0, sym.ticks and prog:read_u16(sym.ticks) or 0 }
       end
       seen = true

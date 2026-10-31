@@ -835,8 +835,12 @@ ETH_TX_STEP
 ; ETH_TX_COPYING: CF=1 while the TX pipeline still reads the payload of a
 ; transport frame out of an application TX slot (EV_FLUSH then holds the
 ; TX_DONE outcomes, so no slot is handed back to the application before
-; its bytes are on the card).  Clobbers A, DE, HL.
+; its bytes are on the card).  A card that is not running copies nothing
+; any more (SHUTDOWN stopped it mid-frame): no hold.  Clobbers A, DE, HL.
 ETH_TX_COPYING
+	LD	A,(IY+CX_HW_STATE)
+	CP	UHW_RUN
+	JR	NZ,.no
 	LD	DE,UCTX_HWSM + HS_TXKIND - CTX_BIAS
 	PUSH	IY
 	POP	HL

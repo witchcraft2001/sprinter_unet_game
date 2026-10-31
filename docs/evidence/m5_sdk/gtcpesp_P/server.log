@@ -1,0 +1,4 @@
+1793441223.542 listening 127.0.0.1 7000 close-after 64
+1793441226.761 tcp connect ('127.0.0.1', 54681)
+1793441226.774 tcp echo 64 total 64
+1793441226.774 tcp close by the server after 64

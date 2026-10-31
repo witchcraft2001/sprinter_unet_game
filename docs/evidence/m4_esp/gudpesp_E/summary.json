@@ -1,7 +1,8 @@
 {
+  "prog": "ugtest",
   "dll": "gudpesp",
   "scenario": "E echo 300 bytes",
-  "wall_s": 4.3,
+  "wall_s": 3.3,
   "info": {
     "min_useful_budget_us": 500,
     "empty_poll_us": 135,
@@ -24,12 +25,13 @@
     "tx_bytes": 300,
     "rx_bytes": 300
   },
+  "clock": "CLOCK_RATE 0.365 now_ms per emulated ms, TICK_MS 52.966, FRAME_MS 20.480, STEP_CALLS_PER_S 174 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.653,
+  "ticks_missed_ratio": 0.613,
   "step": {
-    "max_us": 1215,
-    "mean_us": 884,
+    "max_us": 1140,
+    "mean_us": 886,
     "steps": 288,
     "over_budget": 288
   },

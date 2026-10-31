@@ -23,10 +23,10 @@ function espStand(opts) {
   card.advance(s.t);
   s.pump = () => card.advance(s.t);
   s.idle = (ms) => { s.t = (s.t + ms) >>> 0; card.advance(s.t); };
-  s.tick = (dt = 10, budget = opts.budget ?? 400) => {
+  s.tick = (dt = 10, budget = opts.budget ?? 400, stepOpts = {}) => {
     s.t = (s.t + dt) >>> 0;
     card.advance(s.t);
-    const r = s.step(s.t, budget);
+    const r = s.step(s.t, budget, 0, stepOpts);
     card.advance(s.t);
     if (card.errors.length) r.problems.push(...card.errors.splice(0).map((e) => `esp model: ${e}`));
     return r;
@@ -47,10 +47,10 @@ function ethStand(opts = {}) {
   s.t = opts.t0 ?? 1000;
   s.pump = () => { peer.tick(s.t); for (const f of peer.out.splice(0)) card.deliver(f); };
   s.idle = (ms) => { s.t = (s.t + ms) >>> 0; };
-  s.tick = (dt = 10, budget = opts.budget ?? 500) => {
+  s.tick = (dt = 10, budget = opts.budget ?? 500, stepOpts = {}) => {
     s.pump();
     s.t = (s.t + dt) >>> 0;
-    const r = s.step(s.t, budget);
+    const r = s.step(s.t, budget, 0, stepOpts);
     s.pump();
     return r;
   };

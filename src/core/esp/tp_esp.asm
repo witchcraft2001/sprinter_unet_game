@@ -175,6 +175,9 @@ ESP_OVERRUN
 ; its slot, so EV_FLUSH holds the TX_DONE outcomes until the job ends.
 ; Clobbers A, DE, HL.
 ESP_TX_COPYING
+	LD	A,(IY+CX_HW_STATE)	; a stopped UART sends nothing any more
+	CP	UHW_RUN
+	JR	NZ,.no
 	LD	DE,UCTX_TP + ET_JOB - CTX_BIAS
 	PUSH	IY
 	POP	HL
@@ -183,5 +186,6 @@ ESP_TX_COPYING
 	CP	EJ_SEND
 	SCF
 	RET	Z
+.no
 	OR	A
 	RET

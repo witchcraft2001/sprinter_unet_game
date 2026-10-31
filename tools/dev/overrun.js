@@ -3,7 +3,7 @@
 // for every STEP above the budget, print the budget calls with the units
 // left and the time between them (PROFILE=1: per-label time of that STEP;
 // ITEMS=1: worst real time of every successful budget item, caller:units).
-// AT=n: budget calls and profile of STEP n.  SCEN=stream: 8 KiB echo at a 2 ms STEP period instead of the short run.
+// AT=n: budget calls and profile of STEP n.  SCEN=stream: 8 KiB echo at a 2 ms STEP period (DT=ms) instead of the short run.
 // Usage: node tools/dev/overrun.js gtcprtl [budget]
 'use strict';
 const { ethStand } = require('../harness/ethnet.js');
@@ -68,7 +68,7 @@ const run = (k) => { for (let i = 0; i < k; i++) {
 } };
 if (process.env.SCEN === 'stream') {
   // 8 KiB echoed in 536/512-byte pieces at a 2 ms STEP period
-  const dt = 2, piece = dll.startsWith('gudp') ? 512 : 536;
+  const dt = +(process.env.DT || 2), piece = dll.startsWith('gudp') ? 512 : 536;
   const runDt = (k) => { for (let i = 0; i < k; i++) { s.t -= 10 - dt; run(1); } };
   runDt(400); s.open(); runDt(400); s.events();
   const d = Array.from({ length: 8192 }, (_, i) => (i * 31 + 3) & 255);

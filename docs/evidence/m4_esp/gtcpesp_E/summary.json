@@ -1,7 +1,8 @@
 {
+  "prog": "ugtest",
   "dll": "gtcpesp",
   "scenario": "E echo 300 bytes",
-  "wall_s": 5.2,
+  "wall_s": 4.1,
   "info": {
     "min_useful_budget_us": 500,
     "empty_poll_us": 135,
@@ -24,12 +25,13 @@
     "tx_bytes": 300,
     "rx_bytes": 300
   },
+  "clock": "CLOCK_RATE 0.286 now_ms per emulated ms, TICK_MS 66.783, FRAME_MS 20.480, STEP_CALLS_PER_S 169 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.64,
+  "ticks_missed_ratio": 0.693,
   "step": {
-    "max_us": 1167,
-    "mean_us": 875,
+    "max_us": 1218,
+    "mean_us": 876,
     "steps": 340,
     "over_budget": 340
   },

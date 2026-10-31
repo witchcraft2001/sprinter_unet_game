@@ -67,6 +67,7 @@ for (const dll of DLLS) {
     assert.equal(i.step_body_max_us, 500);
     assert.equal(i.isr_body_max_us, 150);
     assert.equal(i.caps & C.cap.IRQ_ROUTE_QUALIFIED, 0, 'v1: no qualified IRQ route');
+    assert.equal(i.caps & C.cap.PROBE, 0, 'v1: no IRQ probe (AUTO is served through POLL)');
     assert.ok(i.caps & C.cap.POLL);
     if (s.profile.hw !== 'LOOP') assert.ok(i.caps & C.cap.AUTO);
     if (s.profile.hw === 'ESP') assert.equal(i.hw_ring_min, 512);

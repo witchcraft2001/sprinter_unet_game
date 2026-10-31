@@ -33,11 +33,16 @@ src/core/esp/  AT byte parser, sequencer, TP_* of passive TCP / active UDP
 src/core/loop/ loopback transport
 src/hw/{esp,rtl,el3,loop}/  hardware access layer, one per card
 src/dll/    seven 20-line entry files: DEFINEs + ORG + INCLUDE core/main.inc
-sdk/        loader, gateway, time adapters; example/ugtest.asm (M stand program)
-tools/      build.sh, size_report.py, gen_abi.py, check_names.py,
-            measure/ (Z80 cost probes), harness/ (Node Z80 stand),
+sdk/        source-included SDK: loader/ugload.asm (over libman), gateway/
+            ugate.inc + ugate.asm, time/ugtime.asm; example/netdemo.asm (the
+            ТЗ §7 example, M stand), example/ugtest.asm (M4 libman tester)
+third_party/libman/  git submodule (libman + sprinter-mkdll), never copied
+tools/      build.sh, build_sdk.sh, size_report.py, gen_abi.py, check_names.py,
+            measure/ (Z80 cost probes), harness/ (Node Z80 stand; appstand.js
+            runs the SDK with interrupts, devices/ctc.js),
             mame/ (M stand: holub MAME build + card patch, ugstand.lua, run_esp.py)
-tests/      z/ (Node stand scenarios, node:test), host/ (python unittest)
+tests/      z/ (Node stand scenarios, node:test; z/sdk: ugz.asm + SDK tests),
+            host/ (python unittest)
 docs/       spec, ABI, ARCHITECTURE, BUILD, TESTING, MEASUREMENTS, acceptance/
 ```
 
@@ -52,7 +57,8 @@ of the same name. Never fork the core per card: hardware differences live in
 
 ```sh
 make gen          # regenerate UNETGAME.INC / ctx include / abi.json / ABI table
-make all          # build the seven DLLs into build/ (+ SDK objects)
+make all          # build the seven DLLs into build/ + build/ugz.bin (make sdk)
+make sdk          # the Z application stand program (tests/z/sdk/ugz.asm)
 make verify       # sprinter-mkdll verify --target 1.3 for every DLL
 make size         # size report: image, reloc, sum, prefix, free bytes
 make names        # delivery names: 8.3, unique, not UNET<tag>, defines match
@@ -61,7 +67,7 @@ make test-host    # python: ABI sources vs generated files, block layouts,
 make test-z       # Node Z80 stand: ABI vectors on all seven builds + hw scenarios
 make check        # everything above; run before every hand-off
 make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
-make test-m       # M stand: seven ESP scenarios in MAME (not part of check)
+make test-m       # M stand: 7 UGTEST + 11 NETDEMO (SDK) scenarios in MAME (not in check)
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -205,9 +211,12 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   one DI from the gateway's shadow. PB0/PB1 = ISA IRQ of slot 1/2, PB6/PB7 =
   printer lines (BIOS: `#CF`, mask `#3F`, data `#C0`). Gateway only.
 - ISA IRQ → PIO is not wired on known boards nor in MAME. v1 hardware
-  profiles are POLL-only releases: the AUTO/STEP_ISR/fallback machinery is
-  complete and tested on the Z stand, GET_INFO reports no qualified route,
-  and IRQ columns of the acceptance matrix say «маршрут не квалифицирован».
+  profiles are POLL-only releases: the core serves AUTO through POLL (no IRQ
+  probe, no fallback machine, CAP_PROBE not published), STEP_ISR is complete
+  and tested (also nested inside STEP), GET_INFO reports no qualified route,
+  the SDK writes neither PIO nor the IM2 route (MASK_ROUTE / an exhausted card
+  quota set a software mask), and IRQ columns of the acceptance matrix say
+  «маршрут не квалифицирован».
 - CTC (#10..#13) belongs to the application (CH0 = mouse). The APP_COUNTER
   adapter may only READ the game's CTC2/CTC3 chain with the owner's
   permission (`CTC3 → CTC2 → CTC3`, one retry, phase modulo 17472).
@@ -241,6 +250,28 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   mode chained into CTC3 and calibrated per frame. The Worms CTC counter
   chain does not count at 875 kHz in this MAME. Scenario state lives in
   WIN2 below `#C000`; at least `UNETG_SLOTS_MIN` (4) slots per direction.
+  MAME loses most IM1 frame pulses (~9 us, under DI); the latched CTC1 tick
+  of NETDEMO loses none. `CLOCK_RATE` is meaningful only on long runs.
+
+- STEP_ISR may interrupt STEP between two portions (ABI §1). Every per-call
+  context field (`call_flags`, `work`, `units`, `flags_out`) is saved and
+  restored by EXP_STEP_ISR; a new per-call field must be added there, and
+  STEP_ISR checks its budget before the first context write.
+- A card that is not running copies nothing: holds keyed on a TX pipeline
+  state (`ETH_TX_COPYING`, `ESP_TX_COPYING`) check `hw_state == UHW_RUN`
+  first, or SHUTDOWN in the middle of a frame never reaches OK.
+- The core was calibrated at a 2 ms STEP; the SDK spreads STEPs (10 ms with 2
+  per period) and GET_INFO allows 20 ms. Stream scenarios run at 10 and 20 ms
+  too (`DT=` in tools/dev/overrun.js); failures there are core debt (`todo`).
+- SDK (docs/SDK.md): no DSS call after `IM 2` (load before, free after IM1 is
+  back); the SDK never writes PIO or CTC (the game programs its timer, the
+  time adapter only reads CTC2/CTC3); ISR entries pre-acquire the lock (owner
+  2) and run STEP_ISR on the INIT_CONFIG ISR stack, refusing a held bus
+  before the core; main `UG_STEP` passes no pre-acquire (the core locks per
+  portion); the budget period comes from the timer tick, not the frame pulse;
+  `UG_BLOCK` is 256-aligned; `UG_OVH_*`, `UG_BUSY_PATH_US` and `UGT_READ_US`
+  are measured on the application stand and checked by tests/z/sdk; libman
+  is the submodule only, its `lib_table` layout pinned by `LIBMAN.VERSION`.
 
 - IX-base macros (`TP_IX`, `HWSM_IX`, `ARP_IX`, `TXH_IX`, `TP_IX_HL`) preserve
   DE; helpers that clobber DE (`TX_BUF`, `RX_BUF`, `TX_*_PTR`, `IY_PTR`,
@@ -288,6 +319,11 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   `#1FFD/#9FBD/#E2`, ISA access only with the window open and IFF=0.
 - `tools/harness/z80core.js` is vendored (MIT, see THIRD_PARTY.md) and pinned
   by SHA-256; never edit it in place.
+- The application stand (`tools/harness/appstand.js`, tests/z/sdk) runs the
+  real SDK around a DLL with IM2 interrupts (CTC model, frame pulse, injected
+  vectors, a sound owner holding the lock) and applies the Stand.call checks
+  to every direct export call, plus DI sections, ISR paths, gateway costs
+  and PIO writes.
 - Calibration and debugging: `tools/dev/audit.js` (budget audit),
   `tools/dev/overrun.js` (overruns, needed base reserve, per-item worst case,
   per-STEP profile), `tools/dev/trace.js` (per-STEP states and budget calls),
@@ -295,7 +331,8 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   budget sweep), `tools/dev/portions.js` (card portion times),
   `tools/dev/di_find.js` (long DI sections), `tools/dev/throughput.js`,
   `tools/dev/tcpcheck.js`, `tools/dev/watch.js` (write watch on context fields),
-  `tools/dev/esp_costs.js` (ESP layer routine costs). Keep debug scripts in
+  `tools/dev/esp_costs.js` (ESP layer routine costs), `tools/dev/sdk_rate.js`
+  (throughput through the SDK gateway by STEPs per period). Keep debug scripts in
   `tools/dev/`, not in the session scratchpad.
 - Results are kept separate per stand: Z (model), M (MAME), Ж (real
   Sprinter). A scenario that was not run is «не проверено», never «пройдено».
@@ -306,7 +343,8 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 The existing drivers block, call DSS and each has its own stack. Reuse
 register sequences and protocol knowledge, never their control flow.
 
-- libman / L1: `/Users/dmitry/dev/zx/sprinter/sources/libman/README.md`
+- libman / L1: the submodule `third_party/libman` (same as
+  `/Users/dmitry/dev/zx/sprinter/sources/libman`): `README.md`
   (formats L0/L1/L2, lines 64-180), `libman/README.md` (API, 179-267),
   `src/sprinter_mkdll/format.py` and `assembler.py` (exact checks),
   `examples/libmantst/testdll_l1.asm` (minimal L1).

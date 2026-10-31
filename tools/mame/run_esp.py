@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""run_esp.py -- one M stand run: UGTEST.EXE + an ESP build in MAME (holub).
+"""run_esp.py -- one M stand run: a test program + an ESP build in MAME (holub).
 
-  tools/mame/run_esp.py gtcpesp E      # E echo, S 8 KiB stream, P peer closes (TCP), D SHUTDOWN while open
+  tools/mame/run_esp.py gtcpesp E                  # UGTEST.EXE (libman l_call, M4)
+  tools/mame/run_esp.py --prog netdemo gtcpesp E   # NETDEMO.EXE (the SDK, M5)
+
+Scenarios: E echo, S 8 KiB stream, P peer closes (TCP), D SHUTDOWN while
+open; NETDEMO also W pause and L load / check / free.
 
 Steps: config include (mkcfg.js) -> UGTEST.EXE (sjasmplus) -> FAT12 floppy
 with the EXE and the DLL -> echo server on 127.0.0.1:7000 -> MAME with
@@ -9,12 +13,13 @@ with the EXE and the DLL -> echo server on 127.0.0.1:7000 -> MAME with
 ugstand.lua -> report.  Exit status 0 only for "RESULT: PASS".
 
 Evidence (report, decoded statistics, server log, the command line) goes
-to build/mame/<dll>_<scen>/ and, with --evidence, to
-docs/evidence/m4_esp/<dll>_<scen>/.
+to build/mame/<prog>_<dll>_<scen>/ and, with --evidence, to
+docs/evidence/m4_esp/<dll>_<scen>/ (ugtest) or docs/evidence/m5_sdk/
+<dll>_<scen>/ (netdemo).
 
 Environment: MAME_HOLUB (binary, default ../../../mame-holub/sprinter),
 MAME_ASSETS (roms + IMG, default .../mame_images/mame_release_v306_25.05.2025),
-LIBMAN_DIR (default ../libman/libman).
+LIBMAN_DIR (default third_party/libman/libman, the git submodule).
 """
 import argparse
 import json
@@ -29,8 +34,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SPRINTER = ROOT.parents[1]
 MAME = pathlib.Path(os.environ.get('MAME_HOLUB', SPRINTER / 'mame-holub' / 'sprinter'))
 ASSETS = pathlib.Path(os.environ.get('MAME_ASSETS', SPRINTER / 'mame_images' / 'mame_release_v306_25.05.2025'))
-LIBMAN = pathlib.Path(os.environ.get('LIBMAN_DIR', ROOT.parent / 'libman' / 'libman'))
-SCENARIOS = {'E': 'echo 300 bytes', 'S': '8 KiB stream', 'P': 'peer closes', 'D': 'SHUTDOWN while open'}
+LIBMAN = pathlib.Path(os.environ.get('LIBMAN_DIR', ROOT / 'third_party' / 'libman' / 'libman'))
+SCENARIOS = {'E': 'echo 300 bytes', 'S': '8 KiB stream', 'P': 'peer closes', 'D': 'SHUTDOWN while open',
+             'W': 'pause 2 s between two echoes', 'L': 'load, check and free the DLL'}
+NETDEMO_ONLY = ('W', 'L')
 
 
 def run(*cmd, **kw):
@@ -48,8 +55,28 @@ def decode(name, hexstr):
     return out
 
 
+def gateway(b):
+    """Decode the gateway snapshot (sdk/gateway/ugate.inc offsets)."""
+    c = {}
+    for line in (ROOT / 'sdk' / 'gateway' / 'ugate.inc').read_text().splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and parts[1] == 'EQU' and parts[0].startswith('UG'):
+            try:
+                c[parts[0]] = int(parts[2], 0)
+            except ValueError:
+                pass
+    u16 = lambda o: int.from_bytes(b[o:o + 2], 'little')
+    q = lambda o: {'poll': u16(o), 'card': u16(o + 2), 'main': u16(o + 4), 'service': u16(o + 6)}
+    st = {k[4:].lower(): u16(c['UGW_STATS'] + v) for k, v in c.items() if k.startswith('UGS_') and k != 'UGS_COUNT'}
+    return {'quota_full': q(c['UGW_QFULL']), 'cost_poll_us': u16(c['UGW_COST_POLL']), 'cost_step_us': u16(c['UGW_COST_STEP']),
+            'periods': u16(c['UGW_PERIOD_NO']), 'largest_period_debit_us': u16(c['UGW_DEBIT_MAX']),
+            'now_ms': int.from_bytes(b[c['UGW_NOW']:c['UGW_NOW'] + 4], 'little'), 'stats': st}
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument('--prog', choices=['ugtest', 'netdemo'], default='ugtest')
+    ap.add_argument('--steps', type=int, default=5, help='NETDEMO: STEPs per 20 ms budget period')
     ap.add_argument('dll', choices=['gtcpesp', 'gudpesp'])
     ap.add_argument('scen', choices=list(SCENARIOS))
     ap.add_argument('--timeout', type=int, default=240, help='MAME -seconds_to_run')
@@ -58,7 +85,10 @@ def main():
     a = ap.parse_args()
     if a.dll == 'gudpesp' and a.scen == 'P':
         sys.exit('P (peer closes) is a TCP scenario')
-    work = ROOT / 'build' / 'mame' / f'{a.dll}_{a.scen}'
+    if a.prog == 'ugtest' and a.scen in NETDEMO_ONLY:
+        sys.exit(f'{a.scen} is a NETDEMO scenario')
+    prog = a.prog
+    work = ROOT / 'build' / 'mame' / (f'{a.dll}_{a.scen}' if prog == 'ugtest' else f'{prog}_{a.dll}_{a.scen}')
     if work.exists():
         shutil.rmtree(work)
     for d in ('cfg', 'nvram', 'diff', 'snap'):
@@ -69,13 +99,13 @@ def main():
     if not MAME.exists():
         sys.exit(f'{MAME} missing: run tools/mame/build_holub.sh')
 
-    run('node', ROOT / 'tools/mame/mkcfg.js', a.dll, work / 'ugcfg.inc')
-    run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', work, '-I', LIBMAN,
-        f'-DSCEN={ord(a.scen)}', f'--sym={work / "ugtest.sym"}', ROOT / 'sdk/example/ugtest.asm',
-        cwd=work, stdout=subprocess.DEVNULL)
-    img = work / 'ugtest.img'
+    run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, a.dll, work / 'ugcfg.inc')
+    run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', ROOT / 'sdk', '-I', work, '-I', LIBMAN,
+        f'-DSCEN={ord(a.scen)}', f'-DUG_STEPS={a.steps}', f'--sym={work / (prog + ".sym")}',
+        ROOT / 'sdk/example' / f'{prog}.asm', cwd=work, stdout=subprocess.DEVNULL)
+    img = work / f'{prog}.img'
     run('mformat', '-C', '-i', img, '-f', '1440', '::')
-    run('mcopy', '-i', img, work / 'ugtest.exe', '::UGTEST.EXE')
+    run('mcopy', '-i', img, work / f'{prog}.exe', f'::{prog.upper()}.EXE')
     run('mcopy', '-i', img, dll, f'::{dll.name}')
 
     srv_log = work / 'server.log'
@@ -96,7 +126,8 @@ def main():
            '-seconds_to_run', str(a.timeout)]
     if not a.window:
         cmd += ['-video', 'none', '-sound', 'none']
-    env = dict(os.environ, UG_SYM=str(work / 'ugtest.sym'), UG_REPORT_FILE=str(report))
+    env = dict(os.environ, UG_SYM=str(work / f'{prog}.sym'), UG_REPORT_FILE=str(report),
+               UG_CMD='b:\\' + prog + '.exe')
     (work / 'command.txt').write_text(' '.join(str(c) for c in cmd) + '\n')
     t0 = time.time()
     try:
@@ -109,8 +140,27 @@ def main():
     wall = time.time() - t0
     text = report.read_text(errors='replace') if report.exists() else 'RESULT: FAIL (no report)\n'
     lines = text.splitlines()
-    summary = {'dll': a.dll, 'scenario': f'{a.scen} {SCENARIOS[a.scen]}', 'wall_s': round(wall, 1)}
+    summary = {'prog': prog, 'dll': a.dll, 'scenario': f'{a.scen} {SCENARIOS[a.scen]}', 'wall_s': round(wall, 1)}
+    if prog == 'netdemo':
+        summary['steps_per_period'] = a.steps
     for ln in lines:
+        if ln.startswith('LOAD '):
+            f = ln[5:].split()
+            summary['load'] = {'status': int(f[0], 16), 'libman_reason': int(f[1], 16), 'handle': int(f[2], 16),
+                               'page': int(f[3], 16), 'base': hex(int(f[4], 16) << 8)}
+        if ln.startswith('ENV '):
+            f = ln[4:].split()
+            summary['env'] = {'init_config': int(f[0], 16), 'env': int(f[1], 16), 'quota_sum_us': int(f[2], 16)}
+        if ln.startswith('GW '):
+            summary['gateway'] = gateway(bytes.fromhex(ln[3:].strip()))
+        if ln.startswith('CLOCK_RATE '):
+            summary['clock'] = ln.strip()
+        if ln.startswith('TIMING '):
+            # stopwatch counts of 16 CPU clocks at 21 MHz (turbo, confirmed by UGTEST's calibration)
+            isr, step, gap, late = (int(x, 16) for x in ln[7:].split())
+            us = 16 / 21.0
+            summary['timing_us'] = {'tick_isr_max': round(isr * us), 'admitted_ug_step_max': round(step * us),
+                                    'largest_tick_gap': round(gap * us), 'late_ticks': late}
         if ln.startswith('STATS '):
             summary['stats'] = {k: v for k, v in decode('STATS', ln[6:].strip()).items() if v}
         if ln.startswith('INFO '):
@@ -144,7 +194,7 @@ def main():
     print(json.dumps(summary, indent=2))
     ok = 'RESULT: PASS' in text
     if a.evidence:
-        ev = ROOT / 'docs' / 'evidence' / 'm4_esp' / f'{a.dll}_{a.scen}'
+        ev = ROOT / 'docs' / 'evidence' / ('m4_esp' if prog == 'ugtest' else 'm5_sdk') / f'{a.dll}_{a.scen}'
         if ev.exists():
             shutil.rmtree(ev)
         ev.mkdir(parents=True)

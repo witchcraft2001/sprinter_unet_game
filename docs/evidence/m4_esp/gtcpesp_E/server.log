@@ -1,4 +1,4 @@
-1793432880.498 listening 127.0.0.1 7000 close-after 0
-1793432885.412 tcp connect ('127.0.0.1', 63856)
-1793432885.425 tcp echo 300 total 300
-1793432885.447 tcp closed by the client 300
+1793441185.187 listening 127.0.0.1 7000 close-after 0
+1793441189.144 tcp connect ('127.0.0.1', 54657)
+1793441189.154 tcp echo 300 total 300
+1793441189.176 tcp closed by the client 300

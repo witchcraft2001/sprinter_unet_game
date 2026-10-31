@@ -1,0 +1,3 @@
+[submodule "third_party/libman"]
+	path = third_party/libman
+	url = https://github.com/witchcraft2001/sprinter-libman.git
