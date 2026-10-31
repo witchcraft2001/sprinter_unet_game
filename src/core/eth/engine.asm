@@ -11,7 +11,10 @@
 ;   NIC_PREPARE        main: derive HS_IO / MAC source from the context
 ;   NIC_BRINGUP    (P) one bring-up step; HS_RES = NBR_*
 ;   NIC_RX_STATUS  (P) CF=1 no frame; else HL = length, A = 0 / 1 (error)
-;   NIC_RX_READ    (P) DE = dest, B = 1..NIC_CHUNK, C = mode (NRX_*)
+;   NIC_RX_READ    (P) DE = dest, B = 1..64, C = mode (NRX_*); DE advanced
+;                      in the stored modes, preserved in NRX_SKIP
+;   NIC_RX_LIMIT   (P) B = E = bytes of the next RX_READ (1..NIC_CHUNK): may
+;                      lower both (RTL: never across the ring end); clobbers A, HL
 ;   NIC_RX_DISCARD (P) drop the rest of the current frame (start)
 ;   NIC_RX_DISC_DONE (P) CF=1 while the drop is in progress
 ;   NIC_TX_BEGIN   (P) HL = frame length; CF=1 when the card has no room
@@ -39,18 +42,26 @@ NTX_ERROR	EQU	2
 ; release = 49 us around the card routine.
 COST_PORTION	EQU	110	; bracket + a short card step (<= 35 us)
 COST_BRINGUP	EQU	190	; bracket + the longest bring-up step (16 ID bytes)
-COST_CHUNK	EQU	COST_PORTION + 3 * NIC_CHUNK	; 40-byte card copy with sum (stand: 216 us)
+COST_CHUNK	EQU	COST_PORTION + 3 * NIC_CHUNK + PROF_DMA_EXTRA_US	; 40-byte card copy with sum (stand: 216 us EL3)
 COST_TX_BEGIN	EQU	250	; TX room check, preamble and a 54-byte header
 COST_TX_WAIT	EQU	150	; completion check + transport notification
 COST_CLASSIFY	EQU	200	; Ethernet/ARP/IPv4 checks and the IP header checksum
-COST_ACCEPT	EQU	290	; transport accept: ports, state, header fields
+COST_SUM0	EQU	120	; pseudo header + up to 30 segment bytes in scratch
+COST_ACCEPT	EQU	200	; transport accept: ports, state, header fields (stand: 162 us)
 COST_STORE	EQU	170	; payload placement in the RX ring (TCP)
-COST_FINISH	EQU	260	; checksum verdict + transport input (TCP/UDP)
+COST_FINISH	EQU	240	; checksum verdict + transport input incl. ACK processing (stand: 219 us)
 COST_PREPARE	EQU	60	; NIC_PREPARE + bring-up deadline
+COST_POLL	EQU	COST_PORTION + PROF_POLL_EXTRA_US	; status poll that may find a frame
 COST_ARP_PULL	EQU	110	; ARP frame into ctx.txh
 COST_TP_PULL	EQU	230	; IPv4 + TCP/UDP header with checksums
 BRINGUP_MS	EQU	3000	; whole bring-up deadline
 TX_TIMEOUT_MS	EQU	50	; transmit completion
+	ASSERT	COST_POLL <= PROF_MAX_ITEM_US && COST_BRINGUP <= PROF_MAX_ITEM_US
+	ASSERT	COST_CHUNK <= PROF_MAX_ITEM_US && COST_TX_BEGIN <= PROF_MAX_ITEM_US
+	ASSERT	COST_CLASSIFY <= PROF_MAX_ITEM_US && COST_ACCEPT <= PROF_MAX_ITEM_US
+	ASSERT	COST_STORE <= PROF_MAX_ITEM_US && COST_FINISH <= PROF_MAX_ITEM_US
+	ASSERT	COST_SUM0 <= PROF_MAX_ITEM_US
+	ASSERT	COST_TP_PULL <= PROF_MAX_ITEM_US && COST_TX_WAIT <= PROF_MAX_ITEM_US
 
 ; IX = ctx.hwsm
 	MACRO	HWSM_IX
@@ -111,7 +122,7 @@ HW_STEP
 	POP	HL
 	ADD	HL,BC
 	LD	DE,BRINGUP_MS
-	CALL	DL_SET
+	CALL	DL_ARM
 	LD	A,UHW_INIT
 .state
 	CP	UHW_INIT
@@ -176,7 +187,19 @@ HS_RESULT
 	LD	A,(HL)
 	RET
 
+; Receive and transmit take turns to go first (bit 1 of the STEP counter;
+; bit 0 alternates hardware and transport), so a long frame in one
+; direction does not starve the other.
 HW_RUN
+	LD	BC,UCTX_STATS - 4 + UNETG_STATS_STEPS_TOTAL - CTX_BIAS
+	PUSH	IY
+	POP	HL
+	ADD	HL,BC
+	BIT	1,(HL)
+	JR	Z,.tx_first
+	CALL	ETH_RX_STEP
+	JP	ETH_TX_STEP
+.tx_first
 	CALL	ETH_TX_STEP
 	JP	ETH_RX_STEP
 
@@ -226,7 +249,17 @@ ETH_RX_STEP
 	DEC	A
 	JP	Z,.header
 	DEC	A
-	JP	NZ,.store
+	JR	Z,.accept
+	DEC	A
+	JP	Z,.store
+	; ERX_SUM0: pseudo header + segment bytes in scratch
+	LD	HL,COST_SUM0
+	CALL	TAKE
+	RET	C
+	CALL	ETH_SUM0
+	XOR	A
+	RET
+.accept
 	; ERX_ACCEPT: the transport decides where the segment goes
 	LD	HL,COST_ACCEPT
 	CALL	TAKE
@@ -256,7 +289,7 @@ ETH_RX_STEP
 	LD	A,1			; CF=0 (OR A), one frame finished
 	RET
 .poll
-	LD	HL,COST_PORTION
+	LD	HL,COST_POLL
 	CALL	TAKE
 	RET	C
 	LD	HL,RXP_POLL
@@ -483,7 +516,140 @@ RXP_COPY
 .c_set
 	LD	B,A
 	LD	E,A
+	JP	NIC_RX_LIMIT		; the card may shorten it (ring end)
+
+; ----------------------------------------------------------------------
+; NIC_PORT_READ (P): read B bytes (1..64) from the card data port HL into
+; DE (NRX_COPY), into DE adding to HS_SUM (NRX_SUM) or only into HS_SUM
+; (NRX_SKIP).  The checksum lanes follow HS_PAR (odd offset = high lane);
+; DE is advanced for the stored modes.  Shared by every card whose data
+; port is one fixed address.  ~28 T per byte + ISA waits.
+; ----------------------------------------------------------------------
+NIC_PORT_READ
+	LD	A,C
+	OR	A
+	JR	NZ,.summed
+.copy
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	DJNZ	.copy
 	RET
+.summed
+	PUSH	IX
+	PUSH	AF			; mode
+	LD	A,B
+	LD	C,(IX+HS_SUM)
+	LD	B,(IX+HS_SUM+1)
+	BIT	0,(IX+HS_PAR)
+	LD	IXL,A			; IXL = bytes left (IX is saved)
+	JR	Z,.even
+	; odd start: one byte into the high lane
+	POP	AF
+	PUSH	AF
+	LD	A,(HL)
+	CALL	.store
+	ADD	A,B
+	LD	B,A
+	LD	A,0
+	ADC	A,C
+	LD	C,A
+	JR	NC,.par0
+	INC	B
+.par0
+	DEC	IXL
+	JR	Z,.even_end
+.even
+	LD	A,IXL
+	SRL	A
+	JR	Z,.tail			; no whole pairs
+	LD	IXH,A
+	POP	AF
+	PUSH	AF
+	CP	NRX_SKIP
+	JR	Z,.pairs_skip
+	OR	A			; CF = 0
+.pairs_copy
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	ADC	A,C
+	LD	C,A
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	ADC	A,B
+	LD	B,A
+	DEC	IXH
+	JR	NZ,.pairs_copy
+	JR	.fold
+.pairs_skip
+	OR	A
+.pairs_skip_loop
+	LD	A,(HL)
+	ADC	A,C
+	LD	C,A
+	LD	A,(HL)
+	ADC	A,B
+	LD	B,A
+	DEC	IXH
+	JR	NZ,.pairs_skip_loop
+.fold
+	LD	A,0
+	ADC	A,C
+	LD	C,A
+	LD	A,0
+	ADC	A,B
+	LD	B,A
+	JR	NC,.tail
+	INC	BC
+.tail
+	LD	A,IXL
+	AND	1
+	JR	Z,.even_end
+	; one byte left: low lane, the next segment byte is odd
+	POP	AF
+	PUSH	AF
+	LD	A,(HL)
+	CALL	.store
+	ADD	A,C
+	LD	C,A
+	LD	A,0
+	ADC	A,B
+	LD	B,A
+	JR	NC,.par1
+	INC	BC
+.par1
+	POP	AF
+	POP	IX
+	LD	(IX+HS_PAR),1
+	JR	.save
+.even_end
+	POP	AF
+	POP	IX
+	LD	(IX+HS_PAR),0
+.save
+	LD	(IX+HS_SUM),C
+	LD	(IX+HS_SUM+1),B
+	RET
+.store					; A = byte; (SP+2) = mode
+	PUSH	AF
+	PUSH	HL
+	LD	HL,6
+	ADD	HL,SP
+	LD	H,(HL)			; saved mode in the high byte of AF
+	LD	A,H
+	CP	NRX_SKIP
+	POP	HL
+	JR	Z,.no_store
+	POP	AF
+	LD	(DE),A
+	INC	DE
+	RET
+.no_store
+	POP	AF
+	RET
+
 
 ; (P) drop the rest of the frame
 RXP_DISCARD
@@ -572,7 +738,7 @@ ETH_CLASSIFY
 	LD	(IX+HS_RXPROTO),A
 	LD	(IX+HS_RXSEG),C
 	LD	(IX+HS_RXSEG+1),B
-	LD	(IX+HS_RXS),ERX_ACCEPT
+	LD	(IX+HS_RXS),ERX_SUM0
 	RET
 .discard
 	CALL	ETH_RX_DROP
@@ -621,46 +787,40 @@ IP_MATCH_DST
 	ADD	HL,BC			; HL -> destination in the frame
 	JP	IP_EQ_CTX		; compare with IY + DE
 
-; ETH_SEG_START: called by TP_RX_ACCEPT for an accepted segment.
-; In: BC = segment length, A = protocol, IX -> frame.  Starts the checksum
-; with the pseudo header and the segment bytes already in scratch and sets
-; HS_RXREM / HS_RXSKIP (= 0) / HS_RXLIM (= 0) / HS_RXS = COPY or FINISH.
-; The transport then sets HS_RXSKIP / HS_RXLIM / HS_RXDST / HS_RXSPAN for
-; the card part.  Out: DE = segment bytes in scratch.
-ETH_SEG_START
+; ETH_SUM0 (ERX_SUM0): start the segment checksum with the pseudo header
+; and the segment bytes already in scratch; HS_RXREM = card bytes of the
+; segment.  Independent of the transport, so it is its own budget item.
+ETH_SUM0
+	HWSM_IX
+	LD	C,(IX+HS_RXSEG)
+	LD	B,(IX+HS_RXSEG+1)
+	LD	A,(IX+HS_RXPROTO)
+	LD	DE,UCTX_SCRATCH - CTX_BIAS
+	PUSH	IY
+	POP	IX
+	ADD	IX,DE			; IX -> frame (addresses of the pseudo header)
 	PUSH	BC
 	LD	D,B
 	LD	E,C
 	LD	C,A
 	CALL	CSUM_PSEUDO		; HL = pseudo-header sum
 	POP	BC
-	LD	A,B
-	OR	A
-	JR	NZ,.full
-	LD	A,C
-	CP	L4_IN_SCRATCH
-	JR	C,.n
-.full
-	LD	A,L4_IN_SCRATCH
-.n
+	CALL	SEG_IN_SCRATCH		; DE = bytes in scratch
 	PUSH	BC			; segment length
-	LD	C,A
-	LD	B,0
-	PUSH	BC			; bytes in scratch
-	PUSH	IX
-	POP	DE
+	PUSH	DE
+	LD	B,D
+	LD	C,E
 	PUSH	HL
-	LD	HL,ETH_L4
+	LD	HL,UCTX_SCRATCH + ETH_L4 - CTX_BIAS
+	PUSH	IY
+	POP	DE
 	ADD	HL,DE
 	EX	DE,HL			; DE -> segment in scratch
 	POP	HL
 	CALL	CSUM_RAM
 	POP	DE			; DE = bytes in scratch
 	POP	BC			; BC = segment length
-	PUSH	IX			; frame
-	PUSH	DE
 	HWSM_IX
-	POP	DE
 	LD	(IX+HS_SUM),L
 	LD	(IX+HS_SUM+1),H
 	LD	H,B
@@ -669,6 +829,30 @@ ETH_SEG_START
 	SBC	HL,DE			; card bytes of the segment
 	LD	(IX+HS_RXREM),L
 	LD	(IX+HS_RXREM+1),H
+	LD	(IX+HS_RXS),ERX_ACCEPT
+	RET
+
+; SEG_IN_SCRATCH: DE = min(BC, L4_IN_SCRATCH).  Preserves BC, HL.
+SEG_IN_SCRATCH
+	LD	DE,L4_IN_SCRATCH
+	LD	A,B
+	OR	A
+	RET	NZ
+	LD	A,C
+	CP	E
+	RET	NC
+	LD	E,C
+	RET
+
+; ETH_SEG_START: called by TP_RX_ACCEPT for an accepted segment (HS_SUM
+; and HS_RXREM were set by ETH_SUM0).  In: BC = segment length, IX ->
+; frame.  Sets HS_RXSKIP / HS_RXLIM (= 0), HS_NOCHK, HS_PAR and HS_RXS =
+; COPY or FINISH; the transport then sets HS_RXSKIP / HS_RXLIM /
+; HS_RXDST / HS_RXSPAN for the card part.  Out: DE = segment bytes in
+; scratch.  Preserves BC, IX.
+ETH_SEG_START
+	PUSH	IX
+	HWSM_IX
 	XOR	A
 	LD	(IX+HS_RXSKIP),A
 	LD	(IX+HS_RXSKIP+1),A
@@ -676,15 +860,15 @@ ETH_SEG_START
 	LD	(IX+HS_RXLIM+1),A
 	LD	(IX+HS_NOCHK),A
 	LD	(IX+HS_PAR),A		; the card part starts on an even offset
-	LD	A,H
-	OR	L
+	LD	A,(IX+HS_RXREM)
+	OR	(IX+HS_RXREM+1)
 	LD	A,ERX_COPY
 	JR	NZ,.state
 	LD	A,ERX_FINISH
 .state
 	LD	(IX+HS_RXS),A
 	POP	IX
-	RET
+	JP	SEG_IN_SCRATCH
 
 ; ======================================================================
 ; TX pipeline
@@ -733,6 +917,10 @@ ETH_TX_STEP
 .run
 	CALL	RUN_PORTION
 	RET	C
+	HWSM_IX
+	LD	A,(IX+HS_TXS)
+	CP	ETX_BEGIN
+	RET	Z			; the card has no room: next STEP (no spinning)
 	SET	2,(IY+CX_WORK)
 	JP	ETH_TX_STEP		; continue while the budget lasts
 .wait
@@ -771,6 +959,29 @@ ETH_TX_STEP
 	CP	ETK_TP
 	LD	A,B
 	JP	Z,TP_TX_DONE		; A = 1 sent, 0 failed
+	RET
+
+; ETH_TX_COPYING: CF=1 while the TX pipeline still reads the payload of a
+; transport frame out of an application TX slot (EV_FLUSH then holds the
+; TX_DONE outcomes, so no slot is handed back to the application before
+; its bytes are on the card).  Clobbers A, DE, HL.
+ETH_TX_COPYING
+	LD	DE,UCTX_HWSM + HS_TXKIND - CTX_BIAS
+	PUSH	IY
+	POP	HL
+	ADD	HL,DE
+	LD	A,(HL)
+	CP	ETK_TP
+	JR	NZ,.no
+	LD	DE,HS_TXS - HS_TXKIND
+	ADD	HL,DE
+	LD	A,(HL)
+	CP	ETX_BEGIN
+	JR	C,.no			; idle
+	CP	ETX_END			; BEGIN / DATA: CF=1
+	RET
+.no
+	OR	A
 	RET
 
 ; (P) start the frame and write its header from ctx.txh
@@ -832,7 +1043,7 @@ TXP_END
 	LD	DE,HS_DL
 	ADD	HL,DE
 	LD	DE,TX_TIMEOUT_MS
-	JP	DL_SET
+	JP	DL_ARM
 
 ; (P) completion check
 TXP_CHECK
@@ -848,7 +1059,7 @@ HW_ISR
 	LD	A,(IY+CX_HW_STATE)
 	CP	UHW_RUN
 	RET	NZ
-	LD	HL,PROF_EMPTY_POLL_US
+	LD	HL,PROF_ISR_POLL_US
 	CALL	TAKE
 	RET	C
 	LD	HL,ISRP_POLL
@@ -860,5 +1071,7 @@ ISRP_POLL
 	CALL	NIC_ISR_POLL
 	RET	C
 	SET	UPEND_RX,(IY+CX_ISR_PENDING)
-	SET	0,(IY+CX_WORK)
+	LD	A,(IY+CX_WORK)
+	OR	UWK_HW | UWK_MORE	; STEP_ISR returns WORK: main has a frame to read
+	LD	(IY+CX_WORK),A
 	RET

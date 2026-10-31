@@ -181,6 +181,19 @@ CLOCK_STEP
 	; Timer cache: protocol timers are evaluated only when the earliest
 	; armed deadline is reached or a deadline was (re)armed.
 	RES	2,(IY+CX_TMR_FLAGS)	; UTMR_DUE
+	; While the transport still owes the evaluation started by an earlier
+	; STEP (its step did not fit), a new full evaluation would only eat the
+	; budget it needs: the cached due deadline is explained by that debt.
+	; (Ethernet transports only: they clear UTMR_TPDUE in every TP_STEP.)
+	IFDEF	UGB_HW_ETH
+	BIT	4,(IY+CX_TMR_FLAGS)	; UTMR_TPDUE
+	JR	Z,.tmr_cache
+	LD	A,(IY+CX_STATE)
+	CP	UNETG_CTXSTATE_CONFIGURED
+	JR	Z,.tmr_done
+	RES	4,(IY+CX_TMR_FLAGS)	; no transport step will pay it any more
+.tmr_cache
+	ENDIF
 	BIT	0,(IY+CX_TMR_FLAGS)	; UTMR_VALID
 	JR	Z,.tmr_due
 	BIT	1,(IY+CX_TMR_FLAGS)	; UTMR_NONE
@@ -432,12 +445,16 @@ EXP_STEP_ISR
 	AND	UCF_PREACQ
 	OR	UCF_ISR
 	LD	(IY+CX_CALL_FLAGS),A
-	PUSH	BC
-	CALL	UNITS_FROM_BUDGET
-	POP	BC
 	XOR	A
 	LD	(IY+CX_WORK),A
 	LD	(IY+CX_FLAGS_OUT),A
+	PUSH	BC
+	CALL	UNITS_FROM_BUDGET
+	LD	HL,PROF_ISR_BASE_US
+	CALL	TAKE
+	POP	BC
+	LD	A,UNETG_STATUS_YIELD
+	JR	C,.out			; not even the fixed path fits
 	PUSH	BC
 	LD	A,B
 	DEC	A
@@ -457,6 +474,7 @@ EXP_STEP_ISR
 .hw
 	CALL	HW_ISR
 	CALL	WORK_STATUS
+.out
 	LD	L,(IY+CX_FLAGS_OUT)
 	LD	H,0
 	LD	(IY+CX_CALL_FLAGS),H

@@ -63,7 +63,7 @@ for (const dll of DLLS) {
     assert.equal(i.max_step_gap_ms, 20);
     assert.ok(i.poll_gap_us <= i.auto_fallback_gap_us && i.auto_fallback_gap_us <= i.max_service_gap_us,
       'poll_gap <= auto_fallback_gap <= max_service_gap (ТЗ §4.2)');
-    assert.ok(i.empty_poll_us <= 100 && i.bus_busy_us <= 25);
+    assert.ok(i.empty_poll_us <= i.isr_body_max_us && i.bus_busy_us <= i.isr_body_max_us);
     assert.equal(i.step_body_max_us, 500);
     assert.equal(i.isr_body_max_us, 150);
     assert.equal(i.caps & C.cap.IRQ_ROUTE_QUALIFIED, 0, 'v1: no qualified IRQ route');

@@ -13,6 +13,8 @@ PROF_CAPS_HW		EQU	UNETG_CAP_POLL | UNETG_CAP_AUTO | UNETG_CAP_PROBE | UNETG_CAP_
 PROF_HW_RING_MIN	EQU	UNETG_UART_RING_MIN
 PROF_UART_PROFILES	EQU	0x01
 PROF_IO_MASK		EQU	0x0007	; 16550 occupies 8 ports
+PROF_POLL_EXTRA_US	EQU	0
+PROF_DMA_EXTRA_US	EQU	0
 	ENDIF
 	IFDEF	UGB_HW_RTL
 PROF_HW			EQU	UNETG_HW_RTL
@@ -24,6 +26,8 @@ PROF_CAPS_HW		EQU	UNETG_CAP_POLL | UNETG_CAP_AUTO | UNETG_CAP_PROBE | UNETG_CAP_
 PROF_HW_RING_MIN	EQU	0
 PROF_UART_PROFILES	EQU	0
 PROF_IO_MASK		EQU	0x001F	; NE2000 block of 32 ports
+PROF_POLL_EXTRA_US	EQU	40	; CURR on page 1 + 4-byte header by remote DMA
+PROF_DMA_EXTRA_US	EQU	15	; remote DMA programmed for every portion (64-byte header: 231 us)
 	ENDIF
 	IFDEF	UGB_HW_EL3
 PROF_HW			EQU	UNETG_HW_EL3
@@ -35,6 +39,8 @@ PROF_CAPS_HW		EQU	UNETG_CAP_POLL | UNETG_CAP_AUTO | UNETG_CAP_PROBE | UNETG_CAP_
 PROF_HW_RING_MIN	EQU	0
 PROF_UART_PROFILES	EQU	0
 PROF_IO_MASK		EQU	0x000F	; 3C509B block of 16 ports
+PROF_POLL_EXTRA_US	EQU	0
+PROF_DMA_EXTRA_US	EQU	0
 	ENDIF
 	IFDEF	UGB_HW_LOOP
 PROF_HW			EQU	UNETG_HW_LOOP
@@ -46,6 +52,8 @@ PROF_CAPS_HW		EQU	UNETG_CAP_POLL | UNETG_CAP_LOOPBACK
 PROF_HW_RING_MIN	EQU	0
 PROF_UART_PROFILES	EQU	0
 PROF_IO_MASK		EQU	0
+PROF_POLL_EXTRA_US	EQU	0
+PROF_DMA_EXTRA_US	EQU	0
 	ENDIF
 
 	IFDEF	UGB_TP_TCP
@@ -71,19 +79,47 @@ PROF_CPU_KHZ		EQU	21000
 ; Fixed STEP path incl. a full deadline recomputation (stand: loopback
 ; 129 us; Ethernet 117 us idle, ~200 us with due timers and a refused
 ; transport step).
+; Ethernet: the reserve must cover the fixed path plus the dispatch and
+; refused attempts around the items (SCEN=stream tools/dev/overrun.js,
+; "needed base reserve": 218 us worst on the stand).
 	IFDEF	UGB_HW_LOOP
 PROF_STEP_BASE_US	EQU	140
 	ELSE
-PROF_STEP_BASE_US	EQU	170
+PROF_STEP_BASE_US	EQU	220
 	ENDIF
-; A useful STEP must afford the fixed path plus one hardware/protocol
-; portion; at 7 MHz this exceeds the 500 us STEP body limit (v1 needs turbo).
-PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + 100
-PROF_ISR_MIN_US		EQU	40	; one STEP_ISR poll portion with return
-PROF_MAX_ATOMIC_US	EQU	60
+; A useful STEP must afford the fixed path plus the most expensive
+; indivisible item, otherwise a pipeline waiting for that item never moves
+; (every *_COST of the Ethernet engine and transports is asserted against
+; PROF_MAX_ITEM_US).  At 7 MHz this exceeds the 500 us STEP body limit:
+; v1 needs turbo.
+	IFDEF	UGB_HW_ETH
+	IFDEF	UGB_TP_TCP
+PROF_MAX_ITEM_US	EQU	270	; TCP idle step + SYN template (60 + 210)
+	ELSE
+PROF_MAX_ITEM_US	EQU	250	; COST_TX_BEGIN; UDP idle step + template (80 + 170)
+	ENDIF
+	ELSE
+	IFDEF	UGB_HW_LOOP
+PROF_MAX_ITEM_US	EQU	210	; COST_LOOP_ITER + COST_LOOP_FIXED + a 16-byte portion
+	ELSE
+PROF_MAX_ITEM_US	EQU	100	; ESP: revised with its transport (M4)
+	ENDIF
+	ENDIF
+PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + PROF_MAX_ITEM_US + PROF_MIN_RETURN_US
+; STEP_ISR (stand, 21 MHz): fixed path 60 us, card status portion 67 us,
+; refused try-lock 73..76 us in all.  These miss the ТЗ §5.1 targets (empty
+; poll <= 100 us, BUS_BUSY <= 25 us); they are published as measured.
+PROF_ISR_BASE_US	EQU	65	; prologue, budget, statistics, return
+	IFDEF	UGB_HW_ETH
+PROF_ISR_POLL_US	EQU	70	; lock + map + card status + unmap + release
+	ELSE
+PROF_ISR_POLL_US	EQU	0	; no card: nothing to poll
+	ENDIF
 PROF_MIN_RETURN_US	EQU	10
-PROF_EMPTY_POLL_US	EQU	60
-PROF_BUS_BUSY_US	EQU	15
+PROF_ISR_MIN_US		EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US + PROF_MIN_RETURN_US
+PROF_MAX_ATOMIC_US	EQU	60
+PROF_EMPTY_POLL_US	EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US
+PROF_BUS_BUSY_US	EQU	80
 PROF_MAX_STEP_GAP_MS	EQU	20
 PROF_TIME_READ_MAX_US	EQU	20
 PROF_TIMING_MODES	EQU	0x03

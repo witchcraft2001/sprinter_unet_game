@@ -36,6 +36,7 @@ class Peer {
     this.window = opts.window ?? 4096;
     this.errors = []; this.sent = []; this.log = []; this.received = [];
     this.tcp = null; this.udpIn = []; this.arpRequests = 0; this.segments = 0;
+    this.rto = opts.rto ?? 1000; this.retransmits = 0;      // RFC 6298 minimum RTO
     this.out = [];                            // frames to deliver to the card
   }
 
@@ -108,7 +109,11 @@ class Peer {
     const c = this.tcp;
     if (!c) return this.errors.push('TCP segment without a connection');
     c.peerWindow = be16(f, 48);
-    if (flags & 0x10) c.acked = ack;
+    if (flags & 0x10) {
+      c.acked = ack;
+      // drop the acknowledged part of the retransmission queue
+      while (c.unacked && c.unacked.length && ((ack - c.unacked[0].seq) >>> 0) < 0x80000000 && ((ack - c.unacked[0].seq) >>> 0) >= c.unacked[0].data.length) c.unacked.shift();
+    }
     if (c.state === 'syn' && (flags & 0x10)) c.state = 'est';
     if (data.length) {
       this.segments++;
@@ -117,7 +122,7 @@ class Peer {
         c.rcv = (c.rcv + data.length) >>> 0;
         this.received.push(...data);
         this.out.push(this.tcpSegment(c, 0x10));
-        if (this.echo) { this.out.push(this.tcpSegment(c, 0x18, data)); c.snd = (c.snd + data.length) >>> 0; }
+        if (this.echo) this.sendData(data);
       } else {
         this.out.push(this.tcpSegment(c, 0x10));        // duplicate ACK
       }
@@ -131,7 +136,27 @@ class Peer {
   }
 
   // Server-side helpers for tests
-  sendData(bytes) { const c = this.tcp; this.out.push(this.tcpSegment(c, 0x18, bytes)); c.snd = (c.snd + bytes.length) >>> 0; }
+  sendData(bytes) {
+    const c = this.tcp;
+    (c.unacked ||= []).push({ seq: c.snd, data: Array.from(bytes), at: this.now ?? 0 });
+    this.out.push(this.tcpSegment(c, 0x18, bytes));
+    c.snd = (c.snd + bytes.length) >>> 0;
+  }
+  // Retransmission timer of the peer's own data (go-back-N from the oldest
+  // unacknowledged segment), driven by the stand clock in ms.
+  tick(now) {
+    this.now = now;
+    const c = this.tcp;
+    if (!c || !c.unacked || !c.unacked.length || now - c.unacked[0].at < this.rto) return;
+    const snd = c.snd;
+    for (const u of c.unacked) {
+      c.snd = u.seq;
+      this.out.push(this.tcpSegment(c, 0x18, u.data));
+      u.at = now;
+      this.retransmits++;
+    }
+    c.snd = snd;
+  }
   sendFin() { const c = this.tcp; this.out.push(this.tcpSegment(c, 0x11)); c.snd = (c.snd + 1) >>> 0; }
   sendRst() { const c = this.tcp; this.out.push(this.tcpSegment(c, 0x14)); }
 

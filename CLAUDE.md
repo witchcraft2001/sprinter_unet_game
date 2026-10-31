@@ -185,7 +185,11 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   may live in `0xC000..0xFFFF`.
 - 3C509B: 16-bit registers are accessed low byte then high byte back to back.
   RTL8019AS: 8-bit mode only, `DCR = 0x48`; ring TPSR 0x40, PSTART 0x46,
-  PSTOP 0x60. TL16C550C (ESP) at ISA I/O 0x3E8: MCR OUT1/OUT2 are the ESP
+  PSTOP 0x60. Never touch the reset port +0x1F (clones hang the ISA cycle;
+  reset softly with CR = STOP and a 2 ms wait state). One remote DMA per
+  portion, programmed in full (CR, ISR.RDC, RBCR, RSAR, CR) and completed
+  inside it; a portion never crosses PSTOP; write CR.TXP exactly once per
+  frame (re-issuing it duplicated frames in the field). TL16C550C (ESP) at ISA I/O 0x3E8: MCR OUT1/OUT2 are the ESP
   module RESET/PGM lines — never use them as a PC-style "IRQ enable"; never
   reset the RX FIFO through FCR mid-session (it leaves auto-RTS deasserted,
   `sprinter_wifi/network/src/lib/esp_tcp_multi.asm:139-151`).
@@ -209,13 +213,35 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - IX-base macros (`TP_IX`, `HWSM_IX`, `ARP_IX`, `TXH_IX`, `TP_IX_HL`) preserve
   DE; helpers that clobber DE (`TX_BUF`, `RX_BUF`, `TX_*_PTR`, `IY_PTR`,
   `STAT_INC`) must be bracketed when DE/HL carry a value.
+- The same macros end in `ADD IX,DE` and destroy CF: never put one between a
+  routine that answers in CF (`DL_LEFT`, `TAKE`, ...) and the branch on it
+  (this silently disabled TCP retransmission until M2).
 - `EV_FLUSH` preserves IX (it can call `TP_RESET`); any routine that runs
   inside an export with an IX argument and calls into the transport must too.
 - Charge the budget BEFORE the work (`TAKE`, `BUDGET_BYTES`, `EV_AFFORD`), with
-  costs taken from `tools/dev/audit.js`, never from estimates. A validated
-  frame must not be dropped for lack of budget: keep the state and continue
-  next STEP. Watch for livelocks: every heavy item plus the base must fit the
-  configured STEP budget (check with `tools/dev/trace.js`).
+  costs measured on the stand (`ITEMS=1 SCEN=stream tools/dev/overrun.js`),
+  never estimated, and measured under load: single-shot scenarios miss the
+  heavy cases (ACK processing, retransmissions). A validated frame must not
+  be dropped for lack of budget: keep the state and continue next STEP.
+- `min_useful_budget_us` = `PROF_STEP_BASE_US` + `PROF_MAX_ITEM_US` +
+  `PROF_MIN_RETURN_US`. Every cost, and every chain of costs taken in one
+  STEP (idle step + template), is `ASSERT`ed against `PROF_MAX_ITEM_US`;
+  `PROF_STEP_BASE_US` must cover the "needed base reserve" that
+  `tools/dev/overrun.js` prints for the stream scenario. The minimum-budget
+  tests and `tools/dev/sweep_loop.js` must keep moving data at the published
+  minimum.
+- Livelocks come from two items that each refuse the other's budget (timer
+  recomputation vs the transport step, TCP idle + template). Deadlines that
+  only their owner polls are armed with `DL_ARM` (no timer-cache reset);
+  while the transport owes a timer evaluation (`UTMR_TPDUE`) no new full
+  recomputation starts. Check with `tools/dev/trace.js` under load.
+- A TX slot is handed back (TX_DONE) only when no pipeline still reads it;
+  a prepared TCP segment overtaken by an ACK is dropped (`TCP_REWIND`).
+  `tools/dev/tcpcheck.js` compares every transmitted payload with the data.
+- Stand scenarios run at the STEP period the configuration promises
+  (`worst_poll_gap_us`, 2 ms by default); the peer retransmits with the
+  RFC 6298 minimum RTO (1 s). Unmet ТЗ targets stay visible as `todo`
+  tests (`tests/z/abi/perf_targets.test.js`), never as weakened asserts.
 - Placing a new global label inside a routine cuts off its dotted locals.
 
 ## Testing policy
@@ -231,9 +257,12 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - `tools/harness/z80core.js` is vendored (MIT, see THIRD_PARTY.md) and pinned
   by SHA-256; never edit it in place.
 - Calibration and debugging: `tools/dev/audit.js` (budget audit),
-  `tools/dev/trace.js` (per-STEP states and budget calls), `tools/dev/e2e.js`
-  (end-to-end smoke), `tools/dev/sweep_loop.js` (GLOOP budget sweep),
-  `tools/dev/watch.js` (write watch on context fields). Keep debug scripts in
+  `tools/dev/overrun.js` (overruns, needed base reserve, per-item worst case,
+  per-STEP profile), `tools/dev/trace.js` (per-STEP states and budget calls),
+  `tools/dev/e2e.js` (end-to-end smoke), `tools/dev/sweep_loop.js` (GLOOP
+  budget sweep), `tools/dev/portions.js` (card portion times),
+  `tools/dev/di_find.js` (long DI sections), `tools/dev/throughput.js`,
+  `tools/dev/tcpcheck.js`, `tools/dev/watch.js` (write watch on context fields). Keep debug scripts in
   `tools/dev/`, not in the session scratchpad.
 - Results are kept separate per stand: Z (model), M (MAME), Ж (real
   Sprinter). A scenario that was not run is «не проверено», never «пройдено».

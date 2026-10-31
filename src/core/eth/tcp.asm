@@ -68,7 +68,11 @@ COST_TCP_STEP	EQU	220	; timers + segment choice (units)
 COST_TCP_IDLE	EQU	60	; segment choice without due timers
 COST_TCP_DATA	EQU	140	; choosing a data segment (slot cursor, window)
 COST_TCP_INPUT	EQU	160
-COST_TEMPLATE	EQU	240	; IP_TEMPLATE (stand: 151 us)
+COST_TEMPLATE	EQU	210	; SYN: IP_TEMPLATE + control segment (stand: 198 us)
+	ASSERT	COST_TCP_STEP <= PROF_MAX_ITEM_US
+	ASSERT	COST_TCP_INPUT <= PROF_MAX_ITEM_US
+	ASSERT	COST_TCP_IDLE + COST_TEMPLATE <= PROF_MAX_ITEM_US	; idle step -> SYN in one STEP
+	ASSERT	COST_TCP_IDLE + COST_TCP_DATA <= PROF_MAX_ITEM_US
 COST_TERMINATE	EQU	60	; CH_TERMINATE (stand: 51 us)
 
 	MACRO	TP_IX
@@ -236,7 +240,10 @@ TP_STEP
 	TP_IX
 	LD	A,(IX+TC_ST)
 	OR	A
-	RET	Z
+	JR	NZ,.active
+	RES	4,(IY+CX_TMR_FLAGS)	; no connection: no transport timers owed
+	RET
+.active
 	BIT	4,(IY+CX_TMR_FLAGS)	; UTMR_TPDUE: timers owed
 	JR	NZ,.due
 	LD	HL,COST_TCP_IDLE
@@ -275,7 +282,7 @@ TP_STEP
 	LD	DE,TC_RTXDL
 	ADD	HL,DE
 	CALL	DL_LEFT
-	TP_IX
+	; IX is kept by DL_LEFT (TP_IX would clobber CF)
 	JP	NC,.stall
 	LD	A,(IX+TC_RTXI)
 	INC	A
@@ -302,19 +309,7 @@ TP_STEP
 	SET	3,(IX+TC_FL)
 	JR	.stall
 .rewind
-	; go back to the oldest unacknowledged byte
-	SEQ_COPY TC_NXT, TC_UNA
-	LD	A,(IY+CX_TX_SEND)
-	LD	(IX+TC_NSLOT),A
-	LD	A,(IY+CX_TX_OFF)
-	LD	(IX+TC_NOFF),A
-	LD	A,(IY+CX_TX_OFF+1)
-	LD	(IX+TC_NOFF+1),A
-	LD	(IX+TC_SEGS),0
-	BIT	2,(IX+TC_FL)		; our FIN was in flight: send it again
-	JR	Z,.stall
-	RES	2,(IX+TC_FL)
-	SET	1,(IX+TC_FL)
+	CALL	TCP_REWIND
 .stall
 	BIT	1,(IX+TC_TMR)
 	JR	Z,.window
@@ -323,7 +318,7 @@ TP_STEP
 	LD	DE,TC_STALL
 	ADD	HL,DE
 	CALL	DL_LEFT
-	TP_IX
+	; IX is kept by DL_LEFT (TP_IX would clobber CF)
 	JR	NC,.window
 	LD	A,UNETG_EV_TIMEOUT
 	LD	DE,UNETG_TIMEOUT_TX
@@ -350,6 +345,23 @@ TP_STEP
 	JP	TCP_CHOOSE
 
 ; TCP_ARM_RTX: RTX deadline = now + retry_wait_ms[TC_RTXI].  IX = tp.
+; TCP_REWIND: send again from the oldest unacknowledged byte (IX = tp).
+TCP_REWIND
+	LD	(IX+TC_PREP),TCP_PREP_NONE
+	SEQ_COPY TC_NXT, TC_UNA
+	LD	A,(IY+CX_TX_SEND)
+	LD	(IX+TC_NSLOT),A
+	LD	A,(IY+CX_TX_OFF)
+	LD	(IX+TC_NOFF),A
+	LD	A,(IY+CX_TX_OFF+1)
+	LD	(IX+TC_NOFF+1),A
+	LD	(IX+TC_SEGS),0
+	BIT	2,(IX+TC_FL)		; our FIN was in flight: send it again
+	RET	Z
+	RES	2,(IX+TC_FL)
+	SET	1,(IX+TC_FL)
+	RET
+
 TCP_ARM_RTX
 	SET	0,(IX+TC_TMR)
 	LD	A,(IX+TC_RTXI)
@@ -1290,6 +1302,24 @@ TCP_ACKED
 	POP	BC
 	CALL	TCP_RELEASE		; BC data bytes acknowledged
 	TP_IX
+	; A prepared data segment that starts before the new UNA (a
+	; retransmission overtaken by the ACK of the original) points into
+	; slots that may be reused now: drop it and send again from UNA.
+	LD	A,(IX+TC_PREP)
+	OR	A			; TCP_PREP_NONE
+	JR	Z,.prep_ok
+	LD	A,(IX+TC_TXLEN)
+	OR	(IX+TC_TXLEN+1)
+	JR	Z,.prep_ok		; control segment: no payload
+	SEQ_SUB	TC_UNA, TC_TXSEQ
+	BIT	7,H
+	JR	NZ,.prep_ok		; UNA before the segment
+	LD	A,H
+	OR	L
+	OR	B
+	OR	C
+	CALL	NZ,TCP_REWIND
+.prep_ok
 	; segments still in flight
 	SEQ_SUB	TC_NXT, TC_UNA
 	LD	A,B

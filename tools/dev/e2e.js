@@ -12,7 +12,7 @@ console.log('INIT_CONFIG', s.initConfig(cfg).a);
 const probs = [];
 let boot = 0;
 for (let i = 0; i < 200 && s.ctx('hw_state') !== 2; i++) { probs.push(...s.tick().problems); boot++; }
-console.log('bring-up steps', boot, 'hw', s.ctx('hw_state'), 'mac', s.card.station.map((x) => x.toString(16)).join(':'));
+console.log('bring-up steps', boot, 'hw', s.ctx('hw_state'), 'mac', s.cardMac().map((x) => x.toString(16)).join(':'));
 console.log('OPEN', s.open().a);
 let ev = [], n = 0;
 for (; n < 400 && !ev.some((e) => e.name === 'CONNECTED'); n++) { probs.push(...s.tick().problems); ev.push(...s.events()); }

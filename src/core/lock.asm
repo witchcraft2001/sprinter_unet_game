@@ -21,7 +21,12 @@ ISA_ACQUIRE
 	LD	B,UNETG_LOCK_NET_MAIN
 	BIT	1,(IY+CX_CALL_FLAGS)	; UCF_ISR
 	JR	Z,.owner
-	INC	B			; UNETG_LOCK_NET_ISR
+	; STEP_ISR runs with IFF=0: the test-and-set is already indivisible
+	LD	A,(HL)
+	OR	A
+	JR	NZ,.refused
+	LD	(HL),UNETG_LOCK_NET_ISR
+	JR	.taken
 .owner
 	LD	A,I
 	JP	PE,.iff_on
@@ -65,6 +70,14 @@ ISA_RELEASE
 ; IY = context and may clobber A, BC, DE, HL, IX; results go to the
 ; context.  Stack: 6 + routine.
 PORTION
+	BIT	1,(IY+CX_CALL_FLAGS)	; UCF_ISR: IFF=0 already, nothing to restore
+	JR	Z,.main
+	PUSH	HL
+	CALL	ISA_MAP
+	POP	HL
+	CALL	JP_HL
+	JP	ISA_UNMAP
+.main
 	LD	A,I
 	JP	PE,.on
 	LD	A,I

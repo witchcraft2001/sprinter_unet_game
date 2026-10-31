@@ -4,7 +4,10 @@
 'use strict';
 const { Stand, C } = require('../harness/stand.js');
 let over = 0, minProgress = null, maxRatio = 0;
-for (const B of [260, 300, 350, 400, 450, 500]) {
+// the published minimum must already move data
+const probe = new Stand({ dll: 'gloop' }); probe.call('INIT');
+const MIN = probe.getInfo().info.min_useful_budget_us;
+for (const B of [MIN, 260, 300, 350, 400, 450, 500].filter((b) => b >= MIN)) {
   let progressed = true;
   for (const n of [1, 7, 64, 200, 536]) for (const tp of ['TCP', 'UDP']) {
     const s = new Stand({ dll: 'gloop' }); s.call('INIT');
@@ -19,5 +22,5 @@ for (const B of [260, 300, 350, 400, 450, 500]) {
   }
   if (progressed && minProgress === null) minProgress = B;
 }
-console.log(JSON.stringify({ over, minProgress, maxRatio: +maxRatio.toFixed(3) }));
-process.exit(over ? 1 : 0);
+console.log(JSON.stringify({ over, published: MIN, minProgress, maxRatio: +maxRatio.toFixed(3) }));
+process.exit(over || minProgress !== MIN ? 1 : 0);

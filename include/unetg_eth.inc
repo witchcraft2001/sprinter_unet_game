@@ -100,7 +100,8 @@ HS_PAR		EQU	47	; u8  1: the next segment byte has an odd offset
 HS_BDL		EQU	48	; u32 deadline of the whole bring-up
 HS_TXHSRC	EQU	52	; u16 header source of the frame being sent
 HS_RXPROTO	EQU	54	; u8  IPv4 protocol of the frame being received
-HS_SIZE		EQU	55
+HS_NEXTPG	EQU	55	; u8  RTL8019AS: next-page field of the frame being read
+HS_SIZE		EQU	56
 	ASSERT	HS_SIZE <= 56
 
 ERX_IDLE	EQU	0
@@ -112,6 +113,7 @@ ERX_DISC_WAIT	EQU	5
 ERX_HDR_READ	EQU	6	; frame waiting, header not read yet
 ERX_ACCEPT	EQU	7	; IPv4 checks passed, transport not asked yet
 ERX_STORE	EQU	8	; transport accepted, payload placement not set up
+ERX_SUM0	EQU	9	; IPv4 checks passed, segment checksum not started
 
 ETX_IDLE	EQU	0
 ETX_BEGIN	EQU	1	; header ready in ctx.txh

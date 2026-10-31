@@ -6,8 +6,12 @@
 
 ; DL_SET: deadline at HL = now_ms + DE (ms).  Invalidates the timer
 ; cache.  Clobbers A, HL.
+; DL_ARM: the same for a deadline that is polled by its owner and never
+; merged into the STEP deadline (card waits, TX completion): the timer
+; cache stays valid.
 DL_SET
 	TMR_INVALIDATE
+DL_ARM
 	LD	A,(IY+CX_NOW_MS)
 	ADD	A,E
 	LD	(HL),A
@@ -93,11 +97,17 @@ DL_MERGE_DE
 ; qualified upper bounds measured on the stand (docs/MEASUREMENTS.md).
 ; ----------------------------------------------------------------------
 
-; UNITS_FROM_BUDGET: units = (DE * cpu_f16) / 16 (rounded down).
-; Clobbers A, B, HL.
+; UNITS_FROM_BUDGET: units = (DE * cpu_f16) / 16 - PROF_MIN_RETURN_US,
+; at least 0: the return reserve is set aside once here, so TAKE and
+; BUDGET_BYTES compare against the units directly.  Clobbers A, B, DE, HL.
 UNITS_FROM_BUDGET
 	LD	A,(IY+CX_CPU_F16)
 	CALL	MUL_F16
+	LD	DE,-PROF_MIN_RETURN_US
+	ADD	HL,DE
+	JR	C,.store
+	LD	HL,0
+.store
 	LD	(IY+CX_UNITS),L
 	LD	(IY+CX_UNITS+1),H
 	RET
@@ -135,20 +145,15 @@ MUL_F16
 ; when the cost plus the cheapest return path does not fit.
 ; Clobbers A, DE, HL.
 TAKE
-	LD	DE,PROF_MIN_RETURN_US
-	ADD	HL,DE
 	EX	DE,HL
 	LD	L,(IY+CX_UNITS)
 	LD	H,(IY+CX_UNITS+1)
 	OR	A
 	SBC	HL,DE
 	JR	C,.refuse
-	LD	DE,PROF_MIN_RETURN_US
-	ADD	HL,DE
 	LD	(IY+CX_UNITS),L
 	LD	(IY+CX_UNITS+1),H
-	OR	A
-	RET
+	RET				; CF=0
 .refuse
 	SET	4,(IY+CX_WORK)		; UWK_YIELD
 	SCF
@@ -163,8 +168,6 @@ TAKE
 BUDGET_BYTES
 	PUSH	AF			; [shift]
 	PUSH	DE			; [shift][wanted]
-	LD	DE,PROF_MIN_RETURN_US
-	ADD	HL,DE
 	EX	DE,HL
 	LD	L,(IY+CX_UNITS)
 	LD	H,(IY+CX_UNITS+1)
@@ -211,8 +214,6 @@ BUDGET_BYTES
 .spend
 	OR	A
 	SBC	HL,DE
-	LD	DE,PROF_MIN_RETURN_US
-	ADD	HL,DE
 	LD	(IY+CX_UNITS),L
 	LD	(IY+CX_UNITS+1),H
 	OR	A

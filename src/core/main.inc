@@ -90,7 +90,7 @@ IMG_CTX_PTR
 	INCLUDE	"core/loop/loop.asm"
 	INCLUDE	"hw/none.asm"
 	ENDIF
-	IFDEF	UGB_HW_EL3
+	IFDEF	UGB_HW_ETH
 	INCLUDE	"unetg_eth.inc"
 	INCLUDE	"core/lock.asm"
 	INCLUDE	"core/eth/csum.asm"
@@ -102,11 +102,12 @@ IMG_CTX_PTR
 	ELSE
 	INCLUDE	"core/eth/udp.asm"
 	ENDIF
+	IFDEF	UGB_HW_EL3
 	INCLUDE	"hw/el3/el3.asm"
 	ENDIF
-	IFDEF	UGB_HW_RTL			; M2: RTL8019AS layer not yet in place
-	INCLUDE	"core/tp_none.asm"
-	INCLUDE	"hw/none.asm"
+	IFDEF	UGB_HW_RTL
+	INCLUDE	"hw/rtl/rtl8019.asm"
+	ENDIF
 	ENDIF
 	IFDEF	UGB_HW_ESP			; M4: ESP layer not yet in place
 	INCLUDE	"core/tp_none.asm"

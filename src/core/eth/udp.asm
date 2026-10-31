@@ -25,6 +25,8 @@ UDP_SUM_CHUNK	EQU	128
 COST_UDP_STEP	EQU	170
 COST_UDP_IDLE	EQU	80
 COST_TEMPLATE	EQU	170	; IP_TEMPLATE (stand: 151 us)
+	ASSERT	COST_UDP_STEP <= PROF_MAX_ITEM_US
+	ASSERT	COST_UDP_IDLE + COST_TEMPLATE <= PROF_MAX_ITEM_US
 
 	MACRO	TP_IX
 	PUSH	DE			; preserves DE
@@ -92,7 +94,10 @@ TP_STEP
 	TP_IX
 	LD	A,(IX+UD_ST)
 	OR	A
-	RET	Z
+	JR	NZ,.active
+	RES	4,(IY+CX_TMR_FLAGS)	; no connection: no transport timers owed
+	RET
+.active
 	CP	UDS_ARP
 	JR	NZ,.not_arp
 	; resolved by ARP_INPUT: open before paying for the timer step, so the

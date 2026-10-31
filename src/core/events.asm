@@ -125,6 +125,10 @@ EV_FLUSH
 	; TX outcomes in ring order: the oldest committed slot follows tx_next.
 	BIT	7,(IY+CX_EV_FLAGS)		; UEVF_TXDONE
 	JR	Z,.rx_ready
+	IFDEF	UGB_HW_ETH
+	CALL	ETH_TX_COPYING			; a slot is still being read by the card
+	JR	C,.rx_ready			; pipeline: outcomes stay held
+	ENDIF
 	BIT	3,(IY+CX_CALL_FLAGS)		; UCF_BUDGET: the scan itself costs
 	JR	Z,.tx_scan
 	LD	HL,COST_TXSCAN

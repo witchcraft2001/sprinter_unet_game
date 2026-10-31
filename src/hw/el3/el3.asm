@@ -207,7 +207,7 @@ NIC_BRINGUP
 	LD	DE,HS_DL
 	ADD	HL,DE
 	LD	DE,EL3_EEPROM_MS
-	CALL	DL_SET
+	CALL	DL_ARM
 	LD	(IX+HS_RES),NBR_WAIT
 	RET
 .ee_done
@@ -349,7 +349,7 @@ EL3_TABLE_OP
 	LD	DE,HS_DL
 	ADD	HL,DE
 	LD	DE,EL3_CIP_MS
-	JP	DL_SET
+	JP	DL_ARM
 .not_cmd
 	DEC	A
 	JR	NZ,.not_mac
@@ -517,135 +517,17 @@ NIC_ISR_POLL
 	JP	NIC_RX_STATUS
 
 ; NIC_RX_READ (P): DE = destination, B = bytes (1..64), C = NRX_* mode.
-; The RX FIFO data register is window 1 register 0.  The checksum lanes
-; follow HS_PAR (odd offset = high lane).  ~28 T per byte + ISA waits.
+; The RX FIFO data register is window 1 register 0; the copy/sum loop is
+; shared with the other cards (engine.asm NIC_PORT_READ).
 NIC_RX_READ
 	PUSH	DE
 	XOR	A
 	CALL	EL3_REG			; HL = FIFO data port
 	POP	DE
-	LD	A,C
-	OR	A
-	JR	NZ,.summed
-.copy
-	LD	A,(HL)
-	LD	(DE),A
-	INC	DE
-	DJNZ	.copy
-	RET
-.summed
-	PUSH	IX
-	PUSH	AF			; mode
-	LD	A,B
-	LD	C,(IX+HS_SUM)
-	LD	B,(IX+HS_SUM+1)
-	BIT	0,(IX+HS_PAR)
-	LD	IXL,A			; IXL = bytes left (IX is saved)
-	JR	Z,.even
-	; odd start: one byte into the high lane
-	POP	AF
-	PUSH	AF
-	LD	A,(HL)
-	CALL	.store
-	ADD	A,B
-	LD	B,A
-	LD	A,0
-	ADC	A,C
-	LD	C,A
-	JR	NC,.par0
-	INC	B
-.par0
-	DEC	IXL
-	JR	Z,.even_end
-.even
-	LD	A,IXL
-	SRL	A
-	JR	Z,.tail			; no whole pairs
-	LD	IXH,A
-	POP	AF
-	PUSH	AF
-	CP	NRX_SKIP
-	JR	Z,.pairs_skip
-	OR	A			; CF = 0
-.pairs_copy
-	LD	A,(HL)
-	LD	(DE),A
-	INC	DE
-	ADC	A,C
-	LD	C,A
-	LD	A,(HL)
-	LD	(DE),A
-	INC	DE
-	ADC	A,B
-	LD	B,A
-	DEC	IXH
-	JR	NZ,.pairs_copy
-	JR	.fold
-.pairs_skip
-	OR	A
-.pairs_skip_loop
-	LD	A,(HL)
-	ADC	A,C
-	LD	C,A
-	LD	A,(HL)
-	ADC	A,B
-	LD	B,A
-	DEC	IXH
-	JR	NZ,.pairs_skip_loop
-.fold
-	LD	A,0
-	ADC	A,C
-	LD	C,A
-	LD	A,0
-	ADC	A,B
-	LD	B,A
-	JR	NC,.tail
-	INC	BC
-.tail
-	LD	A,IXL
-	AND	1
-	JR	Z,.even_end
-	; one byte left: low lane, the next segment byte is odd
-	POP	AF
-	PUSH	AF
-	LD	A,(HL)
-	CALL	.store
-	ADD	A,C
-	LD	C,A
-	LD	A,0
-	ADC	A,B
-	LD	B,A
-	JR	NC,.par1
-	INC	BC
-.par1
-	POP	AF
-	POP	IX
-	LD	(IX+HS_PAR),1
-	JR	.save
-.even_end
-	POP	AF
-	POP	IX
-	LD	(IX+HS_PAR),0
-.save
-	LD	(IX+HS_SUM),C
-	LD	(IX+HS_SUM+1),B
-	RET
-.store					; A = byte; (SP+2) = mode
-	PUSH	AF
-	PUSH	HL
-	LD	HL,6
-	ADD	HL,SP
-	LD	H,(HL)			; saved mode in the high byte of AF
-	LD	A,H
-	CP	NRX_SKIP
-	POP	HL
-	JR	Z,.no_store
-	POP	AF
-	LD	(DE),A
-	INC	DE
-	RET
-.no_store
-	POP	AF
+	JP	NIC_PORT_READ
+
+; NIC_RX_LIMIT (P): the FIFO has no wrap: any portion length is fine.
+NIC_RX_LIMIT
 	RET
 
 ; NIC_RX_DISCARD (P): RX_DISCARD drops the whole top frame.
