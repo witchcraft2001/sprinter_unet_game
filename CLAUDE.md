@@ -1,0 +1,316 @@
+# UNET-GAME — repository instructions
+
+Non-blocking Z80 network libraries for Sprinter games. Seven libman 1.3 L1
+DLLs are built from ONE shared core: `GTCPESP`, `GUDPESP`, `GTCPRTL`,
+`GUDPRTL`, `GTCP509B`, `GUDP509B` and the loopback `GLOOP`, plus the SDK
+(loader, gateway, time adapters, example) and the host test stand.
+
+## Authority
+
+- `docs/unet-game-spec.md` (ТЗ) and `docs/unet-game-abi.md` (ABI v1) are
+  normative. When code and these documents disagree, the documents win; change
+  them only on explicit request from the user.
+- `abi/unetgame_abi.toml` is the single source of every public number:
+  export indices, statuses, sources, event types, block layouts (INIT_CONFIG,
+  GET_INFO, GET_STATS, event, context). `tools/gen_abi.py` generates
+  `include/UNETGAME.INC`, `include/unetg_ctx.inc`, `tools/harness/abi.json`
+  and `docs/ABI-TABLE.md`. Never edit generated files; run `make gen`.
+- The ABI is append-only after the M0 freeze (v1.0): never renumber or reuse
+  a value, add a new field at the end of a block or take a reserved slot.
+  The public include `UNETGAME.INC` uses the `UNETG_` prefix for every name.
+- Language: this file and code comments are English; project documents,
+  reports and the acceptance matrix are Russian.
+
+## Layout
+
+```
+abi/        unetgame_abi.toml (source of truth)
+include/    UNETGAME.INC, unetg_ctx.inc (generated), unetg_internal.inc
+src/core/   ABI dispatch, config validation, scheduler, hwsm, lock, fallback,
+            slots, events, timers, lifecycle, stats
+src/core/eth/  frame, arp, csum, tcp, udp   (RTL + 3C509B)
+src/core/esp/  AT sequencer, byte parser, passive TCP, active UDP
+src/core/loop/ loopback transport
+src/hw/{esp,rtl,el3,loop}/  hardware access layer, one per card
+src/dll/    seven 20-line entry files: DEFINEs + ORG + INCLUDE core/main.inc
+sdk/        loader, gateway, time adapters, example/netdemo
+tools/      build.sh, size_report.py, gen_abi.py, check_names.py,
+            measure/ (Z80 cost probes), mame/, harness/ (Node Z80 stand)
+tests/      z/ (Node stand scenarios, node:test), host/ (python unittest)
+docs/       spec, ABI, ARCHITECTURE, BUILD, TESTING, MEASUREMENTS, acceptance/
+```
+
+Each DLL is selected by exactly one `UGB_HW_{ESP,RTL,EL3,LOOP}` and one
+`UGB_TP_{TCP,UDP,ANY}` build define (`tools/mkentries.sh` writes the entry
+files); `src/core/main.inc` asserts that. Build selectors never reuse a
+`UNETG_*` name: sjasmplus `DEFINE` would textually replace the ABI constant
+of the same name. Never fork the core per card: hardware differences live in
+`src/hw/*` and behind `IFDEF UGB_HW_*` only where unavoidable.
+
+## Commands
+
+```sh
+make gen          # regenerate UNETGAME.INC / ctx include / abi.json / ABI table
+make all          # build the seven DLLs into build/ (+ SDK objects)
+make verify       # sprinter-mkdll verify --target 1.3 for every DLL
+make size         # size report: image, reloc, sum, prefix, free bytes
+make names        # delivery names: 8.3, unique, not UNET<tag>, defines match
+make test-host    # python: ABI sources vs generated files, block layouts,
+                  # relocated L1 == direct assembly at 4 bases, vendored SHA-256
+make test-z       # Node Z80 stand: ABI vectors on all seven builds + hw scenarios
+make check        # everything above; run before every hand-off
+```
+
+Single DLL by hand (what `tools/build.sh` does):
+
+```sh
+sprinter-mkdll build src/dll/gtcp509b.asm --format l1 --target 1.3 \
+  --assembler sjasmplus -I include -I src --name "GTCP509B v0.1.0" \
+  --version 0.1 --date YYYY-MM-DD --no-compress -o build/GTCP509B.DLL
+sprinter-mkdll verify build/GTCP509B.DLL --target 1.3
+sprinter-mkdll inspect build/GTCP509B.DLL
+```
+
+Tools: `sjasmplus` 1.22 and `sprinter-mkdll` in `/usr/local/bin`,
+`z88dk-ticks` in `/Users/dmitry/dev/zx/sprinter/z88dk/bin`, `node`, `python3`.
+Automated builds/tests are the agent's job: run `make check` yourself, do not
+ask the user to run them. Ask the user only for MAME/real-Sprinter runs.
+
+## Size limit (hard, checked on every build)
+
+libman 1.3 loads at most 16 KiB. For every DLL:
+
+- `code_size` (which INCLUDES the 32-byte L1 header) `+ reloc_size <= 16384`;
+- the L1 prefix size (header field at +02h) `<= 16384`;
+- hence the code body after the header is at most **0x38C7 = 14535 bytes**
+  (32 + 14535 + ceil(14535/8) = 16384).
+
+Rules:
+
+- Every `src/dll/*.asm` ends with
+  `DISPLAY "free: ", /D, IMG_ORIGIN + 0x38C7 - $` and
+  `ASSERT $ <= IMG_ORIGIN + 0x38C7` (pattern:
+  `sprinter-rtl8019a/src/dll/unetrtl.asm:3054-3058`). Do not weaken it to
+  `$ <= 0x4000` — that ignores the relocation bitmap
+  (the mistake in `sprinter_wifi/network/src/dll/unetesp.asm:2840`).
+- `make size` (`tools/size_report.py`) prints image size, relocation size,
+  their sum and the prefix size separately for each DLL and fails above the
+  limit. Report the numbers for every DLL whose size changed.
+- No cold overlays, no WIN0 blobs, no trailing payload appended after the L1
+  image (ТЗ §2). The existing UNET509B/UNETRTL overlay design is NOT a model.
+- The image is BSS-free: code + constant tables only. All mutable state lives
+  in the application context passed to INIT_CONFIG. The only mutable image
+  bytes are `IMG_CTX_PTR` (2 bytes, GET_INFO.image_mutable_bytes); the stand
+  flags any other write into the image.
+  This is the main size reserve versus the old DLLs (3+ KB of in-image BSS).
+- Biggest risk is `GTCP509B`, then `GTCPRTL`. If a build gets close to the
+  limit: table-driven automata, shared helpers, trim optional statistics down
+  to the mandatory list of ТЗ §7 — never an overlay.
+
+## L1 / sprinter-mkdll rules
+
+- Exactly one `ORG 0x0000`, and it is the first `ORG` in the assembled text
+  (mkdll rewrites only that line and assembles twice, at 0x0020 and 0x0120).
+- Every byte differing between the two passes must differ by exactly +1:
+  absolute addresses, `DW label` tables, `HIGH label`, `label ± constant` are
+  fine; `label*2`, `label>>1`, `label/…`, masks of addresses are build errors.
+- `label - label` inside the image is pass-invariant and fine; never mix an
+  image label with an absolute literal address (`label - 0xA000`): one side is
+  relocated, the other is not. No pass-dependent `DS`/`IF`.
+- `LOW label` is not relocated: it is correct only because libman places
+  images on 256-byte boundaries — rely on that, never on a full address.
+- Jump table at image +0x20, 3 bytes (`JP`) per entry: 0 = INIT, 1 = FINI
+  (libman), game exports from 2 (order fixed by the TOML). Reserved slots jump
+  to a stub returning `STATE`.
+- The relocated base comes from `LD HL,IMG_ORIGIN` (the header is at
+  `IMG_ORIGIN - 0x20`, 256-aligned); INIT refuses window 3 (`SCF`), otherwise
+  `XOR A`. FINI must succeed after a failed or partial INIT and
+  without INIT_CONFIG. libman forwards CF only for function 0: every game
+  export returns its status in A.
+- Via `l_call` only A, DE, IX, IY reach the DLL and only A, DE (and IX/IY)
+  come back; extra outputs (HL, flags byte) are duplicated into the context.
+- The L1 name field is at most 15 bytes (`"GTCP509B v0.1.0"` is exactly 15).
+- libman 1.3 does not pass the file handle to INIT and uses DSS SETWIN; do not
+  depend on 1.4-only behaviour.
+
+## Core rules (non-negotiable, ТЗ §2–§5, ABI §1)
+
+- The core never calls DSS, BIOS or libman: no `RST #08`, `RST #10`,
+  `RST #30`, no call into system pages — not even in INIT_CONFIG or errors.
+- No `EXX`, no `EX AF,AF'`; preserve IX and IY in every export; never change
+  SP; no self-modifying code (the sibling `isa.asm` stores state in
+  instruction operands — port its logic, not that idiom).
+- No `EI` inside STEP_ISR (it runs with IFF=0; RETI belongs to the gateway).
+  Main-loop exports restore the caller's IFF exactly: sample IFF2 with
+  `LD A,I` twice (Z80 erratum), `DI`, … , `EI` only if it was set.
+- No busy waits. Every hardware/connection/close wait is a resumable state
+  advanced by STEP/STEP_ISR with a byte/visit cap and a `now_ms` deadline.
+  "Drain until empty" loops are forbidden; every loop has a fixed maximum.
+- Budget: STEP body ≤ 500 µs and ≤ the passed budget; STEP_ISR body ≤ 150 µs;
+  empty poll ≤ 100 µs; BUS_BUSY path ≤ 25 µs; any DI section ≤ 200 µs.
+  Stack: ≤ 256 bytes for main exports, ≤ 96 bytes for STEP_ISR. Do not start
+  an indivisible operation that does not fit together with its return cost.
+- Only STEP advances protocol time (`now_ms` u32, wrap-safe comparisons,
+  intervals < 2^31). STEP_ISR never touches the event queue or RX publication;
+  it only moves hardware data and sets pending bits.
+- The core never touches CTC ports (#10..#13) or PIO ports (#1C..#1F). Card
+  interrupt masks (UART IER, RTL IMR, 3C509B mask) only while holding ISA.
+  Route masking is the gateway's job; the core returns the `MASK_ROUTE` flag.
+- ISA access only while the shared try-lock byte (`isa_lock_ptr`) is held:
+  0 free, 1 net/main, 2 net/ISR, 3 sound, 4 controller. Test-and-set under one
+  short DI; a non-zero byte, even our own ID, is BUS_BUSY. Honour the
+  gateway's pre-acquired flag; release only after restoring mapping/shadows.
+- Single-producer/single-consumer queues with one-byte indices; publish the
+  index after the content with one write. Multi-byte cross-context values
+  (UART ring head/tail, ISR stats) need an atomic protocol.
+- All application regions are validated with 17-bit interval arithmetic
+  before touching the card: overflow, overlap, crossing into 0xC000..0xFFFF,
+  overlap with the DLL image or gateway/stack regions → BAD_CONFIG.
+
+## Sprinter platform rules
+
+Trust `Estex-DSS/Shared_Includes/constants/SP2000.inc`, the BIOS/FPGA sources
+and the working drivers; `sprinter_ai_doc/manual/08_peripherals/03_isa_bus.md`
+and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
+
+- ISA lives only in WIN3 (`0xC000..0xFFFF`), memory-mapped: card I/O port N
+  is address `0xC000+N`. Open: `IN A,(#E2)` (save page) → `OUT (#1FFD),sh|#10`
+  → `OUT (#E2),#D4|slot<<1` (I/O mode; `#D0` memory) → `OUT (#9FBD),0`.
+  Close: `OUT (#1FFD),sh` → restore `#E2`. `#1FFD` and `#9FBD` are write-only:
+  use the shadow bytes passed by the gateway and restore their exact values,
+  never a constant `#01`/0. `#1FFD` bit 0 must stay 1 (otherwise ROM in WIN0).
+  While `#1FFD` bit 4 is set, never map page `#A0` into WIN3 (soft reset).
+- Keep the window open only under DI and only for one bounded portion;
+  nothing an interrupt can reach (handlers, their stack, IM2 table, gateway)
+  may live in `0xC000..0xFFFF`.
+- 3C509B: 16-bit registers are accessed low byte then high byte back to back.
+  RTL8019AS: 8-bit mode only, `DCR = 0x48`; ring TPSR 0x40, PSTART 0x46,
+  PSTOP 0x60. TL16C550C (ESP) at ISA I/O 0x3E8: MCR OUT1/OUT2 are the ESP
+  module RESET/PGM lines — never use them as a PC-style "IRQ enable"; never
+  reset the RX FIFO through FCR mid-session (it leaves auto-RTS deasserted,
+  `sprinter_wifi/network/src/lib/esp_tcp_multi.asm:139-151`).
+- Z84C15 PIO port B: data `#1E`, control `#1F`, written ONLY as
+  `LD BC,#001F : OUT (C),A` (the short form is redirected by the FPGA). Mode 3
+  control word with "mask follows" and its mask byte go out back to back under
+  one DI from the gateway's shadow. PB0/PB1 = ISA IRQ of slot 1/2, PB6/PB7 =
+  printer lines (BIOS: `#CF`, mask `#3F`, data `#C0`). Gateway only.
+- ISA IRQ → PIO is not wired on known boards nor in MAME. v1 hardware
+  profiles are POLL-only releases: the AUTO/STEP_ISR/fallback machinery is
+  complete and tested on the Z stand, GET_INFO reports no qualified route,
+  and IRQ columns of the acceptance matrix say «маршрут не квалифицирован».
+- CTC (#10..#13) belongs to the application (CH0 = mouse). The APP_COUNTER
+  adapter may only READ the game's CTC2/CTC3 chain with the owner's
+  permission (`CTC3 → CTC2 → CTC3`, one retry, phase modulo 17472).
+- CPU is 7 MHz or 21 MHz (turbo, default on). ISA cycles are plain memory
+  cycles without IOCHRDY handling: real costs come from `tools/measure`.
+
+## Lessons that are now rules
+
+- IX-base macros (`TP_IX`, `HWSM_IX`, `ARP_IX`, `TXH_IX`, `TP_IX_HL`) preserve
+  DE; helpers that clobber DE (`TX_BUF`, `RX_BUF`, `TX_*_PTR`, `IY_PTR`,
+  `STAT_INC`) must be bracketed when DE/HL carry a value.
+- `EV_FLUSH` preserves IX (it can call `TP_RESET`); any routine that runs
+  inside an export with an IX argument and calls into the transport must too.
+- Charge the budget BEFORE the work (`TAKE`, `BUDGET_BYTES`, `EV_AFFORD`), with
+  costs taken from `tools/dev/audit.js`, never from estimates. A validated
+  frame must not be dropped for lack of budget: keep the state and continue
+  next STEP. Watch for livelocks: every heavy item plus the base must fit the
+  configured STEP budget (check with `tools/dev/trace.js`).
+- Placing a new global label inside a routine cuts off its dotted locals.
+
+## Testing policy
+
+- Every code iteration ends with `make check` green. ABI vectors in
+  `tests/z/abi` run on all seven builds; hardware scenarios run per card.
+- The Node stand (`tools/harness`, `node:test`) executes the real relocated
+  DLLs (`stand.js` places them in WIN1/WIN2 at any 256-byte offset) and
+  enforces: T-state budgets at 7/21 MHz, DI-section length, stack high-water
+  (guard bytes), no RST/EXX/EX AF/SMC writes into the image (except the 4
+  mutable bytes), no CTC/PIO port access from the image, exact restore of
+  `#1FFD/#9FBD/#E2`, ISA access only with the window open and IFF=0.
+- `tools/harness/z80core.js` is vendored (MIT, see THIRD_PARTY.md) and pinned
+  by SHA-256; never edit it in place.
+- Calibration and debugging: `tools/dev/audit.js` (budget audit),
+  `tools/dev/trace.js` (per-STEP states and budget calls), `tools/dev/e2e.js`
+  (end-to-end smoke), `tools/dev/sweep_loop.js` (GLOOP budget sweep),
+  `tools/dev/watch.js` (write watch on context fields). Keep debug scripts in
+  `tools/dev/`, not in the session scratchpad.
+- Results are kept separate per stand: Z (model), M (MAME), Ж (real
+  Sprinter). A scenario that was not run is «не проверено», never «пройдено».
+  Model passes do not prove hardware IRQ routing or real ISA timing.
+
+## Reference sources (port logic, re-implement non-blocking)
+
+The existing drivers block, call DSS and each has its own stack. Reuse
+register sequences and protocol knowledge, never their control flow.
+
+- libman / L1: `/Users/dmitry/dev/zx/sprinter/sources/libman/README.md`
+  (formats L0/L1/L2, lines 64-180), `libman/README.md` (API, 179-267),
+  `src/sprinter_mkdll/format.py` and `assembler.py` (exact checks),
+  `examples/libmantst/testdll_l1.asm` (minimal L1).
+- L1 production skeleton and build script:
+  `/Users/dmitry/dev/zx/sprinter/sprinter-rtl8019a/src/dll/unetrtl.asm`
+  (rules 22-73, jump table 141-174, INIT/FINI 339-367, size assert 3054-3058),
+  `sprinter-rtl8019a/tools/build.sh:59-158`.
+- Existing UNET L1 binaries: `/Users/dmitry/dev/zx/sprinter/sources/unet_libs/unet_libs_core/dll/`
+  (`sprinter-mkdll inspect` for size comparison).
+- DLL test pattern with z88dk-ticks: `/Users/dmitry/dev/zx/sprinter/sources/libs/gfx320/Makefile`,
+  `tools/run_z80_tests.sh`, `tools/prepare_runtime_image.py` (relocation).
+- ISA window: `/Users/dmitry/dev/zx/sprinter/sprinter-rtl8019a/src/lib/isa.asm`
+  (IFF2 sampling; uses SMC — do not copy the idiom).
+- SprinterESP / TL16C550C / ESP-AT:
+  `/Users/dmitry/dev/zx/sprinter/sprinter_wifi/network/src/lib/esplib.asm`
+  (registers 15-71, UART_INIT 171-233, RTS pause 292-344, FIFO trigger 351-387,
+  module reset 684-703), `src/lib/esp_tcp.asm` (+IPD header/len 2545-2665),
+  `src/lib/esp_tcp_multi.asm:284-715` (CIPRECVMODE/CIPRECVDATA),
+  `src/lib/tput_lib.asm:561-616` (AFE burst problems), `docs/UNETAPI.md:715-738`,
+  `docs/UNETRTL-GAMES-FR.md` (earlier analysis of game needs),
+  `sprinter_wifi/network/CLAUDE.md` (ESP-AT 2.2.1/2.2.2 differences, jesperl).
+- RTL8019AS: `/Users/dmitry/dev/zx/sprinter/sprinter-rtl8019a/src/include/rtl8019.inc`,
+  `src/lib/rtl8019.asm` (DMA_READ 1211-1312, INIT_NORMAL 1619-1678,
+  SEND_FRAME_SG 1829-1974, RING_HAS_PACKET 2293-2387, RECOVER_OVERFLOW
+  2423-2471, READ_PACKET 2484-2703), `sprinter_rtl8019_soft.md:369-516`,
+  driver constraints in `sprinter-rtl8019a/CLAUDE.md` ("Driver / Stack
+  Constraints", "ISA window discipline").
+- 3C509B: `/Users/dmitry/dev/zx/sprinter/sprinter-3C509B/src/include/el3.inc`,
+  `src/lib/el3.asm` (DISCOVER 63-127, ACTIVATE 133-172, ID_SEQUENCE 214-249),
+  `el3_regs.asm` (CMD 51, WAIT_CIP 63-94, SELECT_WINDOW 227-252, INIT 293-424),
+  `el3_fifo.asm` (SEND_FRAME 19-112, RX_PENDING 117-141, READ_FRAME 148-229),
+  `el3_io.asm` (FIFO_READ 190-254; RX_COPY_SUM 364-482 uses EXX — rewrite),
+  `specs.md:128-260`. Its GPL clean-room rule applies to us as well: never
+  copy Linux/Nestor packet-driver code.
+- Host stand models: `/Users/dmitry/dev/zx/sprinter/sprinter-rtl8019a/tools/exe-harness/`
+  (`harness.js` MMU/ISA/IFF2, `rtl8019-model.js`, `net-builders.js`,
+  `docs/HARNESS.md`), `/Users/dmitry/dev/zx/sprinter/sprinter-3C509B/tools/exe-harness/harness.js`
+  (class `EtherLinkIII`, lines 406-1618).
+- Platform: `/Users/dmitry/dev/zx/sprinter/Estex-DSS/Shared_Includes/constants/SP2000.inc`
+  (cp866; windows 527-534, ISA 566-601, CTC 2113-2117, PIO 2125-2130),
+  `/Users/dmitry/dev/zx/sprinter/sprinter_bios/src/bios/exp/EXP.asm:1040-1091`
+  (PIO and `#1FFD` init), `/Users/dmitry/dev/zx/sprinter/sprinter_ai_doc/manual`
+  (architecture overview), `/Users/dmitry/dev/zx/sprinter/Estex-DSS` (DSS,
+  IM1 handler `DSS/DSS-MAIN.ASM:143-167`), `/Users/dmitry/dev/zx/sprinter/sprinter_bios`.
+- Worms (first consumer): `https://github.com/witchcraft2001/worms`
+  (`src/platform/ctcnow.inc` CTC phase read, `src/input.asm` PIO B / Sega,
+  `src/video_boot.asm` silent CBL); local copy may exist under
+  `/Users/dmitry/dev/zx/sprinter/sources/games/worms`.
+- MAME: `/Users/dmitry/dev/zx/sprinter/mame` (`src/mame/sinclair/sprinter.cpp`:
+  ISA IRQs are not connected to PIO), ESP emulator
+  `/Users/dmitry/dev/zx/sprinter/mame_esp/jesperl`.
+
+Treat sibling repositories as read-only references; this repository is the
+source of truth for UNET-GAME.
+
+## Style
+
+sjasmplus only. Uppercase mnemonics, tabs, unique per-unit label prefixes
+(exports are `EXP_<NAME>`, no `MODULE` around them), dotted local labels, `EQU` constants from the generated includes instead of literals,
+English comments for hardware ordering, timing and invariants. Every public
+routine documents inputs, outputs, clobbers, stack depth and worst-case cost.
+
+## Commits and hygiene
+
+- Short imperative subjects (`Add 3C509B RX chunk state`); mention milestone
+  and verification in the body when useful.
+- Never add `Co-Authored-By: Claude …` or any other AI attribution trailer.
+- Do not commit `build/`, `distr/`, listings, captures with private traffic or
+  credentials. Commit release DLLs only when a release is requested.

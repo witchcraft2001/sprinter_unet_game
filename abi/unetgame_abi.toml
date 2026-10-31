@@ -1,0 +1,476 @@
+# UNET-GAME ABI v1 — single source of truth.
+# Generated from this file: include/UNETGAME.INC, include/unetg_ctx.inc,
+# tools/harness/abi.json, docs/ABI-TABLE.md  (tools/gen_abi.py).
+# Normative prose: docs/unet-game-abi.md. Append-only after the v1.0 freeze.
+
+[meta]
+abi_major = 1
+abi_minor = 0
+prefix = "UNETG_"
+image_max_body = 0x38C7          # 32 + 14535 + 1817 = 16384
+image_max_total = 16384
+
+# Export table: index N is at image_base + 0x20 + 3*N.
+# Entries 0/1 belong to libman. Registers are documented in docs/ABI-TABLE.md.
+[[export]]
+name = "INIT"
+index = 0
+regs_in = "libman"
+regs_out = "CF=1 on refusal (window 3); A=0 on success"
+[[export]]
+name = "FINI"
+index = 1
+regs_in = "libman"
+regs_out = "A=0"
+[[export]]
+name = "INIT_CONFIG"
+index = 2
+regs_in = "IX=config block"
+regs_out = "A=status"
+[[export]]
+name = "SHUTDOWN"
+index = 3
+regs_in = "-"
+regs_out = "A=status (OK, WORK, DEVICE_FAULT)"
+[[export]]
+name = "STEP"
+index = 4
+regs_in = "DE=budget_us, IX=now_ms[15:0], IY=now_ms[31:16], A bit0=ISA pre-acquired by gateway"
+regs_out = "A=status, DE=next protocol deadline ms (0 due, <=0xFFFE, 0xFFFF none), L=flags (ctx copy)"
+[[export]]
+name = "STEP_ISR"
+index = 5
+regs_in = "A=source | 0x80 if ISA pre-acquired, DE=budget_us"
+regs_out = "A=status, L=flags (ctx copy)"
+[[export]]
+name = "OPEN"
+index = 6
+regs_in = "IX=0 (peer from config) or IX=peer {ip[4], port u16}"
+regs_out = "A=status"
+[[export]]
+name = "CLOSE"
+index = 7
+regs_in = "-"
+regs_out = "A=status"
+[[export]]
+name = "ABORT"
+index = 8
+regs_in = "-"
+regs_out = "A=status"
+[[export]]
+name = "TX_RESERVE"
+index = 9
+regs_in = "DE=n bytes"
+regs_out = "A=status, HL=buffer (ctx copy), E=slot, D=0"
+[[export]]
+name = "TX_COMMIT"
+index = 10
+regs_in = "A=slot, DE=used, IX=tag"
+regs_out = "A=status"
+[[export]]
+name = "TX_UNRESERVE"
+index = 11
+regs_in = "A=slot"
+regs_out = "A=status"
+[[export]]
+name = "RX_PEEK"
+index = 12
+regs_in = "-"
+regs_out = "A=status, HL=data (ctx copy), DE=length, slot in ctx"
+[[export]]
+name = "RX_RELEASE"
+index = 13
+regs_in = "-"
+regs_out = "A=status"
+[[export]]
+name = "NEXT_EVENT"
+index = 14
+regs_in = "IX=8-byte buffer"
+regs_out = "A=status (OK, EMPTY)"
+[[export]]
+name = "GET_INFO"
+index = 15
+regs_in = "IX=buffer, DE=buffer size"
+regs_out = "A=status"
+[[export]]
+name = "GET_STATS"
+index = 16
+regs_in = "IX=buffer, DE=buffer size"
+regs_out = "A=status"
+
+[exports]
+reserved_from = 17
+reserved_to = 23            # entries 17..23 return STATE
+
+[status]
+OK = 0x00
+WORK = 0x01
+YIELD = 0x02
+IDLE = 0x03
+BUS_BUSY = 0x04
+WOULD_BLOCK = 0x05
+STATE = 0x06
+EMPTY = 0x07
+BAD_CONFIG = 0x08
+UNSUPPORTED_TIMING = 0x09
+BAD_ARGUMENT = 0x0A
+DEVICE_FAULT = 0x0B
+
+[flag]                      # flags byte of STEP/STEP_ISR
+MASK_ROUTE = 0x01
+
+[src]
+CARD_IRQ = 0x01
+TIMER = 0x02
+FRAME = 0x03
+KEY = 0x04
+CBL = 0x05
+OTHER_IRQ = 0x06
+
+[src_flag]
+PREACQ = 0x80               # STEP_ISR: OR-ed into A; STEP: A bit 0
+STEP_PREACQ = 0x01
+
+[ev]
+CONNECTED = 1
+RX_READY = 2
+TX_DONE = 3
+PEER_CLOSED = 4
+RESET = 5
+RETRY_EXHAUSTED = 6
+LINK_LOST = 7
+CONFIG_EXPIRED = 8
+CLOSED = 9
+MODE_CHANGED = 10
+STREAM_ERROR = 11
+TIMEOUT = 12
+
+[txdone]
+OK = 0
+CANCEL = 1
+FAILED = 2
+
+[timeout]
+OPEN = 1
+TX = 2
+CLOSE = 3
+
+[stream]                    # STREAM_ERROR.detail
+UART_OVERRUN = 1
+PARSER = 2
+LENGTH = 3
+FRAMING = 4
+
+[fallback]                  # MODE_CHANGED.detail, GET_STATS.fallback_reason
+NONE = 0
+NO_ROUTE = 1
+PROBE_TIMEOUT = 2
+PROBE_UNSAFE = 3
+TWO_OBSERVATIONS = 4
+DELIVERY_TIMEOUT = 5
+QUOTA = 6
+SPURIOUS = 7
+
+[hw]
+ESP = 1
+RTL = 2
+EL3 = 3
+LOOP = 4
+
+[transport]
+TCP = 1
+UDP = 2
+
+[mode]
+POLL = 1
+AUTO = 2
+IRQ = 3                     # only as GET_STATS.mode_actual
+
+[timing]
+APP_COUNTER = 1
+FIXED_SCHEDULE = 2
+
+[cfgf]                      # INIT_CONFIG.flags
+HAS_EXPIRY = 0x01
+ALLOW_PROBE = 0x02
+CBL_QUALIFIED = 0x04
+FLOW_VERIFIED = 0x08        # ESP: RTS/CTS wiring and both UART settings verified
+
+[cap]                       # GET_INFO.caps
+POLL = 0x0001
+AUTO = 0x0002
+IRQ_ROUTE_QUALIFIED = 0x0004
+TCP = 0x0008
+UDP = 0x0010
+LOOPBACK = 0x0020
+CHECKSUM_VERIFY = 0x0040
+FLOW_CONTROL_REQUIRED = 0x0080
+NATIVE_RTO = 0x0100
+PROBE = 0x0200
+
+[route]                     # GET_STATS.route_state
+NO_ROUTE = 0
+POLL_PRE_PROBE = 1
+PROBING = 2
+IRQ_ENABLED = 3
+IRQ_SUSPECT = 4
+POLL_FALLBACK = 5
+IRQ_UNCONFIRMED = 6
+
+[probe]
+NONE = 0
+OK = 1
+TIMEOUT = 2
+UNAVAILABLE = 3
+
+[lock]                      # values of the shared ISA try-lock byte
+FREE = 0
+NET_MAIN = 1
+NET_ISR = 2
+SOUND = 3
+CONTROLLER = 4
+
+[ctxstate]                  # GET_STATS.ctx_state
+NONE = 0
+CONFIGURED = 1
+STOPPING = 2
+STOPPED = 3
+FAULT = 4
+
+[avail]                     # GET_STATS.avail mask: field is measured/valid
+MAX_STEP_GAP = 0x0001
+MAX_CALL_TIME = 0x0002
+MAX_DI = 0x0004
+MAX_SERVICE_GAP = 0x0008
+
+[limits]
+TCP_MSS = 536
+UDP_MAX = 512
+EVENT_SIZE = 8
+SLOTS_MIN = 4
+EVENT_EXTRA = 4             # event queue useful entries >= tx_slots + 4
+UART_RING_MIN = 512
+STEP_BODY_MAX_US = 500
+ISR_BODY_MAX_US = 150
+STACK_MAIN_MAX = 256
+STACK_ISR_MAX = 96
+TAG_RESERVED = 0xFFFF
+SLOT_NONE = 0xFF
+CHANNEL_GLOBAL = 0xFF
+DEADLINE_NONE = 0xFFFF
+DEADLINE_MAX = 0xFFFE
+
+# ---------------------------------------------------------------------------
+# Blocks. Fields are laid out in order; types: u8, u16, u32, ip4, mac6,
+# or "u8[N]"/"u16[N]". Offsets are generated, never hand-written.
+# ---------------------------------------------------------------------------
+
+[[block]]
+name = "CFG"
+title = "INIT_CONFIG v1.0"
+fields = [
+  ["abi_version", "u16", "0x0100"],
+  ["size", "u16", "bytes of this block"],
+  ["hw_profile", "u8", "UNETG_HW_*"],
+  ["transport", "u8", "UNETG_TRANSPORT_*"],
+  ["mode", "u8", "UNETG_MODE_POLL / AUTO"],
+  ["flags", "u8", "UNETG_CFGF_*"],
+  ["cpu_khz", "u16", "7000 or 21000 (cost table selection)"],
+  ["timing_mode", "u8", "UNETG_TIMING_*"],
+  ["isa_slot", "u8", "0 or 1"],
+  ["io_base", "u16", "card I/O base (RTL 0x300, EL3 0x200..0x3E0, ESP 0x3E8)"],
+  ["id_port", "u16", "3C509B ID port (0x110); 0 otherwise"],
+  ["mac", "mac6", "all zero = use the card PROM/EEPROM address"],
+  ["route_present", "u8", "0 = no qualified IRQ route"],
+  ["route_pio_bit", "u8", "PIO B input bit (0 = PB0, 1 = PB1)"],
+  ["route_vector", "u8", "IM2 vector low byte reserved for the card"],
+  ["route_flags", "u8", "reserved, 0"],
+  ["irq_delivery_us", "u16", "observation window D for the probe"],
+  ["local_ip", "ip4", "network order"],
+  ["netmask", "ip4", "network order"],
+  ["gateway_ip", "ip4", "network order, 0.0.0.0 = none"],
+  ["peer_ip", "ip4", "network order"],
+  ["peer_port", "u16", "little-endian"],
+  ["local_port", "u16", "little-endian, 0 = ephemeral"],
+  ["expires_ms", "u32", "absolute now_ms deadline if HAS_EXPIRY"],
+  ["uart_divisor", "u16", "16550 divisor (8 = 115200 at 14.7456 MHz)"],
+  ["uart_flow", "u8", "local 16550: 0 none, 1 AFE RTS/CTS"],
+  ["esp_flow", "u8", "ESP side: 0 none, 3 RTS/CTS (AT+UART_CUR)"],
+  ["esp_fw", "u8", "1 = ESP-AT 2.2.2 passive TCP profile"],
+  ["uart_rx_trigger", "u8", "FIFO trigger: 1, 4, 8, 14"],
+  ["connect_timeout_ms", "u16", "5000"],
+  ["retry_count", "u8", "4; schedule length = retry_count + 1 <= 8"],
+  ["reserved0", "u8", "0"],
+  ["retry_wait_ms", "u16[8]", "500,1000,2000,2000,2000"],
+  ["send_stall_timeout_ms", "u16", "7500"],
+  ["close_timeout_ms", "u16", "2000"],
+  ["arp_ttl_ms", "u16", "neighbour entry lifetime"],
+  ["worst_poll_gap_us", "u16", "guaranteed worst interval of useful polls"],
+  ["worst_step_gap_ms", "u16", "guaranteed worst interval of STEP calls"],
+  ["step_budget_us", "u16", "body budget the gateway passes to STEP"],
+  ["isr_budget_us", "u16", "body budget the gateway passes to STEP_ISR"],
+  ["time_read_cost_us", "u16", "adapter clock read + publish cost"],
+  ["ctx_ptr", "u16", "context area"],
+  ["ctx_len", "u16", ">= GET_INFO.ctx_size"],
+  ["tx_slots_ptr", "u16", "tx_slot_count * tx_slot_size bytes"],
+  ["tx_slot_size", "u16", ">= transport payload limit"],
+  ["tx_slot_count", "u8", ">= 4"],
+  ["rx_slot_count", "u8", ">= 4"],
+  ["rx_slots_ptr", "u16", "rx_slot_count * rx_slot_size bytes"],
+  ["rx_slot_size", "u16", ">= transport payload limit"],
+  ["event_ptr", "u16", "event_cap * 8 bytes"],
+  ["event_cap", "u8", "power of two, >= tx_slot_count + 4 + 1 (sentinel)"],
+  ["reserved1", "u8", "0"],
+  ["hw_ring_ptr", "u16", "ESP UART software ring; 0 for other cards"],
+  ["hw_ring_len", "u16", "ESP: 512"],
+  ["isa_lock_ptr", "u16", "shared ISA try-lock byte"],
+  ["shadow_1ffd_ptr", "u16", "gateway shadow of write-only port #1FFD"],
+  ["shadow_9fbd_ptr", "u16", "gateway shadow of write-only port #9FBD"],
+  ["gw_ptr", "u16", "gateway code/data/IM2 region (overlap check only)"],
+  ["gw_len", "u16", ""],
+  ["main_stack_ptr", "u16", "lowest byte of the main stack region"],
+  ["main_stack_len", "u16", ""],
+  ["isr_stack_ptr", "u16", "lowest byte of the network ISR stack region"],
+  ["isr_stack_len", "u16", ""],
+]
+
+[[block]]
+name = "INFO"
+title = "GET_INFO v1.0"
+fields = [
+  ["abi_version", "u16", "0x0100"],
+  ["size", "u16", "bytes of this block"],
+  ["hw_profile", "u8", "UNETG_HW_*"],
+  ["transports", "u8", "bit0 TCP, bit1 UDP"],
+  ["image_version", "u16", "(major << 8) | minor"],
+  ["caps", "u16", "UNETG_CAP_*"],
+  ["profile_cpu_khz", "u16", "clock the timing fields below are valid for"],
+  ["min_useful_budget_us", "u16", "smaller budgets only YIELD"],
+  ["max_atomic_us", "u16", "longest indivisible operation"],
+  ["min_return_us", "u16", "cost of the cheapest return path"],
+  ["empty_poll_us", "u16", "<= 100"],
+  ["bus_busy_us", "u16", "<= 25"],
+  ["poll_gap_us", "u16", "POLL and unverified AUTO"],
+  ["auto_fallback_gap_us", "u16", "verified AUTO backup poll"],
+  ["irq_delivery_us", "u16", "probe observation window"],
+  ["max_service_gap_us", "u16", "physical limit of the profile"],
+  ["max_step_gap_ms", "u16", "20 for the game profile"],
+  ["step_body_max_us", "u16", "500"],
+  ["isr_body_max_us", "u16", "150"],
+  ["stack_main_max", "u16", "bytes, all branches"],
+  ["stack_isr_max", "u16", "bytes, all branches"],
+  ["ctx_size", "u16", "required context bytes"],
+  ["ctx_version", "u16", "context layout version"],
+  ["tx_max_payload", "u16", "536 TCP / 512 UDP"],
+  ["rx_max_payload", "u16", "536 TCP / 512 UDP"],
+  ["tx_slots_min", "u8", "4"],
+  ["rx_slots_min", "u8", "4"],
+  ["event_size", "u8", "8"],
+  ["event_extra", "u8", "useful events >= tx slots + this"],
+  ["hw_ring_min", "u16", "ESP 512, others 0"],
+  ["timing_modes", "u8", "bit0 APP_COUNTER, bit1 FIXED_SCHEDULE"],
+  ["uart_profiles", "u8", "ESP: bit0 115200/flow, bit1 115200/no flow"],
+  ["image_mutable_bytes", "u8", "2 (IMG_CTX_PTR)"],
+  ["reserved0", "u8", "0"],
+  ["image_base", "u16", "address of the relocated L1 header; jump N at +0x20+3N"],
+  ["image_size", "u16", "code_size including the 32-byte header"],
+]
+
+[[block]]
+name = "STATS"
+title = "GET_STATS v1.0"
+fields = [
+  ["abi_version", "u16", "0x0100"],
+  ["size", "u16", "bytes of this block"],
+  ["mode_actual", "u8", "UNETG_MODE_POLL / IRQ"],
+  ["route_state", "u8", "UNETG_ROUTE_*"],
+  ["fallback_reason", "u8", "UNETG_FALLBACK_*"],
+  ["probe_result", "u8", "UNETG_PROBE_*"],
+  ["avail", "u16", "UNETG_AVAIL_*: which maxima below are valid"],
+  ["timing_mode", "u8", "active timing mode"],
+  ["ctx_state", "u8", "UNETG_CTXSTATE_*"],
+  ["irq_count", "u16", "STEP_ISR calls with source CARD_IRQ"],
+  ["isr_calls", "u16[6]", "STEP_ISR calls by source 1..6"],
+  ["polls_total", "u16", "hardware status checks"],
+  ["polls_useful", "u16", "checks that found work"],
+  ["steps_total", "u16", ""],
+  ["steps_useful", "u16", "STEP calls that advanced protocol time"],
+  ["budget_yields", "u16", ""],
+  ["bus_busy", "u16", ""],
+  ["max_call_us", "u16", "not measured by the core: avail bit clear"],
+  ["max_di_us", "u16", "not measured by the core: avail bit clear"],
+  ["max_service_gap_us", "u16", "not measured by the core: avail bit clear"],
+  ["max_step_gap_ms", "u16", "max_observed_step_gap_ms"],
+  ["deadline_misses", "u16", ""],
+  ["uart_overrun", "u16", ""],
+  ["ring_overflow", "u16", "software rings and RX slots"],
+  ["hw_overflow", "u16", "card ring/FIFO overflow"],
+  ["tcp_retransmits", "u16", ""],
+  ["drop_size", "u16", ""],
+  ["drop_checksum", "u16", ""],
+  ["drop_foreign", "u16", "foreign address/port/peer"],
+  ["drop_fragment", "u16", ""],
+  ["arp_requests", "u16", ""],
+  ["tx_frames", "u16", ""],
+  ["rx_frames", "u16", ""],
+  ["tx_bytes", "u32", "payload bytes"],
+  ["rx_bytes", "u32", "payload bytes"],
+  ["stream_errors", "u16", ""],
+]
+
+[[block]]
+name = "EVT"
+title = "Event (8 bytes)"
+fields = [
+  ["type", "u8", "UNETG_EV_*"],
+  ["channel", "u8", "0, or 0xFF for a global event"],
+  ["tag", "u16", "0xFFFF without a tag"],
+  ["status", "u8", "TX_DONE: UNETG_TXDONE_*"],
+  ["slot", "u8", "0xFF without a slot"],
+  ["detail", "u16", "0 without detail"],
+]
+
+[[block]]
+name = "PEER"
+title = "OPEN peer argument"
+fields = [
+  ["ip", "ip4", "network order"],
+  ["port", "u16", "little-endian"],
+]
+
+# Delivery names (ТЗ §9.1): G<transport><card tag>.DLL, DOS 8.3, uppercase.
+[[dll]]
+file = "GTCPESP.DLL"
+src = "gtcpesp"
+hw = "ESP"
+transport = "TCP"
+[[dll]]
+file = "GUDPESP.DLL"
+src = "gudpesp"
+hw = "ESP"
+transport = "UDP"
+[[dll]]
+file = "GTCPRTL.DLL"
+src = "gtcprtl"
+hw = "RTL"
+transport = "TCP"
+[[dll]]
+file = "GUDPRTL.DLL"
+src = "gudprtl"
+hw = "RTL"
+transport = "UDP"
+[[dll]]
+file = "GTCP509B.DLL"
+src = "gtcp509b"
+hw = "EL3"
+transport = "TCP"
+[[dll]]
+file = "GUDP509B.DLL"
+src = "gudp509b"
+hw = "EL3"
+transport = "UDP"
+[[dll]]
+file = "GLOOP.DLL"
+src = "gloop"
+hw = "LOOP"
+transport = "ANY"

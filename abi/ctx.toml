@@ -1,0 +1,145 @@
+# Internal context layout (NOT public ABI). The application only allocates
+# GET_INFO.ctx_size bytes and must zero them before the first INIT_CONFIG.
+# The core addresses the context through IY-free code: HL/DE/IX loaded from
+# IMG_CTX_PTR + offset. Generated into include/unetg_ctx.inc as UCTX_*.
+# Bump ctx_version whenever the layout changes.
+
+[meta]
+ctx_version = 0x0001
+max_slots = 8               # tx/rx slot count upper bound (state arrays)
+
+[[block]]
+name = "UCTX"
+title = "Core context"
+fields = [
+  # --- header / lifecycle -------------------------------------------------
+  ["layout", "u16", "UCTX_VERSION once configured"],
+  ["state", "u8", "UNETG_CTXSTATE_*"],
+  ["chan", "u8", "channel state UCH_*"],
+  ["flags_out", "u8", "last STEP/STEP_ISR flags byte"],
+  ["route_state", "u8", ""],
+  ["fallback_reason", "u8", ""],
+  ["probe_result", "u8", ""],
+  ["cpu_f16", "u8", "floor(16 * cpu_khz / 21000): budget -> 21 MHz microseconds"],
+  ["rx_peek_slot", "u8", "slot returned by the last RX_PEEK, 0xFF none"],
+  ["tx_res_slot", "u8", "slot of the open reservation, 0xFF none"],
+  ["event_mask", "u8", "event_cap - 1"],
+  ["out_hl", "u16", "duplicated HL output"],
+  ["out_de", "u16", "duplicated DE output"],
+  ["tx_res_len", "u16", "reserved length n"],
+  # --- configuration copy: runs mirror INIT_CONFIG (see CFG_COPY table) ----
+  # run 1 = cfg.hw_profile .. cfg.flags
+  ["hw", "u8", ""],
+  ["transport", "u8", ""],
+  ["mode", "u8", "configured mode POLL/AUTO"],
+  ["cfg_flags", "u8", ""],
+  # run 2 = cfg.timing_mode .. cfg.mac
+  ["timing_mode", "u8", ""],
+  ["isa_slot", "u8", ""],
+  ["io_base", "u16", ""],
+  ["id_port", "u16", ""],
+  ["mac", "mac6", ""],
+  # run 3 = cfg.irq_delivery_us .. cfg.arp_ttl_ms
+  ["irq_delivery_us", "u16", ""],
+  ["local_ip", "ip4", ""],
+  ["netmask", "ip4", ""],
+  ["gateway_ip", "ip4", ""],
+  ["peer_ip", "ip4", ""],
+  ["peer_port", "u16", ""],
+  ["local_port", "u16", ""],
+  ["expires_ms", "u32", ""],
+  ["uart_divisor", "u16", ""],
+  ["uart_flow", "u8", ""],
+  ["esp_flow", "u8", ""],
+  ["esp_fw", "u8", ""],
+  ["uart_rx_trigger", "u8", ""],
+  ["connect_timeout_ms", "u16", ""],
+  ["retry_count", "u8", ""],
+  ["pad1", "u8", ""],
+  ["retry_wait_ms", "u16[8]", ""],
+  ["send_stall_timeout_ms", "u16", ""],
+  ["close_timeout_ms", "u16", ""],
+  ["arp_ttl_ms", "u16", ""],
+  # run 4 = cfg.tx_slots_ptr .. cfg.shadow_9fbd_ptr
+  ["tx_slots_ptr", "u16", ""],
+  ["tx_slot_size", "u16", ""],
+  ["tx_slot_count", "u8", ""],
+  ["rx_slot_count", "u8", ""],
+  ["rx_slots_ptr", "u16", ""],
+  ["rx_slot_size", "u16", ""],
+  ["event_ptr", "u16", ""],
+  ["event_cap", "u8", ""],
+  ["pad2", "u8", ""],
+  ["hw_ring_ptr", "u16", ""],
+  ["hw_ring_len", "u16", ""],
+  ["isa_lock_ptr", "u16", ""],
+  ["sh1ffd_ptr", "u16", ""],
+  ["sh9fbd_ptr", "u16", ""],
+  # --- per-call state and clock ------------------------------------------
+  ["call_flags", "u8", "UCF_*: ISA pre-acquired, inside STEP_ISR, ISA held"],
+  ["isa_e2", "u8", "WIN3 page saved by ISA_MAP"],
+  ["now_ms", "u32", "now_ms of the current/last STEP"],
+  ["last_useful_ms", "u32", "previous useful STEP"],
+  ["t0_ms", "u32", "SHUTDOWN hardware phase start"],
+  ["clk_flags", "u8", "UCLK_*"],
+  ["isr_pending", "u8", "UPEND_* bits set by STEP_ISR with SET b,(HL)"],
+  ["units", "u16", "remaining body budget of the running call (us)"],
+  ["dl_next", "u16", "nearest protocol deadline being computed (ms)"],
+  ["hw_state", "u8", "UHW_*: hardware bring-up/run/stop phase"],
+  ["work", "u8", "UWK_*: work done in this call"],
+  # --- events --------------------------------------------------------------
+  ["ev_head", "u8", "producer index (main)"],
+  ["ev_tail", "u8", "consumer index (main)"],
+  ["ev_flags", "u8", "UEVF_* pending notifications"],
+  ["ev_reason", "u8", "pending terminal reason event type"],
+  ["ev_reason_detail", "u16", ""],
+  ["ev_tmp", "u8[8]", "event being published (EV_MAKE/EV_PUT)"],
+  # --- channel -------------------------------------------------------------
+  ["chan_flags", "u8", "UCHF_*"],
+  ["pad3", "u8", ""],
+  ["op_deadline_ms", "u32", "OPEN/CLOSE deadline"],
+  # --- TX slots (ring order) ----------------------------------------------
+  ["tx_state", "u8[8]", "UTX_*"],
+  ["tx_len", "u16[8]", "committed length"],
+  ["tx_tag", "u16[8]", "application tag, 0xFFFF for a reservation"],
+  ["tx_next", "u8", "slot of the next reservation"],
+  ["tx_send", "u8", "oldest committed slot (transport cursor)"],
+  ["tx_off", "u16", "bytes of tx_send already handed to the transport"],
+  # --- RX: datagram slots (UDP) or byte ring over the slots (TCP) ---------
+  ["rx_state", "u8[8]", "URX_* (datagram mode)"],
+  ["rx_len", "u16[8]", "datagram length (datagram mode)"],
+  ["rx_fill", "u8", "slot being filled / write slot (ring mode)"],
+  ["rx_read", "u8", "next slot to read"],
+  ["rx_wr_off", "u16", "ring mode: write offset inside rx_fill"],
+  ["rx_rd_off", "u16", "ring mode: read offset inside rx_read"],
+  ["rx_used", "u16", "ring mode: published unread bytes"],
+  ["rx_total", "u16", "ring mode: slot_count * slot_size"],
+  ["rx_peek_len", "u16", "length returned by the outstanding RX_PEEK"],
+  # --- timer cache: protocol timers are re-evaluated only when due --------
+  ["tmr_flags", "u8", "UTMR_*"],
+  ["tmr_due", "u32", "earliest armed protocol deadline"],
+  # --- hardware state machine ---------------------------------------------
+  ["hwsm", "u8[56]", "Ethernet/UART engine and card state (src/hw/*, eth/engine.asm)"],
+  # --- transport state ----------------------------------------------------
+  ["tp", "u8[96]", "TCP / UDP / ESP / loop state"],
+  # --- ARP ---------------------------------------------------------------------
+  ["arp", "u8[32]", "next-hop cache and the pending ARP reply"],
+  # --- scratch -----------------------------------------------------------------
+  ["scratch", "u8[64]", "RX: Ethernet + IPv4 + TCP/UDP header of the frame in progress"],
+  ["txh", "u8[60]", "TX: transport header template (Ethernet + IPv4 + TCP/UDP)"],
+  ["arptx", "u8[42]", "TX: ARP frame being sent"],
+  # --- statistics: byte image of GET_STATS from field mode_actual ----------
+  ["stats", "u8[76]", "GET_STATS bytes 4.. (copied by GET_STATS)"],
+  ["guard", "u8[4]", "0xA5 guard checked by the stand"],
+]
+
+# INIT_CONFIG -> context copy runs: [cfg_first, cfg_last, ctx_first].
+# gen_abi.py checks that both runs have the same length and emits CFG_COPY.
+[[copy]]
+run = ["hw_profile", "flags", "hw"]
+[[copy]]
+run = ["timing_mode", "mac", "timing_mode"]
+[[copy]]
+run = ["irq_delivery_us", "arp_ttl_ms", "irq_delivery_us"]
+[[copy]]
+run = ["tx_slots_ptr", "shadow_9fbd_ptr", "tx_slots_ptr"]

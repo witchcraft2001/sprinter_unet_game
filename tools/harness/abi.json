@@ -1,0 +1,1933 @@
+{
+ "abi_version": 256,
+ "image_max_body": 14535,
+ "image_max_total": 16384,
+ "exports": {
+  "INIT": 0,
+  "FINI": 1,
+  "INIT_CONFIG": 2,
+  "SHUTDOWN": 3,
+  "STEP": 4,
+  "STEP_ISR": 5,
+  "OPEN": 6,
+  "CLOSE": 7,
+  "ABORT": 8,
+  "TX_RESERVE": 9,
+  "TX_COMMIT": 10,
+  "TX_UNRESERVE": 11,
+  "RX_PEEK": 12,
+  "RX_RELEASE": 13,
+  "NEXT_EVENT": 14,
+  "GET_INFO": 15,
+  "GET_STATS": 16
+ },
+ "export_count": 24,
+ "consts": {
+  "status": {
+   "OK": 0,
+   "WORK": 1,
+   "YIELD": 2,
+   "IDLE": 3,
+   "BUS_BUSY": 4,
+   "WOULD_BLOCK": 5,
+   "STATE": 6,
+   "EMPTY": 7,
+   "BAD_CONFIG": 8,
+   "UNSUPPORTED_TIMING": 9,
+   "BAD_ARGUMENT": 10,
+   "DEVICE_FAULT": 11
+  },
+  "flag": {
+   "MASK_ROUTE": 1
+  },
+  "src": {
+   "CARD_IRQ": 1,
+   "TIMER": 2,
+   "FRAME": 3,
+   "KEY": 4,
+   "CBL": 5,
+   "OTHER_IRQ": 6
+  },
+  "src_flag": {
+   "PREACQ": 128,
+   "STEP_PREACQ": 1
+  },
+  "ev": {
+   "CONNECTED": 1,
+   "RX_READY": 2,
+   "TX_DONE": 3,
+   "PEER_CLOSED": 4,
+   "RESET": 5,
+   "RETRY_EXHAUSTED": 6,
+   "LINK_LOST": 7,
+   "CONFIG_EXPIRED": 8,
+   "CLOSED": 9,
+   "MODE_CHANGED": 10,
+   "STREAM_ERROR": 11,
+   "TIMEOUT": 12
+  },
+  "txdone": {
+   "OK": 0,
+   "CANCEL": 1,
+   "FAILED": 2
+  },
+  "timeout": {
+   "OPEN": 1,
+   "TX": 2,
+   "CLOSE": 3
+  },
+  "stream": {
+   "UART_OVERRUN": 1,
+   "PARSER": 2,
+   "LENGTH": 3,
+   "FRAMING": 4
+  },
+  "fallback": {
+   "NONE": 0,
+   "NO_ROUTE": 1,
+   "PROBE_TIMEOUT": 2,
+   "PROBE_UNSAFE": 3,
+   "TWO_OBSERVATIONS": 4,
+   "DELIVERY_TIMEOUT": 5,
+   "QUOTA": 6,
+   "SPURIOUS": 7
+  },
+  "hw": {
+   "ESP": 1,
+   "RTL": 2,
+   "EL3": 3,
+   "LOOP": 4
+  },
+  "transport": {
+   "TCP": 1,
+   "UDP": 2
+  },
+  "mode": {
+   "POLL": 1,
+   "AUTO": 2,
+   "IRQ": 3
+  },
+  "timing": {
+   "APP_COUNTER": 1,
+   "FIXED_SCHEDULE": 2
+  },
+  "cfgf": {
+   "HAS_EXPIRY": 1,
+   "ALLOW_PROBE": 2,
+   "CBL_QUALIFIED": 4,
+   "FLOW_VERIFIED": 8
+  },
+  "cap": {
+   "POLL": 1,
+   "AUTO": 2,
+   "IRQ_ROUTE_QUALIFIED": 4,
+   "TCP": 8,
+   "UDP": 16,
+   "LOOPBACK": 32,
+   "CHECKSUM_VERIFY": 64,
+   "FLOW_CONTROL_REQUIRED": 128,
+   "NATIVE_RTO": 256,
+   "PROBE": 512
+  },
+  "route": {
+   "NO_ROUTE": 0,
+   "POLL_PRE_PROBE": 1,
+   "PROBING": 2,
+   "IRQ_ENABLED": 3,
+   "IRQ_SUSPECT": 4,
+   "POLL_FALLBACK": 5,
+   "IRQ_UNCONFIRMED": 6
+  },
+  "probe": {
+   "NONE": 0,
+   "OK": 1,
+   "TIMEOUT": 2,
+   "UNAVAILABLE": 3
+  },
+  "lock": {
+   "FREE": 0,
+   "NET_MAIN": 1,
+   "NET_ISR": 2,
+   "SOUND": 3,
+   "CONTROLLER": 4
+  },
+  "ctxstate": {
+   "NONE": 0,
+   "CONFIGURED": 1,
+   "STOPPING": 2,
+   "STOPPED": 3,
+   "FAULT": 4
+  },
+  "avail": {
+   "MAX_STEP_GAP": 1,
+   "MAX_CALL_TIME": 2,
+   "MAX_DI": 4,
+   "MAX_SERVICE_GAP": 8
+  },
+  "limits": {
+   "TCP_MSS": 536,
+   "UDP_MAX": 512,
+   "EVENT_SIZE": 8,
+   "SLOTS_MIN": 4,
+   "EVENT_EXTRA": 4,
+   "UART_RING_MIN": 512,
+   "STEP_BODY_MAX_US": 500,
+   "ISR_BODY_MAX_US": 150,
+   "STACK_MAIN_MAX": 256,
+   "STACK_ISR_MAX": 96,
+   "TAG_RESERVED": 65535,
+   "SLOT_NONE": 255,
+   "CHANNEL_GLOBAL": 255,
+   "DEADLINE_NONE": 65535,
+   "DEADLINE_MAX": 65534
+  }
+ },
+ "blocks": {
+  "CFG": {
+   "size": 134,
+   "fields": {
+    "abi_version": {
+     "offset": 0,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "size": {
+     "offset": 2,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "hw_profile": {
+     "offset": 4,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "transport": {
+     "offset": 5,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "mode": {
+     "offset": 6,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "flags": {
+     "offset": 7,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "cpu_khz": {
+     "offset": 8,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "timing_mode": {
+     "offset": 10,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "isa_slot": {
+     "offset": 11,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "io_base": {
+     "offset": 12,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "id_port": {
+     "offset": 14,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "mac": {
+     "offset": 16,
+     "size": 6,
+     "count": 1,
+     "elem": "mac6",
+     "type": "mac6"
+    },
+    "route_present": {
+     "offset": 22,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "route_pio_bit": {
+     "offset": 23,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "route_vector": {
+     "offset": 24,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "route_flags": {
+     "offset": 25,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "irq_delivery_us": {
+     "offset": 26,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "local_ip": {
+     "offset": 28,
+     "size": 4,
+     "count": 1,
+     "elem": "ip4",
+     "type": "ip4"
+    },
+    "netmask": {
+     "offset": 32,
+     "size": 4,
+     "count": 1,
+     "elem": "ip4",
+     "type": "ip4"
+    },
+    "gateway_ip": {
+     "offset": 36,
+     "size": 4,
+     "count": 1,
+     "elem": "ip4",
+     "type": "ip4"
+    },
+    "peer_ip": {
+     "offset": 40,
+     "size": 4,
+     "count": 1,
+     "elem": "ip4",
+     "type": "ip4"
+    },
+    "peer_port": {
+     "offset": 44,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "local_port": {
+     "offset": 46,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "expires_ms": {
+     "offset": 48,
+     "size": 4,
+     "count": 1,
+     "elem": "u32",
+     "type": "u32"
+    },
+    "uart_divisor": {
+     "offset": 52,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "uart_flow": {
+     "offset": 54,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "esp_flow": {
+     "offset": 55,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "esp_fw": {
+     "offset": 56,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "uart_rx_trigger": {
+     "offset": 57,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "connect_timeout_ms": {
+     "offset": 58,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "retry_count": {
+     "offset": 60,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "reserved0": {
+     "offset": 61,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "retry_wait_ms": {
+     "offset": 62,
+     "size": 16,
+     "count": 8,
+     "elem": "u16",
+     "type": "u16[8]"
+    },
+    "send_stall_timeout_ms": {
+     "offset": 78,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "close_timeout_ms": {
+     "offset": 80,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "arp_ttl_ms": {
+     "offset": 82,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "worst_poll_gap_us": {
+     "offset": 84,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "worst_step_gap_ms": {
+     "offset": 86,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "step_budget_us": {
+     "offset": 88,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isr_budget_us": {
+     "offset": 90,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "time_read_cost_us": {
+     "offset": 92,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "ctx_ptr": {
+     "offset": 94,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "ctx_len": {
+     "offset": 96,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_slots_ptr": {
+     "offset": 98,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_slot_size": {
+     "offset": 100,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_slot_count": {
+     "offset": 102,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "rx_slot_count": {
+     "offset": 103,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "rx_slots_ptr": {
+     "offset": 104,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "rx_slot_size": {
+     "offset": 106,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "event_ptr": {
+     "offset": 108,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "event_cap": {
+     "offset": 110,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "reserved1": {
+     "offset": 111,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "hw_ring_ptr": {
+     "offset": 112,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "hw_ring_len": {
+     "offset": 114,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isa_lock_ptr": {
+     "offset": 116,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "shadow_1ffd_ptr": {
+     "offset": 118,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "shadow_9fbd_ptr": {
+     "offset": 120,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "gw_ptr": {
+     "offset": 122,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "gw_len": {
+     "offset": 124,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "main_stack_ptr": {
+     "offset": 126,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "main_stack_len": {
+     "offset": 128,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isr_stack_ptr": {
+     "offset": 130,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isr_stack_len": {
+     "offset": 132,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    }
+   }
+  },
+  "INFO": {
+   "size": 62,
+   "fields": {
+    "abi_version": {
+     "offset": 0,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "size": {
+     "offset": 2,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "hw_profile": {
+     "offset": 4,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "transports": {
+     "offset": 5,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "image_version": {
+     "offset": 6,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "caps": {
+     "offset": 8,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "profile_cpu_khz": {
+     "offset": 10,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "min_useful_budget_us": {
+     "offset": 12,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_atomic_us": {
+     "offset": 14,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "min_return_us": {
+     "offset": 16,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "empty_poll_us": {
+     "offset": 18,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "bus_busy_us": {
+     "offset": 20,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "poll_gap_us": {
+     "offset": 22,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "auto_fallback_gap_us": {
+     "offset": 24,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "irq_delivery_us": {
+     "offset": 26,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_service_gap_us": {
+     "offset": 28,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_step_gap_ms": {
+     "offset": 30,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "step_body_max_us": {
+     "offset": 32,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isr_body_max_us": {
+     "offset": 34,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "stack_main_max": {
+     "offset": 36,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "stack_isr_max": {
+     "offset": 38,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "ctx_size": {
+     "offset": 40,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "ctx_version": {
+     "offset": 42,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_max_payload": {
+     "offset": 44,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "rx_max_payload": {
+     "offset": 46,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_slots_min": {
+     "offset": 48,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "rx_slots_min": {
+     "offset": 49,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "event_size": {
+     "offset": 50,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "event_extra": {
+     "offset": 51,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "hw_ring_min": {
+     "offset": 52,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "timing_modes": {
+     "offset": 54,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "uart_profiles": {
+     "offset": 55,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "image_mutable_bytes": {
+     "offset": 56,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "reserved0": {
+     "offset": 57,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "image_base": {
+     "offset": 58,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "image_size": {
+     "offset": 60,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    }
+   }
+  },
+  "STATS": {
+   "size": 80,
+   "fields": {
+    "abi_version": {
+     "offset": 0,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "size": {
+     "offset": 2,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "mode_actual": {
+     "offset": 4,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "route_state": {
+     "offset": 5,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "fallback_reason": {
+     "offset": 6,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "probe_result": {
+     "offset": 7,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "avail": {
+     "offset": 8,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "timing_mode": {
+     "offset": 10,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "ctx_state": {
+     "offset": 11,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "irq_count": {
+     "offset": 12,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "isr_calls": {
+     "offset": 14,
+     "size": 12,
+     "count": 6,
+     "elem": "u16",
+     "type": "u16[6]"
+    },
+    "polls_total": {
+     "offset": 26,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "polls_useful": {
+     "offset": 28,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "steps_total": {
+     "offset": 30,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "steps_useful": {
+     "offset": 32,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "budget_yields": {
+     "offset": 34,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "bus_busy": {
+     "offset": 36,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_call_us": {
+     "offset": 38,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_di_us": {
+     "offset": 40,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_service_gap_us": {
+     "offset": 42,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "max_step_gap_ms": {
+     "offset": 44,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "deadline_misses": {
+     "offset": 46,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "uart_overrun": {
+     "offset": 48,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "ring_overflow": {
+     "offset": 50,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "hw_overflow": {
+     "offset": 52,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tcp_retransmits": {
+     "offset": 54,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "drop_size": {
+     "offset": 56,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "drop_checksum": {
+     "offset": 58,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "drop_foreign": {
+     "offset": 60,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "drop_fragment": {
+     "offset": 62,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "arp_requests": {
+     "offset": 64,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_frames": {
+     "offset": 66,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "rx_frames": {
+     "offset": 68,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "tx_bytes": {
+     "offset": 70,
+     "size": 4,
+     "count": 1,
+     "elem": "u32",
+     "type": "u32"
+    },
+    "rx_bytes": {
+     "offset": 74,
+     "size": 4,
+     "count": 1,
+     "elem": "u32",
+     "type": "u32"
+    },
+    "stream_errors": {
+     "offset": 78,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    }
+   }
+  },
+  "EVT": {
+   "size": 8,
+   "fields": {
+    "type": {
+     "offset": 0,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "channel": {
+     "offset": 1,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "tag": {
+     "offset": 2,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    },
+    "status": {
+     "offset": 4,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "slot": {
+     "offset": 5,
+     "size": 1,
+     "count": 1,
+     "elem": "u8",
+     "type": "u8"
+    },
+    "detail": {
+     "offset": 6,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    }
+   }
+  },
+  "PEER": {
+   "size": 6,
+   "fields": {
+    "ip": {
+     "offset": 0,
+     "size": 4,
+     "count": 1,
+     "elem": "ip4",
+     "type": "ip4"
+    },
+    "port": {
+     "offset": 4,
+     "size": 2,
+     "count": 1,
+     "elem": "u16",
+     "type": "u16"
+    }
+   }
+  }
+ },
+ "ctx": {
+  "version": 1,
+  "size": 673,
+  "fields": {
+   "layout": {
+    "offset": 0,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "state": {
+    "offset": 2,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "chan": {
+    "offset": 3,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "flags_out": {
+    "offset": 4,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "route_state": {
+    "offset": 5,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "fallback_reason": {
+    "offset": 6,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "probe_result": {
+    "offset": 7,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "cpu_f16": {
+    "offset": 8,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "rx_peek_slot": {
+    "offset": 9,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "tx_res_slot": {
+    "offset": 10,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "event_mask": {
+    "offset": 11,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "out_hl": {
+    "offset": 12,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "out_de": {
+    "offset": 14,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "tx_res_len": {
+    "offset": 16,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "hw": {
+    "offset": 18,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "transport": {
+    "offset": 19,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "mode": {
+    "offset": 20,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "cfg_flags": {
+    "offset": 21,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "timing_mode": {
+    "offset": 22,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "isa_slot": {
+    "offset": 23,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "io_base": {
+    "offset": 24,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "id_port": {
+    "offset": 26,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "mac": {
+    "offset": 28,
+    "size": 6,
+    "count": 1,
+    "elem": "mac6",
+    "type": "mac6"
+   },
+   "irq_delivery_us": {
+    "offset": 34,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "local_ip": {
+    "offset": 36,
+    "size": 4,
+    "count": 1,
+    "elem": "ip4",
+    "type": "ip4"
+   },
+   "netmask": {
+    "offset": 40,
+    "size": 4,
+    "count": 1,
+    "elem": "ip4",
+    "type": "ip4"
+   },
+   "gateway_ip": {
+    "offset": 44,
+    "size": 4,
+    "count": 1,
+    "elem": "ip4",
+    "type": "ip4"
+   },
+   "peer_ip": {
+    "offset": 48,
+    "size": 4,
+    "count": 1,
+    "elem": "ip4",
+    "type": "ip4"
+   },
+   "peer_port": {
+    "offset": 52,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "local_port": {
+    "offset": 54,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "expires_ms": {
+    "offset": 56,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "uart_divisor": {
+    "offset": 60,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "uart_flow": {
+    "offset": 62,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "esp_flow": {
+    "offset": 63,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "esp_fw": {
+    "offset": 64,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "uart_rx_trigger": {
+    "offset": 65,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "connect_timeout_ms": {
+    "offset": 66,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "retry_count": {
+    "offset": 68,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "pad1": {
+    "offset": 69,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "retry_wait_ms": {
+    "offset": 70,
+    "size": 16,
+    "count": 8,
+    "elem": "u16",
+    "type": "u16[8]"
+   },
+   "send_stall_timeout_ms": {
+    "offset": 86,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "close_timeout_ms": {
+    "offset": 88,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "arp_ttl_ms": {
+    "offset": 90,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "tx_slots_ptr": {
+    "offset": 92,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "tx_slot_size": {
+    "offset": 94,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "tx_slot_count": {
+    "offset": 96,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "rx_slot_count": {
+    "offset": 97,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "rx_slots_ptr": {
+    "offset": 98,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_slot_size": {
+    "offset": 100,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "event_ptr": {
+    "offset": 102,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "event_cap": {
+    "offset": 104,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "pad2": {
+    "offset": 105,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "hw_ring_ptr": {
+    "offset": 106,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "hw_ring_len": {
+    "offset": 108,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "isa_lock_ptr": {
+    "offset": 110,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "sh1ffd_ptr": {
+    "offset": 112,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "sh9fbd_ptr": {
+    "offset": 114,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "call_flags": {
+    "offset": 116,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "isa_e2": {
+    "offset": 117,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "now_ms": {
+    "offset": 118,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "last_useful_ms": {
+    "offset": 122,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "t0_ms": {
+    "offset": 126,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "clk_flags": {
+    "offset": 130,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "isr_pending": {
+    "offset": 131,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "units": {
+    "offset": 132,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "dl_next": {
+    "offset": 134,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "hw_state": {
+    "offset": 136,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "work": {
+    "offset": 137,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_head": {
+    "offset": 138,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_tail": {
+    "offset": 139,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_flags": {
+    "offset": 140,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_reason": {
+    "offset": 141,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_reason_detail": {
+    "offset": 142,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "ev_tmp": {
+    "offset": 144,
+    "size": 8,
+    "count": 8,
+    "elem": "u8",
+    "type": "u8[8]"
+   },
+   "chan_flags": {
+    "offset": 152,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "pad3": {
+    "offset": 153,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "op_deadline_ms": {
+    "offset": 154,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "tx_state": {
+    "offset": 158,
+    "size": 8,
+    "count": 8,
+    "elem": "u8",
+    "type": "u8[8]"
+   },
+   "tx_len": {
+    "offset": 166,
+    "size": 16,
+    "count": 8,
+    "elem": "u16",
+    "type": "u16[8]"
+   },
+   "tx_tag": {
+    "offset": 182,
+    "size": 16,
+    "count": 8,
+    "elem": "u16",
+    "type": "u16[8]"
+   },
+   "tx_next": {
+    "offset": 198,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "tx_send": {
+    "offset": 199,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "tx_off": {
+    "offset": 200,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_state": {
+    "offset": 202,
+    "size": 8,
+    "count": 8,
+    "elem": "u8",
+    "type": "u8[8]"
+   },
+   "rx_len": {
+    "offset": 210,
+    "size": 16,
+    "count": 8,
+    "elem": "u16",
+    "type": "u16[8]"
+   },
+   "rx_fill": {
+    "offset": 226,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "rx_read": {
+    "offset": 227,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "rx_wr_off": {
+    "offset": 228,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_rd_off": {
+    "offset": 230,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_used": {
+    "offset": 232,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_total": {
+    "offset": 234,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "rx_peek_len": {
+    "offset": 236,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "tmr_flags": {
+    "offset": 238,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "tmr_due": {
+    "offset": 239,
+    "size": 4,
+    "count": 1,
+    "elem": "u32",
+    "type": "u32"
+   },
+   "hwsm": {
+    "offset": 243,
+    "size": 56,
+    "count": 56,
+    "elem": "u8",
+    "type": "u8[56]"
+   },
+   "tp": {
+    "offset": 299,
+    "size": 96,
+    "count": 96,
+    "elem": "u8",
+    "type": "u8[96]"
+   },
+   "arp": {
+    "offset": 395,
+    "size": 32,
+    "count": 32,
+    "elem": "u8",
+    "type": "u8[32]"
+   },
+   "scratch": {
+    "offset": 427,
+    "size": 64,
+    "count": 64,
+    "elem": "u8",
+    "type": "u8[64]"
+   },
+   "txh": {
+    "offset": 491,
+    "size": 60,
+    "count": 60,
+    "elem": "u8",
+    "type": "u8[60]"
+   },
+   "arptx": {
+    "offset": 551,
+    "size": 42,
+    "count": 42,
+    "elem": "u8",
+    "type": "u8[42]"
+   },
+   "stats": {
+    "offset": 593,
+    "size": 76,
+    "count": 76,
+    "elem": "u8",
+    "type": "u8[76]"
+   },
+   "guard": {
+    "offset": 669,
+    "size": 4,
+    "count": 4,
+    "elem": "u8",
+    "type": "u8[4]"
+   }
+  }
+ }
+}
