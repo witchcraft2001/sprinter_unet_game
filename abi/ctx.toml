@@ -5,7 +5,7 @@
 # Bump ctx_version whenever the layout changes.
 
 [meta]
-ctx_version = 0x0001
+ctx_version = 0x0002
 max_slots = 8               # tx/rx slot count upper bound (state arrays)
 
 [[block]]
@@ -76,8 +76,9 @@ fields = [
   ["sh1ffd_ptr", "u16", ""],
   ["sh9fbd_ptr", "u16", ""],
   # --- per-call state and clock ------------------------------------------
-  ["call_flags", "u8", "UCF_*: ISA pre-acquired, inside STEP_ISR, ISA held"],
-  ["isa_e2", "u8", "WIN3 page saved by ISA_MAP"],
+  ["call_flags", "u8", "UCF_*: ISA pre-acquired, inside STEP_ISR, budgeted"],
+  ["sched_flags", "u8", "USCH_*: admission state of the running STEP"],
+  ["sched_items", "u8", "items a pipeline may still run in this admission phase (STEP)"],
   ["now_ms", "u32", "now_ms of the current/last STEP"],
   ["last_useful_ms", "u32", "previous useful STEP"],
   ["t0_ms", "u32", "SHUTDOWN hardware phase start"],
@@ -96,12 +97,11 @@ fields = [
   ["ev_tmp", "u8[8]", "event being published (EV_MAKE/EV_PUT)"],
   # --- channel -------------------------------------------------------------
   ["chan_flags", "u8", "UCHF_*"],
-  ["pad3", "u8", ""],
+  ["isr_stats_ptr", "u16", "address of stats isr_calls[0] - 2, set by INIT_CONFIG (STEP_ISR counters)"],
   ["op_deadline_ms", "u32", "OPEN/CLOSE deadline"],
   # --- TX slots (ring order) ----------------------------------------------
   ["tx_state", "u8[8]", "UTX_*"],
   ["tx_len", "u16[8]", "committed length"],
-  ["tx_tag", "u16[8]", "application tag, 0xFFFF for a reservation"],
   ["tx_next", "u8", "slot of the next reservation"],
   ["tx_send", "u8", "oldest committed slot (transport cursor)"],
   ["tx_off", "u16", "bytes of tx_send already handed to the transport"],
@@ -130,6 +130,8 @@ fields = [
   ["arptx", "u8[42]", "TX: ARP frame being sent"],
   # --- statistics: byte image of GET_STATS from field mode_actual ----------
   ["stats", "u8[76]", "GET_STATS bytes 4.. (copied by GET_STATS)"],
+  # --- reached only through IY_PTR (kept out of the IY window) -------------
+  ["tx_tag", "u16[8]", "application tag, 0xFFFF for a reservation"],
   ["guard", "u8[4]", "0xA5 guard checked by the stand"],
 ]
 

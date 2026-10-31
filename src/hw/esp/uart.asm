@@ -21,7 +21,8 @@
 ; must not see half a u16.
 
 COST_PREPARE	EQU	60	; NIC_PREPARE + bring-up deadline
-COST_PUMP	EQU	185	; bracket + LSR + ring + RTS + up to ES_TX_MAX TX bytes (stand: HW_RUN <= 231 us with 12 RX)
+COST_PUMP	EQU	165	; bracket + LSR + ring + RTS + up to ES_TX_MAX TX bytes (+ 4 per RX byte;
+				; stand: real <= 0.73 of the old 185 + 4 * 12 reserve)
 
 COST_BRINGUP	EQU	COST_PUMP + 4 * ES_RX_MAX	; table step, or a full pump in EUP_AT
 COST_PORTION	EQU	90	; stop step
@@ -370,21 +371,13 @@ HW_RUN
 	RET
 
 ; ----------------------------------------------------------------------
-; HW_ISR: STEP_ISR body -- a status sample: received bytes waiting in the
-; FIFO set UPEND_RX and make STEP_ISR return WORK; STEP moves them.  (Moving
-; the bytes here costs ~120 us besides the STEP_ISR base: it does not fit
-; the 150 us STEP_ISR bound with the current core; the auto-RTS flow
-; control holds the module meanwhile.)  No events, no TX.
+; ISRP_POLL (P): the STEP_ISR body of a running card (sched.asm) -- a
+; status sample: received bytes waiting in the FIFO set UPEND_RX and make
+; STEP_ISR return WORK; STEP moves them.  (Moving the bytes here costs
+; ~120 us besides the STEP_ISR base: it does not fit the 150 us STEP_ISR
+; bound with the current core; the auto-RTS flow control holds the module
+; meanwhile.)  No events, no TX.
 ; ----------------------------------------------------------------------
-HW_ISR
-	LD	A,(IY+CX_HW_STATE)
-	CP	UHW_RUN
-	RET	NZ
-	LD	HL,PROF_ISR_POLL_US
-	CALL	TAKE
-	RET	C
-	LD	HL,ISRP_POLL
-	JP	RUN_PORTION
 ISRP_POLL
 	STAT_INC UNETG_STATS_POLLS_TOTAL
 	SET	UPEND_POLLED,(IY+CX_ISR_PENDING)

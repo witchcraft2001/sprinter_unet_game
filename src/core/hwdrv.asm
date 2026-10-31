@@ -36,20 +36,7 @@ HS_FIELD
 	POP	DE
 	RET
 
-; RUN_PORTION: take the bus and run (P) routine HL.  CF=1 when the bus is
-; busy (nothing was run).  Clobbers A, BC, DE, HL, IX.
-RUN_PORTION
-	PUSH	HL
-	CALL	ISA_ACQUIRE
-	POP	HL
-	RET	C
-	PUSH	HL
-	HWSM_IX
-	POP	HL
-	CALL	PORTION
-	CALL	ISA_RELEASE
-	OR	A
-	RET
+; RUN_PORTION (core/lock.asm): take the bus and run (P) routine HL.
 
 ; ----------------------------------------------------------------------
 ; HW_STEP: main-loop hardware work of one STEP.

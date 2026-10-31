@@ -1,4 +1,4 @@
--- ugstand.lua -- MAME "sprinter" driver of the M stand (tools/mame/run_esp.py).
+-- ugstand.lua -- MAME "sprinter" driver of the M stand (tools/mame/run_m.py).
 --
 -- Waits for DSS to reach the File Manager, types the UGTEST command on the
 -- PS/2 keyboard (ioport fields, as sources/games/battleship does), then

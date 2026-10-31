@@ -204,14 +204,21 @@ EXP_SHUTDOWN
 	JR	Z,.check
 	CP	UNETG_CTXSTATE_FAULT
 	JR	Z,.retry
-	; CONFIGURED -> STOPPING
-	LD	(IY+CX_STATE),UNETG_CTXSTATE_STOPPING
-	CALL	CH_ABORT
+	; CONFIGURED -> STOPPING.  The hardware state leaves UHW_RUN before the
+	; context state leaves CONFIGURED: STEP_ISR takes UHW_RUN as proof of a
+	; configured context (sched.asm).
 	LD	A,(IY+CX_HW_STATE)
 	OR	A			; UHW_DOWN: the card was never touched
-	JR	NZ,.stop_hw
+	JR	NZ,.stop_cfg
 	LD	(IY+CX_HW_STATE),UHW_STOPPED
+	LD	(IY+CX_STATE),UNETG_CTXSTATE_STOPPING
+	CALL	CH_ABORT
 	JR	.check
+.stop_cfg
+	LD	(IY+CX_HW_STATE),UHW_STOP
+	LD	(IY+CX_STATE),UNETG_CTXSTATE_STOPPING
+	CALL	CH_ABORT
+	JR	.stop_t0
 .retry
 	; The first call after a missed stop deadline reports it; the next
 	; one starts a new attempt with a new t0 (no repeated cancel events).
@@ -223,8 +230,8 @@ EXP_SHUTDOWN
 .again
 	RES	5,(IY+CX_CLK_FLAGS)
 	LD	(IY+CX_STATE),UNETG_CTXSTATE_STOPPING
-.stop_hw
 	LD	(IY+CX_HW_STATE),UHW_STOP
+.stop_t0
 	RES	1,(IY+CX_CLK_FLAGS)	; UCLK_T0_SET: next STEP records t0
 	TMR_INVALIDATE
 .check

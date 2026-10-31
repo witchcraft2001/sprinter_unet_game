@@ -11,7 +11,7 @@ s.initConfig(s.defaultConfig({ step_budget_us: 500 }));
 const hs = (o) => s.m.peek(s.layout().ctx + require('../harness/stand.js').ABI.ctx.fields.hwsm.offset + o);
 let n = 0;
 const go = (k) => { for (let i = 0; i < k; i++) {
-  const before = { hw: s.ctx('hw_state'), rxs: hs(16), txs: hs(31), phase: hs(0), step: hs(1) };
+  const before = { hw: s.ctx('hw_state'), rxs: hs(16), txs: hs(17), phase: hs(0), step: hs(1) };
   const r = s.tick();
   if (r.maxDiUs > lim) console.log(`step ${n} DI ${r.maxDiUs.toFixed(1)} us`, JSON.stringify(before));
   n++;

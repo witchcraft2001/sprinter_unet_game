@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// mkcfg.js -- memory map and INIT_CONFIG block of the M stand test program
-// (sdk/example/ugtest.asm) for one build, as an sjasmplus include.
+// mkcfg.js -- memory map and INIT_CONFIG block of the M stand test programs
+// (sdk/example/ugtest.asm, netdemo.asm) for one build, as an sjasmplus include.
 // The block is encoded by the Z stand's own encoder (tools/harness), so
 // both stands use the same field layout from abi/unetgame_abi.toml.
 // Usage: node tools/mame/mkcfg.js [--prog ugtest|netdemo] <dll> <out.inc> [peer_ip] [peer_port] [local_port]
@@ -62,7 +62,10 @@ const cfg = {
   isa_slot: 1,                                   // -isa1 in MAME: latch #D6
   io_base: { ESP: 0x3e8, RTL: 0x300, EL3: 0x300 }[prof.hw] ?? 0,
   id_port: prof.hw === 'EL3' ? 0x110 : 0,
-  local_ip: '192.168.0.10', netmask: '255.255.255.0', gateway_ip: '192.168.0.1',
+  // ESP: the module owns the IP layer (the fields are unused); Ethernet:
+  // the Sprinter end of the feth pair (tools/mame/net_feth.sh, host 192.168.7.1)
+  local_ip: prof.hw === 'ESP' ? '192.168.0.10' : (process.env.MAME_NET_LOCAL || '192.168.7.21'),
+  netmask: '255.255.255.0', gateway_ip: prof.hw === 'ESP' ? '192.168.0.1' : peerIp,
   peer_ip: peerIp, peer_port: +peerPort, local_port: +localPort,
   uart_divisor: prof.hw === 'ESP' ? 8 : 0, uart_flow: prof.hw === 'ESP' ? 1 : 0,
   esp_flow: prof.hw === 'ESP' ? 3 : 0, esp_fw: prof.hw === 'ESP' ? 1 : 0,

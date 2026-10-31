@@ -1,6 +1,8 @@
 // sdk_rate.js -- echo throughput through the real SDK gateway on the Z
 // application stand, by STEPs per 20 ms budget period.
 // Usage: node tools/dev/sdk_rate.js [dll ...] [--steps 2,5,10] [--bytes 2048]
+//        [--budget us] [--isr us]   (profile STEP / STEP_ISR body budgets;
+//        0 = the gateway's default: min_useful / empty poll + return)
 'use strict';
 const { AppStand, BUF } = require('../harness/appstand.js');
 const { decodeBlock } = require('../harness/stand.js');
@@ -9,12 +11,13 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : d; };
 const steps = opt('--steps', '2,5,10').split(',').map(Number);
 const total = Number(opt('--bytes', '2048'));
+const stepBudget = Number(opt('--budget', '0')), isrBudget = Number(opt('--isr', '0'));
 const dlls = args.length ? args : ['gtcprtl', 'gtcp509b', 'gudp509b', 'gtcpesp', 'gudpesp'];
 
 for (const dll of dlls) {
   for (const n of steps) {
     const a = new AppStand({ dll });
-    a.gwInit(); a.call('INIT'); a.initEnv({}, { steps: n }); a.start(); a.auto = 15;
+    a.gwInit(); a.call('INIT'); a.initEnv({}, { steps: n, step_budget: stepBudget, isr_budget: isrBudget }); a.start(); a.auto = 15;
     a.until(() => a.ctx('hw_state') === 2, 10000);
     a.call('OPEN');
     const ev = [];
@@ -32,7 +35,7 @@ for (const dll of dlls) {
     a.call('GET_STATS', { ix: BUF, de: 80 });
     const st = decodeBlock('STATS', Uint8Array.from(a.m.peekBytes(BUF, 80)));
     const b = a.block();
-    console.log(`${dll} steps/period ${n}: ${(total / 1024 / sec).toFixed(2)} KiB/s each way, intact ${JSON.stringify(rx) === JSON.stringify(d)}, ` +
+    console.log(`${dll} steps/period ${n} budget ${b.stepBudget ?? stepBudget} isr ${b.isrBudget ?? isrBudget}: ${(total / 1024 / sec).toFixed(2)} KiB/s each way, intact ${JSON.stringify(rx) === JSON.stringify(d)}, ` +
       `hw_overflow ${st.hw_overflow}, uart_overrun ${st.uart_overrun}, quota sum ${b.sum} us, largest period debit ${b.debitMax} us, problems ${a.problems.length}` + (a.problems.length ? ` (${a.problems.slice(0, 2).join("; ")})` : ""));
   }
 }

@@ -37,21 +37,18 @@ EXP_RESERVED
 	RET
 
 ; ----------------------------------------------------------------------
-; CTX_LOAD: IY := context + CTX_BIAS.
+; CTX_LOAD: IY := context + CTX_BIAS (IMG_CTX_PTR holds that value, 0
+; when no context is active; a context never starts at 0xFF80).
 ; Out: Z when no context is active (IY unchanged), NZ otherwise.
-; Clobbers A, HL.  BC and DE preserved (export arguments).  Stack: 4.
+; Clobbers A, HL.  BC and DE preserved (export arguments).  Stack: 2.
 ; ----------------------------------------------------------------------
 CTX_LOAD
 	LD	HL,(IMG_CTX_PTR)
 	LD	A,H
 	OR	L
 	RET	Z
-	PUSH	BC
-	LD	BC,CTX_BIAS
-	ADD	HL,BC
 	PUSH	HL
 	POP	IY
-	POP	BC
 	RET
 
 ; CTX_PTR_HL: HL := context + offset in BC (needs IY = ctx + bias).

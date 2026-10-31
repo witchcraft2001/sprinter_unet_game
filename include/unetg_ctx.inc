@@ -4,7 +4,7 @@
 	IFNDEF	_UNETG_CTX_INC
 	DEFINE	_UNETG_CTX_INC
 
-UCTX_VERSION	EQU	0x0001
+UCTX_VERSION	EQU	0x0002
 UCTX_MAX_SLOTS	EQU	8
 UCTX_LAYOUT	EQU	0	; u16 UCTX_VERSION once configured
 UCTX_STATE	EQU	2	; u8 UNETG_CTXSTATE_*
@@ -63,52 +63,53 @@ UCTX_HW_RING_LEN	EQU	108	; u16
 UCTX_ISA_LOCK_PTR	EQU	110	; u16
 UCTX_SH1FFD_PTR	EQU	112	; u16
 UCTX_SH9FBD_PTR	EQU	114	; u16
-UCTX_CALL_FLAGS	EQU	116	; u8 UCF_*: ISA pre-acquired, inside STEP_ISR, ISA held
-UCTX_ISA_E2	EQU	117	; u8 WIN3 page saved by ISA_MAP
-UCTX_NOW_MS	EQU	118	; u32 now_ms of the current/last STEP
-UCTX_LAST_USEFUL_MS	EQU	122	; u32 previous useful STEP
-UCTX_T0_MS	EQU	126	; u32 SHUTDOWN hardware phase start
-UCTX_CLK_FLAGS	EQU	130	; u8 UCLK_*
-UCTX_ISR_PENDING	EQU	131	; u8 UPEND_* bits set by STEP_ISR with SET b,(HL)
-UCTX_UNITS	EQU	132	; u16 remaining body budget of the running call (us)
-UCTX_DL_NEXT	EQU	134	; u16 nearest protocol deadline being computed (ms)
-UCTX_HW_STATE	EQU	136	; u8 UHW_*: hardware bring-up/run/stop phase
-UCTX_WORK	EQU	137	; u8 UWK_*: work done in this call
-UCTX_EV_HEAD	EQU	138	; u8 producer index (main)
-UCTX_EV_TAIL	EQU	139	; u8 consumer index (main)
-UCTX_EV_FLAGS	EQU	140	; u8 UEVF_* pending notifications
-UCTX_EV_REASON	EQU	141	; u8 pending terminal reason event type
-UCTX_EV_REASON_DETAIL	EQU	142	; u16
-UCTX_EV_TMP	EQU	144	; u8[8] event being published (EV_MAKE/EV_PUT)
-UCTX_CHAN_FLAGS	EQU	152	; u8 UCHF_*
-UCTX_PAD3	EQU	153	; u8
-UCTX_OP_DEADLINE_MS	EQU	154	; u32 OPEN/CLOSE deadline
-UCTX_TX_STATE	EQU	158	; u8[8] UTX_*
-UCTX_TX_LEN	EQU	166	; u16[8] committed length
-UCTX_TX_TAG	EQU	182	; u16[8] application tag, 0xFFFF for a reservation
-UCTX_TX_NEXT	EQU	198	; u8 slot of the next reservation
-UCTX_TX_SEND	EQU	199	; u8 oldest committed slot (transport cursor)
-UCTX_TX_OFF	EQU	200	; u16 bytes of tx_send already handed to the transport
-UCTX_RX_STATE	EQU	202	; u8[8] URX_* (datagram mode)
-UCTX_RX_LEN	EQU	210	; u16[8] datagram length (datagram mode)
-UCTX_RX_FILL	EQU	226	; u8 slot being filled / write slot (ring mode)
-UCTX_RX_READ	EQU	227	; u8 next slot to read
-UCTX_RX_WR_OFF	EQU	228	; u16 ring mode: write offset inside rx_fill
-UCTX_RX_RD_OFF	EQU	230	; u16 ring mode: read offset inside rx_read
-UCTX_RX_USED	EQU	232	; u16 ring mode: published unread bytes
-UCTX_RX_TOTAL	EQU	234	; u16 ring mode: slot_count * slot_size
-UCTX_RX_PEEK_LEN	EQU	236	; u16 length returned by the outstanding RX_PEEK
-UCTX_TMR_FLAGS	EQU	238	; u8 UTMR_*
-UCTX_TMR_DUE	EQU	239	; u32 earliest armed protocol deadline
-UCTX_HWSM	EQU	243	; u8[56] Ethernet/UART engine and card state (src/hw/*, eth/engine.asm)
-UCTX_TP	EQU	299	; u8[96] TCP / UDP / ESP / loop state
-UCTX_ARP	EQU	395	; u8[32] next-hop cache and the pending ARP reply
-UCTX_SCRATCH	EQU	427	; u8[64] RX: Ethernet + IPv4 + TCP/UDP header of the frame in progress
-UCTX_TXH	EQU	491	; u8[60] TX: transport header template (Ethernet + IPv4 + TCP/UDP)
-UCTX_ARPTX	EQU	551	; u8[42] TX: ARP frame being sent
-UCTX_STATS	EQU	593	; u8[76] GET_STATS bytes 4.. (copied by GET_STATS)
-UCTX_GUARD	EQU	669	; u8[4] 0xA5 guard checked by the stand
-UCTX_BYTES	EQU	673
+UCTX_CALL_FLAGS	EQU	116	; u8 UCF_*: ISA pre-acquired, inside STEP_ISR, budgeted
+UCTX_SCHED_FLAGS	EQU	117	; u8 USCH_*: admission state of the running STEP
+UCTX_SCHED_ITEMS	EQU	118	; u8 items a pipeline may still run in this admission phase (STEP)
+UCTX_NOW_MS	EQU	119	; u32 now_ms of the current/last STEP
+UCTX_LAST_USEFUL_MS	EQU	123	; u32 previous useful STEP
+UCTX_T0_MS	EQU	127	; u32 SHUTDOWN hardware phase start
+UCTX_CLK_FLAGS	EQU	131	; u8 UCLK_*
+UCTX_ISR_PENDING	EQU	132	; u8 UPEND_* bits set by STEP_ISR with SET b,(HL)
+UCTX_UNITS	EQU	133	; u16 remaining body budget of the running call (us)
+UCTX_DL_NEXT	EQU	135	; u16 nearest protocol deadline being computed (ms)
+UCTX_HW_STATE	EQU	137	; u8 UHW_*: hardware bring-up/run/stop phase
+UCTX_WORK	EQU	138	; u8 UWK_*: work done in this call
+UCTX_EV_HEAD	EQU	139	; u8 producer index (main)
+UCTX_EV_TAIL	EQU	140	; u8 consumer index (main)
+UCTX_EV_FLAGS	EQU	141	; u8 UEVF_* pending notifications
+UCTX_EV_REASON	EQU	142	; u8 pending terminal reason event type
+UCTX_EV_REASON_DETAIL	EQU	143	; u16
+UCTX_EV_TMP	EQU	145	; u8[8] event being published (EV_MAKE/EV_PUT)
+UCTX_CHAN_FLAGS	EQU	153	; u8 UCHF_*
+UCTX_ISR_STATS_PTR	EQU	154	; u16 address of stats isr_calls[0] - 2, set by INIT_CONFIG (STEP_ISR counters)
+UCTX_OP_DEADLINE_MS	EQU	156	; u32 OPEN/CLOSE deadline
+UCTX_TX_STATE	EQU	160	; u8[8] UTX_*
+UCTX_TX_LEN	EQU	168	; u16[8] committed length
+UCTX_TX_NEXT	EQU	184	; u8 slot of the next reservation
+UCTX_TX_SEND	EQU	185	; u8 oldest committed slot (transport cursor)
+UCTX_TX_OFF	EQU	186	; u16 bytes of tx_send already handed to the transport
+UCTX_RX_STATE	EQU	188	; u8[8] URX_* (datagram mode)
+UCTX_RX_LEN	EQU	196	; u16[8] datagram length (datagram mode)
+UCTX_RX_FILL	EQU	212	; u8 slot being filled / write slot (ring mode)
+UCTX_RX_READ	EQU	213	; u8 next slot to read
+UCTX_RX_WR_OFF	EQU	214	; u16 ring mode: write offset inside rx_fill
+UCTX_RX_RD_OFF	EQU	216	; u16 ring mode: read offset inside rx_read
+UCTX_RX_USED	EQU	218	; u16 ring mode: published unread bytes
+UCTX_RX_TOTAL	EQU	220	; u16 ring mode: slot_count * slot_size
+UCTX_RX_PEEK_LEN	EQU	222	; u16 length returned by the outstanding RX_PEEK
+UCTX_TMR_FLAGS	EQU	224	; u8 UTMR_*
+UCTX_TMR_DUE	EQU	225	; u32 earliest armed protocol deadline
+UCTX_HWSM	EQU	229	; u8[56] Ethernet/UART engine and card state (src/hw/*, eth/engine.asm)
+UCTX_TP	EQU	285	; u8[96] TCP / UDP / ESP / loop state
+UCTX_ARP	EQU	381	; u8[32] next-hop cache and the pending ARP reply
+UCTX_SCRATCH	EQU	413	; u8[64] RX: Ethernet + IPv4 + TCP/UDP header of the frame in progress
+UCTX_TXH	EQU	477	; u8[60] TX: transport header template (Ethernet + IPv4 + TCP/UDP)
+UCTX_ARPTX	EQU	537	; u8[42] TX: ARP frame being sent
+UCTX_STATS	EQU	579	; u8[76] GET_STATS bytes 4.. (copied by GET_STATS)
+UCTX_TX_TAG	EQU	655	; u16[8] application tag, 0xFFFF for a reservation
+UCTX_GUARD	EQU	671	; u8[4] 0xA5 guard checked by the stand
+UCTX_BYTES	EQU	675
 
 ; IY-relative offsets: the core keeps IY = context + 128, so fields
 ; inside the first 256 bytes are reached as (IY+CX_<FIELD>).
@@ -171,42 +172,42 @@ CX_ISA_LOCK_PTR	EQU	-18
 CX_SH1FFD_PTR	EQU	-16
 CX_SH9FBD_PTR	EQU	-14
 CX_CALL_FLAGS	EQU	-12
-CX_ISA_E2	EQU	-11
-CX_NOW_MS	EQU	-10
-CX_LAST_USEFUL_MS	EQU	-6
-CX_T0_MS	EQU	-2
-CX_CLK_FLAGS	EQU	2
-CX_ISR_PENDING	EQU	3
-CX_UNITS	EQU	4
-CX_DL_NEXT	EQU	6
-CX_HW_STATE	EQU	8
-CX_WORK	EQU	9
-CX_EV_HEAD	EQU	10
-CX_EV_TAIL	EQU	11
-CX_EV_FLAGS	EQU	12
-CX_EV_REASON	EQU	13
-CX_EV_REASON_DETAIL	EQU	14
-CX_EV_TMP	EQU	16
-CX_CHAN_FLAGS	EQU	24
-CX_PAD3	EQU	25
-CX_OP_DEADLINE_MS	EQU	26
-CX_TX_STATE	EQU	30
-CX_TX_LEN	EQU	38
-CX_TX_TAG	EQU	54
-CX_TX_NEXT	EQU	70
-CX_TX_SEND	EQU	71
-CX_TX_OFF	EQU	72
-CX_RX_STATE	EQU	74
-CX_RX_LEN	EQU	82
-CX_RX_FILL	EQU	98
-CX_RX_READ	EQU	99
-CX_RX_WR_OFF	EQU	100
-CX_RX_RD_OFF	EQU	102
-CX_RX_USED	EQU	104
-CX_RX_TOTAL	EQU	106
-CX_RX_PEEK_LEN	EQU	108
-CX_TMR_FLAGS	EQU	110
-CX_TMR_DUE	EQU	111
+CX_SCHED_FLAGS	EQU	-11
+CX_SCHED_ITEMS	EQU	-10
+CX_NOW_MS	EQU	-9
+CX_LAST_USEFUL_MS	EQU	-5
+CX_T0_MS	EQU	-1
+CX_CLK_FLAGS	EQU	3
+CX_ISR_PENDING	EQU	4
+CX_UNITS	EQU	5
+CX_DL_NEXT	EQU	7
+CX_HW_STATE	EQU	9
+CX_WORK	EQU	10
+CX_EV_HEAD	EQU	11
+CX_EV_TAIL	EQU	12
+CX_EV_FLAGS	EQU	13
+CX_EV_REASON	EQU	14
+CX_EV_REASON_DETAIL	EQU	15
+CX_EV_TMP	EQU	17
+CX_CHAN_FLAGS	EQU	25
+CX_ISR_STATS_PTR	EQU	26
+CX_OP_DEADLINE_MS	EQU	28
+CX_TX_STATE	EQU	32
+CX_TX_LEN	EQU	40
+CX_TX_NEXT	EQU	56
+CX_TX_SEND	EQU	57
+CX_TX_OFF	EQU	58
+CX_RX_STATE	EQU	60
+CX_RX_LEN	EQU	68
+CX_RX_FILL	EQU	84
+CX_RX_READ	EQU	85
+CX_RX_WR_OFF	EQU	86
+CX_RX_RD_OFF	EQU	88
+CX_RX_USED	EQU	90
+CX_RX_TOTAL	EQU	92
+CX_RX_PEEK_LEN	EQU	94
+CX_TMR_FLAGS	EQU	96
+CX_TMR_DUE	EQU	97
 
 ; INIT_CONFIG -> context copy runs: DB cfg_offset, ctx_offset, length
 CFG_COPY_COUNT	EQU	4

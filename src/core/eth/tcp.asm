@@ -62,11 +62,12 @@ TCF_SYN		EQU	0x08	; send (or resend) SYN
 TCP_PREP_NONE	EQU	0
 TCP_PREP_SUM	EQU	1
 TCP_PREP_READY	EQU	2
+TCP_PREP_PRE	EQU	3	; IPv4 header done, TC_SUM = pseudo header + payload
 
 TCP_SUM_CHUNK	EQU	128
-COST_TCP_STEP	EQU	220	; timers + segment choice (units)
-COST_TCP_IDLE	EQU	60	; segment choice without due timers
-COST_TCP_DATA	EQU	140	; choosing a data segment (slot cursor, window)
+COST_TCP_STEP	EQU	165	; timers + segment choice (148 us)
+COST_TCP_IDLE	EQU	45	; segment choice without due timers (31 us)
+COST_TCP_DATA	EQU	155	; choosing a data segment (slot cursor, window; 139 us)
 COST_TCP_INPUT	EQU	160
 COST_TEMPLATE	EQU	210	; SYN: IP_TEMPLATE + control segment (stand: 198 us)
 	ASSERT	COST_TCP_STEP <= PROF_MAX_ITEM_US
@@ -74,6 +75,9 @@ COST_TEMPLATE	EQU	210	; SYN: IP_TEMPLATE + control segment (stand: 198 us)
 	ASSERT	COST_TCP_IDLE + COST_TEMPLATE <= PROF_MAX_ITEM_US	; idle step -> SYN in one STEP
 	ASSERT	COST_TCP_IDLE + COST_TCP_DATA <= PROF_MAX_ITEM_US
 COST_TERMINATE	EQU	60	; CH_TERMINATE (stand: 51 us)
+COST_TP_PRE	EQU	110	; TX pull, stage 1: IPv4 header, pseudo-header sum (58 us)
+COST_TP_HDR	EQU	190	; TX pull, stage 2: TCP header fields + their sum, frame, RTX (175 us)
+	ASSERT	COST_TP_PRE <= PROF_MAX_ITEM_US && COST_TP_HDR <= PROF_MAX_ITEM_US
 
 	MACRO	TP_IX
 	PUSH	DE			; preserves DE
@@ -246,6 +250,14 @@ TP_STEP
 .active
 	BIT	4,(IY+CX_TMR_FLAGS)	; UTMR_TPDUE: timers owed
 	JR	NZ,.due
+	; no timer due, a segment prepared for the engine and no window to
+	; announce: nothing to choose, no budget taken
+	LD	A,(IX+TC_PREP)
+	CP	TCP_PREP_READY
+	JR	C,.idle
+	BIT	2,(IY+CX_CHAN_FLAGS)	; UCHF_WINUPD
+	RET	Z
+.idle
 	LD	HL,COST_TCP_IDLE
 	CALL	TAKE
 	RET	C
@@ -634,36 +646,53 @@ TCP_PREP_SUMMING
 	RET
 
 ; ----------------------------------------------------------------------
-; TP_TX_PULL: hand a prepared segment to the engine (header in ctx.txh).
-; Out: CF=1 nothing ready.
+; TP_TX_PULL: hand a prepared segment to the engine (header in ctx.txh),
+; in two budget items: TCP_PREP_READY -> TCP_PREP_PRE (IPv4 header, the
+; pseudo-header + payload sum: nothing that depends on received data)
+; -> handed over (sequence, acknowledgment and window as of now, their
+; sum, the engine frame, RTX).  Out: CF=1 nothing (or not yet) ready.
 ; ----------------------------------------------------------------------
 TP_TX_PULL
 	TP_IX
 	LD	A,(IX+TC_PREP)
+	CP	TCP_PREP_PRE
+	JR	Z,.hdr
 	CP	TCP_PREP_READY
 	SCF
 	RET	NZ
-	LD	HL,COST_TP_PULL
+	LD	HL,COST_TP_PRE
 	CALL	TAKE
 	RET	C
 	TP_IX
-	LD	(IX+TC_PREP),TCP_PREP_NONE
 	LD	B,TCP_HDR		; 24 with the MSS option on SYN
 	BIT	1,(IX+TC_TXFL)		; TCPF_SYN
 	JR	Z,.hlen
 	LD	B,TCP_HDR + 4
 .hlen
 	LD	(IX+TC_HLEN),B
-	LD	L,(IX+TC_TXLEN)
-	LD	H,(IX+TC_TXLEN+1)
-	LD	E,B
-	LD	D,0
-	ADD	HL,DE
-	EX	DE,HL			; DE = TCP length
+	CALL	TCP_LEN			; DE = TCP length
 	PUSH	DE
 	CALL	IP_FINISH
-	CALL	TCP_HDR_FILL
 	POP	DE
+	PUSH	DE
+	CALL	L4_SUM0			; clobbers DE
+	POP	DE
+	CALL	CSUM_ADD_BE		; pseudo-header length
+	TP_IX
+	LD	E,(IX+TC_SUM)
+	LD	D,(IX+TC_SUM+1)
+	ADD	HL,DE			; payload sum, same byte-swapped domain
+	CALL	CSUM_FOLD
+	LD	(IX+TC_SUM),L
+	LD	(IX+TC_SUM+1),H
+	LD	(IX+TC_PREP),TCP_PREP_PRE
+.hdr
+	LD	HL,COST_TP_HDR
+	CALL	TAKE
+	RET	C
+	TP_IX
+	LD	(IX+TC_PREP),TCP_PREP_NONE
+	CALL	TCP_HDR_FILL
 	CALL	TCP_CSUM_TX
 	TP_IX
 	LD	A,(IX+TC_HLEN)
@@ -685,6 +714,16 @@ TP_TX_PULL
 	CALL	Z,TCP_ARM_RTX
 .no_rtx
 	OR	A
+	RET
+
+; TCP_LEN: DE = TC_TXLEN + TC_HLEN (IX = tp).  Clobbers HL.
+TCP_LEN
+	LD	L,(IX+TC_TXLEN)
+	LD	H,(IX+TC_TXLEN+1)
+	LD	E,(IX+TC_HLEN)
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL
 	RET
 
 ; TCP_HDR_FILL: the variable part of the TCP header (ports are in the
@@ -758,20 +797,24 @@ TCP_HDR_FILL
 	LD	(HL),LOW UNETG_TCP_MSS
 	RET
 
-; TCP_CSUM_TX: DE = TCP length.  checksum = TPT_L4S0 (addresses, protocol,
-; ports) + length + the header from the sequence field + payload sum.
+; TCP_CSUM_TX: the TCP checksum into ctx.txh: TC_SUM (pseudo header with
+; the ports and the length, payload; TP_TX_PULL stage 1) + the header from
+; the sequence field.  Clobbers A, BC, DE, HL.
 TCP_CSUM_TX
-	PUSH	DE
-	CALL	L4_SUM0
-	POP	DE
-	CALL	CSUM_ADD_BE		; pseudo-header length
-	PUSH	HL
+	; TC_SUM = pseudo header (with ports and length) + payload (stage 1)
 	LD	A,TC_HLEN
 	CALL	TP_FIELD
 	LD	A,(HL)
 	SUB	4			; ports are already in L4S0
 	LD	C,A
 	LD	B,0
+	LD	A,TC_SUM
+	CALL	TP_FIELD
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	LD	L,A
+	PUSH	HL
 	LD	DE,UCTX_TXH + TCP_SEQ - CTX_BIAS
 	PUSH	IY
 	POP	HL
@@ -779,15 +822,6 @@ TCP_CSUM_TX
 	EX	DE,HL			; DE -> sequence field
 	POP	HL
 	CALL	CSUM_RAM
-	PUSH	HL
-	LD	A,TC_SUM
-	CALL	TP_FIELD
-	LD	E,(HL)
-	INC	HL
-	LD	D,(HL)
-	POP	HL
-	ADD	HL,DE			; payload sum, same byte-swapped domain
-	CALL	CSUM_FOLD
 	PUSH	HL
 	LD	DE,UCTX_TXH + TCP_CSUM - CTX_BIAS
 	PUSH	IY

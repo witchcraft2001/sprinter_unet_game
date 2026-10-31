@@ -72,8 +72,8 @@ IMG_ORIGIN
 	INCLUDE	"unetg_jt.inc"
 	ASSERT	$ - IMG_ORIGIN == 3 * UNETG_EXPORT_COUNT
 
-; The only mutable bytes of the image: pointer to the active context,
-; 0 when no INIT_CONFIG is active.  Published as image_mutable_bytes.
+; The only mutable bytes of the image: pointer to the active context plus
+; CTX_BIAS (the IY value of the core), 0 when no INIT_CONFIG is active.  Published as image_mutable_bytes.
 IMG_CTX_PTR
 	DW	0
 
@@ -91,8 +91,8 @@ IMG_CTX_PTR
 	INCLUDE	"hw/none.asm"
 	ENDIF
 	IFNDEF	UGB_HW_LOOP
-	INCLUDE	"core/lock.asm"
 	INCLUDE	"core/hwdrv.asm"
+	INCLUDE	"core/lock.asm"
 	ENDIF
 	IFDEF	UGB_HW_ETH
 	INCLUDE	"unetg_eth.inc"

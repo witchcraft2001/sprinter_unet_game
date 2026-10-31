@@ -11,12 +11,14 @@
 
 COST_ESP_STEP	EQU	90	; TP_STEP entry, pending / overrun checks, sequencer dispatch and job checks
 ; Chains one STEP must afford after the transport entry (min_useful_budget):
-; a parse round, a pending line action, a job start with its first command
-; piece, a command result.
+; a parse round, a pending line action, a job start, a command piece, a
+; command result.  A job start and its first piece need not share a STEP:
+; ESP_ISSUE leaves ECS_BUILD, and a refused piece is built next STEP.
 	ASSERT	COST_ESP_STEP + COST_PARSE + 8 <= PROF_MAX_ITEM_US
 	ASSERT	COST_ESP_STEP + COST_PARSE + COST_PAY + 1 <= PROF_MAX_ITEM_US
 	ASSERT	COST_ESP_STEP + COST_LINE <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_PICK + COST_PIECE <= PROF_MAX_ITEM_US
+	ASSERT	COST_ESP_STEP + COST_PICK <= PROF_MAX_ITEM_US
+	ASSERT	COST_ESP_STEP + COST_PIECE <= PROF_MAX_ITEM_US
 	ASSERT	COST_ESP_STEP + COST_RESULT <= PROF_MAX_ITEM_US
 
 ; TP_OPEN: CIPSTART is issued by the sequencer once the module is idle.

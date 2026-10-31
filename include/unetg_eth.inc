@@ -74,19 +74,19 @@ NIC_CHUNK	EQU	40		; largest card transfer per DI portion (DI < 200 us)
 HS_LFSR		EQU	3	; u8  3C509B ID sequence value
 HS_MAC		EQU	10	; u8[6] station address
 HS_RXS		EQU	16	; u8  RX pipeline state (ERX_*)
-HS_RXLEN	EQU	17	; u16 frame length reported by the card
-HS_RXSKIP	EQU	19	; u16 card bytes summed but not stored (header tail)
-HS_RXLIM	EQU	21	; u16 card bytes summed and stored
-HS_RXREM	EQU	23	; u16 card bytes of the segment still to read
-HS_RXDST	EQU	25	; u16 store pointer
-HS_RXSPAN	EQU	27	; u16 bytes before the RX ring wraps
-HS_SUM		EQU	29	; u16 checksum accumulator (byte-swapped)
-HS_TXS		EQU	31	; u8  TX pipeline state (ETX_*)
-HS_TXLEN	EQU	32	; u16 frame length without padding
-HS_TXHDR	EQU	34	; u8  header bytes in ctx.txh
-HS_TXREM	EQU	35	; u16 payload bytes still to write
-HS_TXSRC	EQU	37	; u16 payload source
-HS_TXKIND	EQU	39	; u8  ETK_*: who asked for the frame
+HS_TXS		EQU	17	; u8  TX pipeline state (ETX_*)
+HS_TXKIND	EQU	18	; u8  ETK_*: who asked for the frame
+HS_RXLEN	EQU	19	; u16 frame length reported by the card
+HS_RXSKIP	EQU	21	; u16 card bytes summed but not stored (header tail)
+HS_RXLIM	EQU	23	; u16 card bytes summed and stored
+HS_RXREM	EQU	25	; u16 card bytes of the segment still to read
+HS_RXDST	EQU	27	; u16 store pointer
+HS_RXSPAN	EQU	29	; u16 bytes before the RX ring wraps
+HS_SUM		EQU	31	; u16 checksum accumulator (byte-swapped)
+HS_TXLEN	EQU	33	; u16 frame length without padding
+HS_TXHDR	EQU	35	; u8  header bytes in ctx.txh
+HS_TXREM	EQU	36	; u16 payload bytes still to write
+HS_TXSRC	EQU	38	; u16 payload source
 HS_WIN		EQU	40	; u8  3C509B: selected register window
 HS_RXSEG	EQU	41	; u16 transport segment length
 HS_TMP		EQU	43	; u16 card scratch
@@ -97,6 +97,11 @@ HS_RXPROTO	EQU	54	; u8  IPv4 protocol of the frame being received
 HS_NEXTPG	EQU	55	; u8  RTL8019AS: next-page field of the frame being read
 HS_SIZE		EQU	56
 	ASSERT	HS_SIZE <= HWSM_BYTES
+; the pipeline states are read by the dispatchers straight through IY
+EX_RXS		EQU	UCTX_HWSM + HS_RXS - CTX_BIAS
+EX_TXS		EQU	UCTX_HWSM + HS_TXS - CTX_BIAS
+EX_TXKIND	EQU	UCTX_HWSM + HS_TXKIND - CTX_BIAS
+	ASSERT	EX_RXS <= 127 && EX_TXS <= 127 && EX_TXKIND <= 127
 
 ERX_IDLE	EQU	0
 ERX_HDR		EQU	1	; header in scratch, not classified

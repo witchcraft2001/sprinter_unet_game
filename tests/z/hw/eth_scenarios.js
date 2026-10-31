@@ -113,7 +113,9 @@ function nestedIsr(s, seed = 12345) {
       if (insideIsr && cpu.pc === e) c0 = mm.cycles;
       if (insideIsr && cpu.pc === ISR_STUB + 19) st.maxUs = Math.max(st.maxUs, (mm.cycles - c0) / mm.mhz);
       if (insideIsr && cpu.pc === ISR_STUB + 30) { insideIsr = false; st.statuses.push(mm.peek(ISR_LOG)); }
-      if (taken > 0 || !cpu.iff1 || !mm.pcInImage()) return;
+      // a real Z80 takes no interrupt right after DI (the vendored core
+      // applies DI one instruction late: do_delayed_di)
+      if (taken > 0 || !cpu.iff1 || cpu.do_delayed_di || !mm.pcInImage()) return;
       if (--x <= 0) { taken = 1; st.taken++; mm.cpu.interrupt(false, 0xff); }
     },
   };
@@ -173,17 +175,12 @@ function transportScenarios(dll) {
   });
 
   // The SDK gateway spreads STEPs over the budget period (ТЗ §7: 2 per
-  // 20 ms); GET_INFO allows gaps up to max_step_gap_ms = 20.  Found with the
-  // SDK (docs/MEASUREMENTS.md, DT=10|20 SCEN=stream tools/dev/overrun.js):
-  // GTCPRTL at 10 ms: a cumulative ACK of several slots makes COST_FINISH
-  // (240) cost ~305 us, needed base reserve 300 us; at 20 ms every TCP build
-  // fails: ESP's 512-byte CIPRECVDATA answer misses its command deadline at
-  // one UART portion per STEP (STREAM_ERROR), Ethernet TCP crawls at a few
-  // bytes per second with retransmissions.
-  const gapTodo = (gap) => (gap === 10 && dll === 'gtcprtl') || (gap === 20 && dll.startsWith('gtcp'));
+  // 20 ms); GET_INFO allows gaps up to max_step_gap_ms = 20
+  // (tools/dev/profile_step.js --dt 2,10,20).  Ethernet TCP holds since the
+  // STEP admission order of ETH_SCHED, ESP since its CIPRECVDATA deadline
+  // counts from the last received byte (ESP_PROGRESS).
   for (const gap of [10, 20]) {
-    test(`${dll}: an 8 KiB stream with a STEP every ${gap} ms stays within budget`,
-      gapTodo(gap) ? { todo: 'core: TCP at long STEP gaps (budget of the ACK input, ESP read deadline, Ethernet rate)' } : {}, () => {
+    test(`${dll}: an 8 KiB stream with a STEP every ${gap} ms stays within budget`, () => {
         const s = boot(dll);
         assert.equal(s.open().a, S.OK);
         s.until(has('CONNECTED'));
@@ -201,7 +198,7 @@ function transportScenarios(dll) {
     s.tick = (...a) => { s.armIsr(); return tick(...a); };
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
-    const d = bytes(4096, 5);
+    const d = bytes(8192, 5);                      // long enough for > 100 interrupts at any speed
     const rx = stream(s, d, isUdp(dll) ? 512 : 536);
     assert.deepEqual(rx, d);
     assert.deepEqual(peerGot(s, dll), d);

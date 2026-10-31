@@ -57,7 +57,6 @@ UTMR_TPDUE	EQU	0x10	; the transport still owes its timer evaluation
 ; UCTX.call_flags (valid during one export call)
 UCF_PREACQ	EQU	0x01	; gateway holds the ISA lock for this portion
 UCF_ISR		EQU	0x02	; inside STEP_ISR
-UCF_ISA_HELD	EQU	0x04	; the core took the ISA lock itself
 UCF_BUDGET	EQU	0x08	; budgeted call (STEP): publication costs are taken
 
 ; UCTX.ev_flags -- notifications waiting for room in the event queue
@@ -88,6 +87,12 @@ UPEND_RX	EQU	0
 UPEND_TX	EQU	1
 UPEND_ERR	EQU	2
 UPEND_POLLED	EQU	3	; STEP_ISR sampled the card since the last STEP
+
+; ctx.sched_flags (STEP admission, Ethernet engine; reset at every STEP)
+USCH_POLL_RSVD	EQU	0	; COST_POLL set aside for this STEP's card poll
+USCH_CONT	EQU	1	; continuation phase: stop a pipeline at its frame end
+USCH_RX_STOP	EQU	2	; RX stopped in this STEP (budget, bus, nothing to do)
+USCH_TX_STOP	EQU	3	; TX stopped in this STEP
 
 ; UCTX.work bits (what the current STEP achieved)
 UWK_HW		EQU	0x01

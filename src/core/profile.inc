@@ -110,20 +110,31 @@ PROF_MAX_ITEM_US	EQU	300	; ESP: transport entry + job start + first command piec
 	ENDIF
 	ENDIF
 PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + PROF_MAX_ITEM_US + PROF_MIN_RETURN_US
-; STEP_ISR (stand, 21 MHz): fixed path 60 us, card status portion 67 us,
-; refused try-lock 73..76 us in all.  These miss the ТЗ §5.1 targets (empty
-; poll <= 100 us, BUS_BUSY <= 25 us); they are published as measured.
-PROF_ISR_BASE_US	EQU	65	; prologue, budget, statistics, return
+; STEP_ISR (stand, 21 MHz, tools/dev/isr_profile.js): fixed path (entry,
+; checks, budget, counters, call fields) 37 us; the card status portion
+; (try-lock, map, status, unmap, release) RTL 50, 3C509B 45, ESP 41 us;
+; empty poll RTL 88, 3C509B 82, ESP 78, loopback 20 us; BUS_BUSY 24.8 us
+; (decided before any per-call write); budget refusal 13.6 us.
 	IFDEF	UGB_HW_LOOP
-PROF_ISR_POLL_US	EQU	0	; no card: nothing to poll
+PROF_ISR_BASE_US	EQU	25	; no card: checks, budget, counters
+PROF_ISR_POLL_US	EQU	0	; nothing to poll
 	ELSE
-PROF_ISR_POLL_US	EQU	70	; lock + map + card status (ESP: one RX byte) + unmap + release
+PROF_ISR_BASE_US	EQU	40	; entry, checks, budget, counters, call fields, return
+	IFDEF	UGB_HW_RTL
+PROF_ISR_POLL_US	EQU	55	; lock + map + CURR on page 1 + unmap + release
+	ENDIF
+	IFDEF	UGB_HW_EL3
+PROF_ISR_POLL_US	EQU	50	; lock + map + RX status + unmap + release
+	ENDIF
+	IFDEF	UGB_HW_ESP
+PROF_ISR_POLL_US	EQU	45	; lock + map + LSR + unmap + release
+	ENDIF
 	ENDIF
 PROF_MIN_RETURN_US	EQU	10
 PROF_ISR_MIN_US		EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US + PROF_MIN_RETURN_US
 PROF_MAX_ATOMIC_US	EQU	60
 PROF_EMPTY_POLL_US	EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US
-PROF_BUS_BUSY_US	EQU	80
+PROF_BUS_BUSY_US	EQU	25	; stand 24.8 us: lock byte read before any per-call write
 PROF_MAX_STEP_GAP_MS	EQU	20
 PROF_TIME_READ_MAX_US	EQU	20
 PROF_TIMING_MODES	EQU	0x03

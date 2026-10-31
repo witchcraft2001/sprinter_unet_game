@@ -1211,8 +1211,8 @@
   }
  },
  "ctx": {
-  "version": 1,
-  "size": 673,
+  "version": 2,
+  "size": 675,
   "fields": {
    "layout": {
     "offset": 0,
@@ -1620,309 +1620,316 @@
     "elem": "u8",
     "type": "u8"
    },
-   "isa_e2": {
+   "sched_flags": {
     "offset": 117,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "now_ms": {
+   "sched_items": {
     "offset": 118,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "now_ms": {
+    "offset": 119,
     "size": 4,
     "count": 1,
     "elem": "u32",
     "type": "u32"
    },
    "last_useful_ms": {
-    "offset": 122,
+    "offset": 123,
     "size": 4,
     "count": 1,
     "elem": "u32",
     "type": "u32"
    },
    "t0_ms": {
-    "offset": 126,
+    "offset": 127,
     "size": 4,
     "count": 1,
     "elem": "u32",
     "type": "u32"
    },
    "clk_flags": {
-    "offset": 130,
-    "size": 1,
-    "count": 1,
-    "elem": "u8",
-    "type": "u8"
-   },
-   "isr_pending": {
     "offset": 131,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "units": {
+   "isr_pending": {
     "offset": 132,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "units": {
+    "offset": 133,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "dl_next": {
-    "offset": 134,
+    "offset": 135,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "hw_state": {
-    "offset": 136,
-    "size": 1,
-    "count": 1,
-    "elem": "u8",
-    "type": "u8"
-   },
-   "work": {
     "offset": 137,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "ev_head": {
+   "work": {
     "offset": 138,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "ev_tail": {
+   "ev_head": {
     "offset": 139,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "ev_flags": {
+   "ev_tail": {
     "offset": 140,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "ev_reason": {
+   "ev_flags": {
     "offset": 141,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "ev_reason_detail": {
+   "ev_reason": {
     "offset": 142,
+    "size": 1,
+    "count": 1,
+    "elem": "u8",
+    "type": "u8"
+   },
+   "ev_reason_detail": {
+    "offset": 143,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "ev_tmp": {
-    "offset": 144,
+    "offset": 145,
     "size": 8,
     "count": 8,
     "elem": "u8",
     "type": "u8[8]"
    },
    "chan_flags": {
-    "offset": 152,
-    "size": 1,
-    "count": 1,
-    "elem": "u8",
-    "type": "u8"
-   },
-   "pad3": {
     "offset": 153,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
-   "op_deadline_ms": {
+   "isr_stats_ptr": {
     "offset": 154,
+    "size": 2,
+    "count": 1,
+    "elem": "u16",
+    "type": "u16"
+   },
+   "op_deadline_ms": {
+    "offset": 156,
     "size": 4,
     "count": 1,
     "elem": "u32",
     "type": "u32"
    },
    "tx_state": {
-    "offset": 158,
+    "offset": 160,
     "size": 8,
     "count": 8,
     "elem": "u8",
     "type": "u8[8]"
    },
    "tx_len": {
-    "offset": 166,
-    "size": 16,
-    "count": 8,
-    "elem": "u16",
-    "type": "u16[8]"
-   },
-   "tx_tag": {
-    "offset": 182,
+    "offset": 168,
     "size": 16,
     "count": 8,
     "elem": "u16",
     "type": "u16[8]"
    },
    "tx_next": {
-    "offset": 198,
+    "offset": 184,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
    "tx_send": {
-    "offset": 199,
+    "offset": 185,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
    "tx_off": {
-    "offset": 200,
+    "offset": 186,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "rx_state": {
-    "offset": 202,
+    "offset": 188,
     "size": 8,
     "count": 8,
     "elem": "u8",
     "type": "u8[8]"
    },
    "rx_len": {
-    "offset": 210,
+    "offset": 196,
     "size": 16,
     "count": 8,
     "elem": "u16",
     "type": "u16[8]"
    },
    "rx_fill": {
-    "offset": 226,
+    "offset": 212,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
    "rx_read": {
-    "offset": 227,
+    "offset": 213,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
    "rx_wr_off": {
-    "offset": 228,
+    "offset": 214,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "rx_rd_off": {
-    "offset": 230,
+    "offset": 216,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "rx_used": {
-    "offset": 232,
+    "offset": 218,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "rx_total": {
-    "offset": 234,
+    "offset": 220,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "rx_peek_len": {
-    "offset": 236,
+    "offset": 222,
     "size": 2,
     "count": 1,
     "elem": "u16",
     "type": "u16"
    },
    "tmr_flags": {
-    "offset": 238,
+    "offset": 224,
     "size": 1,
     "count": 1,
     "elem": "u8",
     "type": "u8"
    },
    "tmr_due": {
-    "offset": 239,
+    "offset": 225,
     "size": 4,
     "count": 1,
     "elem": "u32",
     "type": "u32"
    },
    "hwsm": {
-    "offset": 243,
+    "offset": 229,
     "size": 56,
     "count": 56,
     "elem": "u8",
     "type": "u8[56]"
    },
    "tp": {
-    "offset": 299,
+    "offset": 285,
     "size": 96,
     "count": 96,
     "elem": "u8",
     "type": "u8[96]"
    },
    "arp": {
-    "offset": 395,
+    "offset": 381,
     "size": 32,
     "count": 32,
     "elem": "u8",
     "type": "u8[32]"
    },
    "scratch": {
-    "offset": 427,
+    "offset": 413,
     "size": 64,
     "count": 64,
     "elem": "u8",
     "type": "u8[64]"
    },
    "txh": {
-    "offset": 491,
+    "offset": 477,
     "size": 60,
     "count": 60,
     "elem": "u8",
     "type": "u8[60]"
    },
    "arptx": {
-    "offset": 551,
+    "offset": 537,
     "size": 42,
     "count": 42,
     "elem": "u8",
     "type": "u8[42]"
    },
    "stats": {
-    "offset": 593,
+    "offset": 579,
     "size": 76,
     "count": 76,
     "elem": "u8",
     "type": "u8[76]"
    },
+   "tx_tag": {
+    "offset": 655,
+    "size": 16,
+    "count": 8,
+    "elem": "u16",
+    "type": "u16[8]"
+   },
    "guard": {
-    "offset": 669,
+    "offset": 671,
     "size": 4,
     "count": 4,
     "elem": "u8",

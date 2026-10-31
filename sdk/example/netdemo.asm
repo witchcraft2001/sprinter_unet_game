@@ -1,5 +1,5 @@
 ; netdemo.asm -- NETDEMO.EXE: the SDK example of mixed service (ТЗ §7) and
-; the M stand program of milestone M5 (tools/mame/run_m.py, MAME holub).
+; the M stand program of milestone M5 (tools/mame/run_m.py).
 ;
 ; The order of ТЗ §7:
 ;  1. before the game: the SDK loader (libman) loads the DLL, the gateway
@@ -20,7 +20,8 @@
 ;     (FINI), report, back to DSS (the report is printed; ugstand.lua
 ;     collects it from memory).
 ; Scenarios (-DSCEN): E echo 300 bytes, S 8 KiB stream, P the peer
-; closes, D SHUTDOWN with the channel open, W pause, L load / check / free.
+; closes, D SHUTDOWN with the channel open, W pause, L load / check / free,
+; H card bring-up and SHUTDOWN without a channel.
 ; ESP builds play NETUP first (AT, AT+UART_CUR=115200,8,1,0,3).
 ; Memory: tools/mame/mkcfg.js --prog netdemo (WIN2, nothing at >= 0xC000).
 
@@ -411,6 +412,9 @@ isr_unknown
 ; Scenarios
 ; ----------------------------------------------------------------------
 scenario
+	IF	SCEN == 'H'
+	RET				; bring-up and SHUTDOWN only, no channel
+	ENDIF
 	CALL	open_wait
 	IF	SCEN == 'E'
 	LD	HL,300

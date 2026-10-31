@@ -18,7 +18,8 @@ ES_PARSE_MAX	EQU	48	; line bytes per parse round
 ES_PAY_MAX	EQU	128	; payload bytes per parse round
 COST_PARSE	EQU	110	; round: ring head, sizing, tail, refund (+ 16 units per line byte)
 COST_PAY	EQU	70	; payload round: ESP_PAY twice (RX ring wrap), datagram publish
-COST_LINE	EQU	160	; a pending action: line classification, header, prompt (stand: ESP_PEND <= 154 us)
+COST_LINE	EQU	210	; a pending action: line classification, header, prompt (ESP_PEND
+				; max 204.5, p99 196 us; ESP_STEP + LINE = PROF_MAX_ITEM_US)
 	ASSERT	ES_PAY_MAX < 256 && ES_PARSE_MAX < 256
 
 ; IX = ctx.tp (preserves DE)
@@ -113,6 +114,7 @@ ESP_PARSE
 	POP	HL			; n
 	OR	A
 	SBC	HL,BC			; consumed
+	CALL	NZ,ESP_PROGRESS
 	POP	DE			; tail
 	ADD	HL,DE
 	LD	A,H

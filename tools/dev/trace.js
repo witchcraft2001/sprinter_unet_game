@@ -28,6 +28,6 @@ for (let i = 0; i < steps; i++) {
   const r = s.step(s.t, +(process.env.BUDGET || 500), 0, { onStep: (m, st) => { const l = pts[st.pc]; if (l) log.push(`${l === 'TAKE' ? '' : 'BB'}${(st.h << 8) | st.l}@${owner(m.peek16(st.sp) - 3)}/${m.peek16(ua)}`); } });
   s.pump();
   const tp = s.m.peekBytes(ctx + F.tp.offset, 72), hw = s.m.peekBytes(ctx + F.hwsm.offset, 56), arp = s.m.peekBytes(ctx + F.arp.offset, 32);
-  console.log(i, 'st', r.a, r.us.toFixed(0), 'tmr', s.ctx('tmr_flags'), 'arp', arp[0], arp[20], 'tcp', tp[0], tp[1], 'prep', tp[59], 'rxs', hw[16], 'txs', hw[31], 'peer', s.peer.sent.length, r.problems.join(';'));
+  console.log(i, 'st', r.a, r.us.toFixed(0), 'tmr', s.ctx('tmr_flags'), 'arp', arp[0], arp[20], 'tcp', tp[0], tp[1], 'prep', tp[59], 'rxs', hw[16], 'txs', hw[17], 'peer', s.peer.sent ? s.peer.sent.length : '-', r.problems.join(';'));
   console.log('   ', log.join(' '));
 }

@@ -15,9 +15,9 @@
 ; Command deadlines are polled by their owner and kept out of the STEP
 ; deadline (DL_ARM): STEP is called every worst_poll_gap_us anyway.
 
-COST_PICK	EQU	70	; choice of the next job (TX slot, RX space, ring cursor)
-COST_PIECE	EQU	140	; one literal run (<= 16 bytes) + one substitution of a command
-COST_RESULT	EQU	150	; a finished command: slot outcome, RX commit (stand: <= 136 us)
+COST_PICK	EQU	85	; choice of the next job (TX slot, RX space, ring cursor; 72 us)
+COST_PIECE	EQU	160	; one literal run (<= 16 bytes) + one substitution of a command (142 us)
+COST_RESULT	EQU	185	; a finished command: slot outcome, RX commit (164 us)
 
 ESP_AT_TRIES	EQU	5	; "AT" until the module answers (boot <= 2 s)
 ESP_AT_MS	EQU	500
@@ -38,6 +38,32 @@ ET_ARM_CDL
 	LD	BC,ET_CDL
 	ADD	HL,BC
 	JP	DL_ARM
+
+; ESP_PROGRESS: bytes of the module arrived while a CIPRECVDATA answer is
+; awaited: its deadline counts from the last progress, so a long answer
+; read at one UART portion per STEP (STEP gap 20 ms: ~90 STEPs for 512
+; bytes) does not time out, while a silent module still does after
+; ESP_IO_MS.  Preserves BC, DE, HL, IX.
+ESP_PROGRESS
+	PUSH	IX
+	ET_IX
+	LD	A,(IX+ET_JOB)
+	CP	EJ_RECV
+	JR	NZ,.out
+	LD	A,(IX+ET_CST)
+	CP	ECS_WAIT
+	JR	NZ,.out
+	PUSH	HL
+	PUSH	DE
+	PUSH	BC
+	LD	DE,ESP_IO_MS
+	CALL	ET_ARM_CDL
+	POP	BC
+	POP	DE
+	POP	HL
+.out
+	POP	IX
+	RET
 
 ; ET_CDL_DUE: CF=1 when ET_CDL is reached.  Clobbers A, BC, DE, HL.
 ET_CDL_DUE

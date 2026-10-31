@@ -40,7 +40,7 @@ const run = (k) => { for (let i = 0; i < k; i++) {
     const uAfter = next ? next.u : null;
     const tNext = next ? next.t : r.us;
     const used = (uAfter ?? s.m.peek16(ua));
-    if (k > 0 && used < calls[k].u) {
+    if (used < calls[k].u) {                 // the base reserve is inline (no TAKE)
       const real = tNext - calls[k].t;
       items += real;
       reserved += calls[k].u - used;

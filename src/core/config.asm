@@ -770,6 +770,13 @@ CFG_COMMIT
 	CALL	MUL8
 	LD	(IY+CX_RX_TOTAL),L
 	LD	(IY+CX_RX_TOTAL+1),H
+	; STEP_ISR counts through an absolute pointer (stats are beyond the IY window)
+	LD	BC,ISR_STATS_OFF
+	PUSH	IY
+	POP	HL
+	ADD	HL,BC
+	LD	(IY+CX_ISR_STATS_PTR),L
+	LD	(IY+CX_ISR_STATS_PTR+1),H
 	; v1: no qualified IRQ route on any board, AUTO serves through POLL.
 	LD	A,(IY+CX_MODE)
 	CP	UNETG_MODE_AUTO
@@ -792,7 +799,9 @@ CFG_COMMIT
 	INC	HL
 	DJNZ	.guard
 	POP	HL
-	LD	(IMG_CTX_PTR),HL
+	LD	BC,CTX_BIAS
+	ADD	HL,BC
+	LD	(IMG_CTX_PTR),HL	; ctx + CTX_BIAS: CTX_LOAD needs no addition
 	RET
 
 ; CFG_F16: A = floor(cpu_khz / 1312) = floor(16 * cpu_khz / 21000) for

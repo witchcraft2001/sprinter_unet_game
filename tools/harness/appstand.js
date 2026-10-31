@@ -196,7 +196,7 @@ class AppStand {
       }
       if (m.cycles >= this.nextPump) { this.pump(); this.nextPump = m.cycles + 100 * m.mhz; }
       if (this.sound.length) this.soundStep();
-      if (s.iff1) {
+      if (s.iff1 && !s.do_delayed_di) {             // real Z80: DI is immediate (the core delays it)
         const r = this.pick();
         if (r) {
           r.ack();

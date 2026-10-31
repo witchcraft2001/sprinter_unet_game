@@ -18,43 +18,58 @@
 EXP_STEP
 	PUSH	IX
 	PUSH	IY
-	PUSH	IY			; now_ms high word
-	PUSH	IX			; now_ms low word
 	LD	C,A
-	CALL	CTX_LOAD
-	JR	NZ,.have
-	POP	HL
-	POP	HL
-	JP	RET_STATE
-.have
+	LD	HL,(IMG_CTX_PTR)	; ctx + CTX_BIAS (CTX_LOAD inline)
+	LD	A,H
+	OR	L
+	JP	Z,RET_STATE
+	PUSH	HL
+	POP	IY
 	LD	A,C
 	AND	UCF_PREACQ
 	OR	UCF_BUDGET
 	LD	(IY+CX_CALL_FLAGS),A
-	PUSH	DE
-	LD	DE,CX_NOW_MS
-	CALL	IY_PTR
-	POP	DE
+	; now_ms from the caller's IX (low) / IY (high) words on the stack
+	POP	HL
 	POP	BC
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
-	INC	HL
-	POP	BC
-	LD	(HL),C
-	INC	HL
-	LD	(HL),B
-	CALL	UNITS_FROM_BUDGET
+	PUSH	BC
+	PUSH	HL
+	LD	(IY+CX_NOW_MS),C
+	LD	(IY+CX_NOW_MS+1),B
+	LD	(IY+CX_NOW_MS+2),L
+	LD	(IY+CX_NOW_MS+3),H
+	; units = budget * f16 / 16 - return (UNITS_FROM_BUDGET), and the
+	; fixed STEP path taken from them at once (TAKE PROF_STEP_BASE_US)
+	LD	A,(IY+CX_CPU_F16)
+	EX	DE,HL			; HL = budget
+	CP	16
+	JR	Z,.turbo		; 21 MHz: one unit per microsecond
+	EX	DE,HL
+	CALL	MUL_F16
+.turbo
 	XOR	A
 	LD	(IY+CX_WORK),A
 	LD	(IY+CX_FLAGS_OUT),A
 	DEC	A
 	LD	(IY+CX_DL_NEXT),A
 	LD	(IY+CX_DL_NEXT+1),A
+	LD	DE,-PROF_MIN_RETURN_US
+	ADD	HL,DE
+	JR	C,.units
+	LD	HL,0
+.units
+	LD	(IY+CX_UNITS),L		; kept for the refusal (no budget taken)
+	LD	(IY+CX_UNITS+1),H
+	LD	DE,-PROF_STEP_BASE_US
+	ADD	HL,DE
+	JR	NC,.no_base
+	LD	(IY+CX_UNITS),L
+	LD	(IY+CX_UNITS+1),H
 	STAT_INC UNETG_STATS_STEPS_TOTAL
-	LD	HL,PROF_STEP_BASE_US
-	CALL	TAKE
-	JR	NC,.useful
+	JR	.useful
+.no_base
+	SET	4,(IY+CX_WORK)		; UWK_YIELD (TAKE's refusal)
+	STAT_INC UNETG_STATS_STEPS_TOTAL
 	; Not even the clock fits: no protocol step (ABI §4: no new reference
 	; point for max_observed_step_gap_ms).
 	STAT_INC UNETG_STATS_BUDGET_YIELDS
@@ -63,6 +78,16 @@ EXP_STEP
 	JR	.out
 .useful
 	CALL	CLOCK_STEP
+	IFDEF	UGB_HW_ETH
+	; A running Ethernet card: the engine orders card and transport work
+	; (ETH_SCHED: poll reserve, frames in progress, transport, new TX, poll).
+	LD	A,(IY+CX_HW_STATE)
+	CP	UHW_RUN
+	JR	NZ,.alternate
+	CALL	ETH_SCHED
+	JR	.served
+.alternate
+	ENDIF
 	; Alternate who is served first, so that neither the hardware nor the
 	; transport is starved when a portion of the other does not fit.
 	LD	BC,UCTX_STATS - 4 + UNETG_STATS_STEPS_TOTAL - CTX_BIAS
@@ -417,113 +442,236 @@ DEADLINES_ALL
 ; active context or for CBL without a qualified portion), L = flags.
 ; Stack: <= 96.  Never touches events, RX publication or protocol time.
 ; ----------------------------------------------------------------------
-EXP_STEP_ISR
-	PUSH	IX
-	PUSH	IY
-	LD	C,A
-	PUSH	BC
-	CALL	CTX_LOAD
-	POP	BC
-	JP	Z,RET_STATE
-	LD	A,C
-	AND	0x7F
-	JP	Z,RET_BADARG
-	CP	UNETG_SRC_OTHER_IRQ + 1
-	JP	NC,RET_BADARG
-	LD	B,A			; B = source
-	LD	A,(IY+CX_STATE)
-	CP	UNETG_CTXSTATE_CONFIGURED
-	JP	NZ,RET_STATE
-	LD	A,B
-	CP	UNETG_SRC_CBL
-	JR	NZ,.src_ok
-	BIT	2,(IY+CX_CFG_FLAGS)	; UNETG_CFGF_CBL_QUALIFIED
-	JP	Z,RET_STATE
-.src_ok
-	; Budget first, without touching the context: a call that cannot pay
-	; even the fixed path returns YIELD at once and leaves the fields of an
-	; interrupted main call alone.
-	PUSH	BC
-	CALL	UNITS_HL
-	LD	DE,PROF_ISR_BASE_US
-	OR	A
-	SBC	HL,DE
-	POP	BC
-	JR	NC,.paid
+ISR_STATS_OFF	EQU	UCTX_STATS - 4 + UNETG_STATS_IRQ_COUNT - CTX_BIAS
+	ASSERT	UNETG_STATS_ISR_CALLS == UNETG_STATS_IRQ_COUNT + 2
+; early exits of STEP_ISR (only IY pushed), within JR range of the checks
+ISR_STATE
+	LD	A,UNETG_STATUS_STATE
+	POP	IY
+	RET
+ISR_BADARG
+	LD	A,UNETG_STATUS_BAD_ARGUMENT
+	POP	IY
+	RET
+ISR_YIELD
 	LD	HL,0			; flags byte 0
 	LD	A,UNETG_STATUS_YIELD
-	JP	RET_A
-.paid
+	POP	IY
+	RET
+EXP_STEP_ISR
+	PUSH	IY			; IX is pushed only on the full path
+	LD	C,A
+	LD	HL,(IMG_CTX_PTR)	; ctx + CTX_BIAS (CTX_LOAD inline)
+	LD	A,H
+	OR	L
+	JR	Z,ISR_STATE
+	PUSH	HL
+	POP	IY
+	LD	A,C
+	AND	0x7F
+	DEC	A
+	CP	UNETG_SRC_OTHER_IRQ	; source 1..6 -> 0..5
+	JR	NC,ISR_BADARG
+	LD	B,A			; B = source - 1
+	IFNDEF	UGB_HW_LOOP
+	; A running card implies a CONFIGURED context (SHUTDOWN moves the
+	; hardware state first): the BUS_BUSY path skips the state check.
+	LD	A,(IY+CX_HW_STATE)
+	CP	UHW_RUN
+	JP	NZ,.idle_card
+	LD	A,B
+	CP	UNETG_SRC_CBL - 1
+	JP	Z,.cbl_run
+.run_ok
+	; Budget first, without touching the context: a call that cannot pay
+	; even the fixed path returns YIELD at once and leaves the fields of an
+	; interrupted main call alone.  units = budget * f16 / 16 - return.
+	LD	A,(IY+CX_CPU_F16)
+	EX	DE,HL			; HL = budget
+	CP	16
+	JR	NZ,.scale_r		; 21 MHz: one unit per microsecond
+.units_r
+	LD	DE,-(PROF_MIN_RETURN_US + PROF_ISR_BASE_US)
+	ADD	HL,DE
+	JR	NC,ISR_YIELD
 	EX	DE,HL			; DE = units left after the fixed path
-	; The network ISR may interrupt a main STEP between two portions (ABI
-	; §1): call flags (UCF_ISA_HELD!), work bits, budget units and the
-	; flags byte belong to that call.  Save them while a call is active
-	; (call_flags != 0 only inside STEP) and restore them on the way out.
-	; Stack: +8.
-	LD	A,(IY+CX_CALL_FLAGS)
+	; isr_calls[source] and irq_count through ctx.isr_stats_ptr (INC (HL)
+	; is atomic per byte, see STAT_INC); HL = that pointer afterwards
+	LD	L,(IY+CX_ISR_STATS_PTR)
+	LD	H,(IY+CX_ISR_STATS_PTR+1)
+	PUSH	HL
+	LD	A,B
 	OR	A
-	JR	Z,.fresh
-	LD	H,A
+	CALL	Z,ISR_COUNT_IRQ		; source 1 = CARD_IRQ
+	INC	A
+	ADD	A,A
+	ADD	A,L
+	LD	L,A
+	JR	C,.carry_r
+.calls_r
+	INC	(HL)			; isr_calls[source]
+	JR	Z,.wrap_r
+.counted_r
+	POP	HL
+	; BUS_BUSY before any write of a per-call field: another owner holds
+	; the bus (the gateway did not pre-acquire it for us) -- answer at once
+	; (ТЗ §5.1: <= 25 us).  The lock byte is only read here; RUN_PORTION
+	; does the test-and-set.  B, C are free on this path (C bit 7 = 0).
+	BIT	7,C
+	JR	NZ,.full		; pre-acquired by the gateway
+	LD	C,(IY+CX_ISA_LOCK_PTR)
+	LD	B,(IY+CX_ISA_LOCK_PTR+1)
+	LD	A,(BC)
+	LD	C,0			; not pre-acquired
+	OR	A
+	JR	Z,.full
+	LD	BC,UNETG_STATS_BUS_BUSY - UNETG_STATS_IRQ_COUNT
+	ADD	HL,BC
+	INC	(HL)			; bus_busy
+	JR	Z,.busy_wrap
+.busy
+	LD	HL,0			; flags byte 0
+	LD	A,UNETG_STATUS_BUS_BUSY
+	POP	IY
+	RET
+.wrap_r
+	INC	HL
+	INC	(HL)
+	JR	.counted_r
+.carry_r
+	INC	H
+	JR	.calls_r
+.scale_r
+	EX	DE,HL
+	PUSH	BC
+	CALL	MUL_F16
+	POP	BC
+	JR	.units_r
+.full
+	; the card status portion (ISRP_POLL of the card layer)
+	LD	HL,-PROF_ISR_POLL_US
+	ADD	HL,DE
+	JR	NC,.no_poll
+	PUSH	IX
+	; The network ISR may interrupt a main STEP between two portions (ABI
+	; §1): its call flags and work bits belong to that call -- saved here
+	; and restored on the way out (call_flags = 0 outside STEP).  The budget
+	; units of the interrupted call are never touched (the portion cost was
+	; checked above).  Nothing in STEP_ISR sets a flags byte bit (v1: no
+	; route to mask), so ctx.flags_out stays the main call's.  Stack: +4.
+	LD	H,(IY+CX_CALL_FLAGS)
 	LD	L,(IY+CX_WORK)
 	PUSH	HL
-	LD	L,(IY+CX_UNITS)
-	LD	H,(IY+CX_UNITS+1)
-	PUSH	HL
-	LD	L,(IY+CX_FLAGS_OUT)
-	PUSH	HL
-	LD	A,1
-.fresh
-	PUSH	AF			; A = 1: a main call was interrupted
-	LD	(IY+CX_UNITS),E
-	LD	(IY+CX_UNITS+1),D
 	LD	A,C
 	RLCA				; bit 7 (pre-acquired) -> bit 0
 	AND	UCF_PREACQ
 	OR	UCF_ISR
 	LD	(IY+CX_CALL_FLAGS),A
-	XOR	A
-	LD	(IY+CX_WORK),A
-	LD	(IY+CX_FLAGS_OUT),A
-	PUSH	BC
-	LD	A,B
-	DEC	A
-	ADD	A,A
-	LD	C,A
-	LD	B,0
-	LD	HL,UCTX_STATS - 4 + UNETG_STATS_ISR_CALLS - CTX_BIAS
-	ADD	HL,BC
-	LD	B,H
-	LD	C,L
-	CALL	STAT_INC_BC
-	POP	BC
-	LD	A,B
-	CP	UNETG_SRC_CARD_IRQ
-	JR	NZ,.hw
-	STAT_INC UNETG_STATS_IRQ_COUNT
-.hw
-	CALL	HW_ISR
-	CALL	WORK_STATUS
-.out
-	LD	C,(IY+CX_FLAGS_OUT)	; this call's flags byte
-	LD	B,A			; status
-	POP	AF
-	OR	A
-	JR	Z,.fresh_out
-	POP	HL
-	LD	(IY+CX_FLAGS_OUT),L
-	POP	HL
-	LD	(IY+CX_UNITS),L
-	LD	(IY+CX_UNITS+1),H
+	LD	(IY+CX_WORK),0
+	LD	HL,ISRP_POLL
+	CALL	RUN_PORTION
+	; status from the work bits (WORK_STATUS without the yield case)
+	LD	A,(IY+CX_WORK)
+	LD	B,UNETG_STATUS_BUS_BUSY
+	BIT	3,A			; UWK_BUSY: RUN_PORTION refused
+	JR	NZ,.status
+	LD	B,UNETG_STATUS_WORK
+	BIT	2,A			; UWK_MORE: a frame / bytes for the next STEP
+	JR	NZ,.status
+	LD	B,UNETG_STATUS_IDLE
+.status
 	POP	HL
 	LD	(IY+CX_WORK),L
 	LD	(IY+CX_CALL_FLAGS),H
-	JR	.ret
-.fresh_out
-	LD	(IY+CX_CALL_FLAGS),A	; A = 0
-.ret
 	LD	A,B
-	LD	L,C
-	LD	H,0
-	POP	IY
+	LD	HL,0			; flags byte 0
 	POP	IX
+	POP	IY
+	RET
+.no_poll
+	STAT_INC UNETG_STATS_BUDGET_YIELDS
+	JP	ISR_YIELD
+	ELSE
+	JR	.idle_card
+	ENDIF
+
+	IFNDEF	UGB_HW_LOOP
+.busy_wrap
+	INC	HL
+	INC	(HL)
+	JR	.busy
+.cbl_run
+	BIT	2,(IY+CX_CFG_FLAGS)	; UNETG_CFGF_CBL_QUALIFIED
+	JP	NZ,.run_ok
+	JP	ISR_STATE
+	ENDIF
+.idle_card
+	; no card poll in this call: the full checks
+	LD	A,(IY+CX_STATE)
+	CP	UNETG_CTXSTATE_CONFIGURED
+	JP	NZ,ISR_STATE
+	LD	A,B
+	CP	UNETG_SRC_CBL - 1
+	JR	NZ,.idle_ok
+	; Budget first (YIELD when not even the fixed path fits), then the
+	; counters; a card that is not running is not polled: IDLE, no writes.
+	BIT	2,(IY+CX_CFG_FLAGS)	; UNETG_CFGF_CBL_QUALIFIED
+	JP	Z,ISR_STATE
+.idle_ok
+	; Budget first, without touching the context: a call that cannot pay
+	; even the fixed path returns YIELD at once and leaves the fields of an
+	; interrupted main call alone.  units = budget * f16 / 16 - return.
+	LD	A,(IY+CX_CPU_F16)
+	EX	DE,HL			; HL = budget
+	CP	16
+	JR	NZ,.scale_i		; 21 MHz: one unit per microsecond
+.units_i
+	LD	DE,-(PROF_MIN_RETURN_US + PROF_ISR_BASE_US)
+	ADD	HL,DE
+	JP	NC,ISR_YIELD
+	EX	DE,HL			; DE = units left after the fixed path
+	; isr_calls[source] and irq_count through ctx.isr_stats_ptr (INC (HL)
+	; is atomic per byte, see STAT_INC); HL = that pointer afterwards
+	LD	L,(IY+CX_ISR_STATS_PTR)
+	LD	H,(IY+CX_ISR_STATS_PTR+1)
+	PUSH	HL
+	LD	A,B
+	OR	A
+	CALL	Z,ISR_COUNT_IRQ		; source 1 = CARD_IRQ
+	INC	A
+	ADD	A,A
+	ADD	A,L
+	LD	L,A
+	JR	C,.carry_i
+.calls_i
+	INC	(HL)			; isr_calls[source]
+	JR	Z,.wrap_i
+.counted_i
+	POP	HL
+	LD	HL,0			; flags byte 0
+	LD	A,UNETG_STATUS_IDLE
+	POP	IY
+	RET
+.wrap_i
+	INC	HL
+	INC	(HL)
+	JR	.counted_i
+.carry_i
+	INC	H
+	JR	.calls_i
+.scale_i
+	EX	DE,HL
+	PUSH	BC
+	CALL	MUL_F16
+	POP	BC
+	JR	.units_i
+
+; ISR_COUNT_IRQ: irq_count += 1 at (HL) (u16).  Preserves A, HL.
+; STEP_ISR only (source CARD_IRQ).
+ISR_COUNT_IRQ
+	INC	(HL)
+	RET	NZ
+	INC	HL
+	INC	(HL)
+	DEC	HL
 	RET

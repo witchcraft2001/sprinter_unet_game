@@ -24,10 +24,11 @@
 | `make size` | Отчёт размеров (`tools/size_report.py`, `build/size-report.json`) |
 | `make names` | Проверка имён поставки (`tools/check_names.py`) |
 | `make test-host` | Python: согласованность ABI, раскладки блоков, релокация L1 = прямая сборка по адресу, пин вендорных файлов |
-| `make test-z` | Стенд Z (Node): векторы ABI на всех семи сборках, сценарии карт 3C509B, RTL8019AS и SprinterESP, цели ТЗ по скорости (`todo`) |
+| `make test-z` | Стенд Z (Node): векторы ABI на всех семи сборках, сценарии карт 3C509B, RTL8019AS и SprinterESP, цели ТЗ по скорости |
+| `make profile-check` | Профиль STEP всех сборок на потоке 8 КиБ при шаге 2, 10 и 20 мс (`tools/dev/profile_step.js --check`): ни одного STEP сверх бюджета |
 | `make check` | Всё перечисленное; обязательный шлюз перед сдачей |
 | `make mame` | Стенд M: клон holub/mame в `../../../mame-holub`, патч `tools/mame/patches/sprinter_esp.patch`, сборка драйвера Sprinter (`tools/mame/build_holub.sh`) |
-| `make test-m` | Стенд M: семь сценариев UGTEST и одиннадцать NETDEMO в MAME (`tools/mame/run_esp.py`), отчёты в `docs/evidence/m4_esp/` и `docs/evidence/m5_sdk/`; в `make check` не входит |
+| `make test-m` | Стенд M: сценарии UGTEST и NETDEMO шести сборок с картами в MAME (`tools/mame/run_m.py`), отчёты в `docs/evidence/m4_esp/`, `docs/evidence/m5_sdk/` и `docs/evidence/m3_eth/`; сетевые сценарии Ethernet требуют пары feth (`sudo tools/mame/net_feth.sh`), без неё — `M SKIP`; в `make check` не входит |
 
 Собственное дерево MAME разработчика (`../../../mame`) стенд M не трогает:
 клон holub собирается в отдельном каталоге (`MAME_HOLUB_DIR`).

@@ -90,7 +90,7 @@ for (const dll of DLLS) {
     assert.equal(r.a, S.OK);
     const L = s.layout();
     for (let k = 0; k < 4; k++) assert.equal(s.m.peek(L.ctx + ABI.ctx.fields.guard.offset + k), 0xa5);
-    assert.equal(s.m.peek16(s.sym('IMG_CTX_PTR')), L.ctx);
+    assert.equal(s.m.peek16(s.sym('IMG_CTX_PTR')), L.ctx + 128, 'ctx + CTX_BIAS');
     assert.equal(s.initConfig(s.defaultConfig()).a, S.STATE, 'active context -> STATE');
     const st = s.getStats();
     clean(st, 'GET_STATS');

@@ -1,8 +1,10 @@
 {
   "prog": "netdemo",
   "dll": "gudpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 4.7,
+  "wall_s": 4.3,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -14,38 +16,38 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4650
+    "quota_sum_us": 4150
   },
   "info": {
     "min_useful_budget_us": 500,
-    "empty_poll_us": 135,
-    "bus_busy_us": 80
+    "empty_poll_us": 85,
+    "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1800,
+      "poll": 1300,
       "card": 0,
       "main": 2750,
       "service": 100
     },
-    "cost_poll_us": 180,
+    "cost_poll_us": 130,
     "cost_step_us": 550,
     "periods": 643,
-    "largest_period_debit_us": 4550,
-    "now_ms": 12867,
+    "largest_period_debit_us": 4065,
+    "now_ms": 12865,
     "stats": {
-      "refuse": 2,
-      "busy": 12,
+      "refuse": 1,
+      "busy": 0,
       "isr": 0,
-      "step": 3148,
-      "early": 4282,
-      "frames": 446,
-      "ticks": 6436,
+      "step": 3152,
+      "early": 4768,
+      "frames": 491,
+      "ticks": 6435,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
       "key": 0,
-      "late": 12
+      "late": 0
     }
   },
   "stats": {
@@ -55,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 8152,
-    "steps_total": 3148,
-    "steps_useful": 3148,
-    "budget_yields": 2780,
+    "polls_total": 8135,
+    "steps_total": 3152,
+    "steps_useful": 3152,
+    "budget_yields": 2793,
     "max_step_gap_ms": 12,
     "tx_frames": 16,
     "rx_frames": 16,
@@ -66,9 +68,9 @@
     "rx_bytes": 8192
   },
   "timing_us": {
-    "tick_isr_max": 483,
-    "admitted_ug_step_max": 1577,
-    "largest_tick_gap": 2114,
+    "tick_isr_max": 390,
+    "admitted_ug_step_max": 1282,
+    "largest_tick_gap": 2053,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 245 (over 12.3 s)"

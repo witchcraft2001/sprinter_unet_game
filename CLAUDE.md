@@ -40,7 +40,8 @@ third_party/libman/  git submodule (libman + sprinter-mkdll), never copied
 tools/      build.sh, build_sdk.sh, size_report.py, gen_abi.py, check_names.py,
             measure/ (Z80 cost probes), harness/ (Node Z80 stand; appstand.js
             runs the SDK with interrupts, devices/ctc.js),
-            mame/ (M stand: holub MAME build + card patch, ugstand.lua, run_esp.py)
+            mame/ (M stand: holub MAME build + card patch, ugstand.lua, run_m.py,
+            net_feth.sh)
 tests/      z/ (Node stand scenarios, node:test; z/sdk: ugz.asm + SDK tests),
             host/ (python unittest)
 docs/       spec, ABI, ARCHITECTURE, BUILD, TESTING, MEASUREMENTS, acceptance/
@@ -65,9 +66,11 @@ make names        # delivery names: 8.3, unique, not UNET<tag>, defines match
 make test-host    # python: ABI sources vs generated files, block layouts,
                   # relocated L1 == direct assembly at 4 bases, vendored SHA-256
 make test-z       # Node Z80 stand: ABI vectors on all seven builds + hw scenarios
+make profile-check # STEP profile of every build at STEP periods 2/10/20 ms: no overrun
 make check        # everything above; run before every hand-off
 make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
-make test-m       # M stand: 7 UGTEST + 11 NETDEMO (SDK) scenarios in MAME (not in check)
+make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME
+                  # (not in check; Ethernet needs the feth pair, else M SKIP)
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -85,8 +88,12 @@ Tools: `sjasmplus` 1.22 and `sprinter-mkdll` in `/usr/local/bin`,
 Automated builds/tests are the agent's job: run `make check` yourself, do not
 ask the user to run them. The M stand is automated too (`make test-m`, MAME
 from https://github.com/holub/mame built in `../../../mame-holub`); never
-touch the user's own MAME tree `../../../mame`. Ask the user only for
-real-Sprinter runs.
+touch the user's own MAME tree `../../../mame` -- its prebuilt binary
+`../../../mame/mame` (the only one with `3c509b`) is run read-only by
+`tools/mame/run_m.py` with our own cfg/nvram/diff directories. Ethernet
+cards in MAME use pcap on the feth pair the user creates
+(`sudo tools/mame/net_feth.sh`); never bind pcap to a real host adapter.
+Ask the user only for real-Sprinter runs.
 
 ## Size limit (hard, checked on every build)
 
@@ -260,9 +267,10 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - A card that is not running copies nothing: holds keyed on a TX pipeline
   state (`ETH_TX_COPYING`, `ESP_TX_COPYING`) check `hw_state == UHW_RUN`
   first, or SHUTDOWN in the middle of a frame never reaches OK.
-- The core was calibrated at a 2 ms STEP; the SDK spreads STEPs (10 ms with 2
-  per period) and GET_INFO allows 20 ms. Stream scenarios run at 10 and 20 ms
-  too (`DT=` in tools/dev/overrun.js); failures there are core debt (`todo`).
+- The SDK spreads STEPs (10 ms with 2 per period) and GET_INFO allows 20 ms:
+  stream scenarios and `make profile-check` run at 2, 10 and 20 ms, and
+  every build must hold the 8 KiB stream at each (a long STEP gap is where
+  timer deadlines, retransmission and command deadlines meet a slow pipe).
 - SDK (docs/SDK.md): no DSS call after `IM 2` (load before, free after IM1 is
   back); the SDK never writes PIO or CTC (the game programs its timer, the
   time adapter only reads CTC2/CTC3); ISR entries pre-acquire the lock (owner
@@ -282,10 +290,14 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - `EV_FLUSH` preserves IX (it can call `TP_RESET`); any routine that runs
   inside an export with an IX argument and calls into the transport must too.
 - Charge the budget BEFORE the work (`TAKE`, `BUDGET_BYTES`, `EV_AFFORD`), with
-  costs measured on the stand (`ITEMS=1 SCEN=stream tools/dev/overrun.js`),
-  never estimated, and measured under load: single-shot scenarios miss the
-  heavy cases (ACK processing, retransmissions). A validated frame must not
-  be dropped for lack of budget: keep the state and continue next STEP.
+  costs measured on the stand, never estimated, and measured under load:
+  single-shot scenarios miss the heavy cases (ACK processing,
+  retransmissions). A validated frame must not be dropped for lack of
+  budget: keep the state and continue next STEP. Cost rule:
+  `COST = max(real * 1.1, real + 15)` rounded up to 5, real = the worst
+  item time of `tools/dev/profile_step.js --items` over STEP periods
+  2/10/20 ms and both cards of the family; `make profile-check` (part of
+  `check`) fails on any STEP over its budget.
 - `min_useful_budget_us` = `PROF_STEP_BASE_US` + `PROF_MAX_ITEM_US` +
   `PROF_MIN_RETURN_US`. Every cost, and every chain of costs taken in one
   STEP (idle step + template), is `ASSERT`ed against `PROF_MAX_ITEM_US`;
@@ -306,6 +318,28 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   RFC 6298 minimum RTO (1 s). Unmet ТЗ targets stay visible as `todo`
   tests (`tests/z/abi/perf_targets.test.js`), never as weakened asserts.
 - Placing a new global label inside a routine cuts off its dotted locals.
+- `RUN_PORTION` (lock.asm) takes the try-lock, maps, runs, unmaps and
+  releases inside ONE DI section: the core never holds the ISA lock with
+  interrupts enabled. `IMG_CTX_PTR` holds ctx + `CTX_BIAS` (the IY value).
+- STEP_ISR decides source, state, budget and BUS_BUSY before any per-call
+  write, never touches `ctx.units` (the poll is checked against its own
+  units in DE) and keeps `flags_out`; it saves/restores `call_flags` and
+  `work`. It takes `hw_state == UHW_RUN` as "configured": SHUTDOWN moves
+  `hw_state` off RUN before `state` leaves CONFIGURED.
+- The IY window is ctx bytes 0..255. Fields reached only through `IY_PTR`
+  (arrays like `tx_tag`) live past it, so hot bytes stay inside: hwsm
+  `EX_RXS`/`EX_TXS`/`EX_TXKIND` (Ethernet) and the ESP `EX_*` are read as
+  `(IY+d)`; an `ASSERT` guards each.
+- Ethernet STEP order is `ETH_SCHED` (engine.asm): poll reserve, frames in
+  progress (bounded, stop at the frame end), transport, TX start, poll,
+  rest. A pipeline that stopped is not retried in the same STEP unless the
+  poll reserve was refunded, a phase is skipped below the cheapest item
+  (`ETH_AFFORD`), the TX completion is checked the STEP after the start, and
+  an idle transport step with a prepared segment takes no budget: refused
+  attempts cost base time too (found as STEP overruns at 20 ms).
+- The vendored Z80 core applies DI one instruction late (`do_delayed_di`):
+  stand code that injects interrupts must skip that state, as a real Z80
+  takes none after DI.
 
 ## Testing policy
 
@@ -324,7 +358,11 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   vectors, a sound owner holding the lock) and applies the Stand.call checks
   to every direct export call, plus DI sections, ISR paths, gateway costs
   and PIO writes.
-- Calibration and debugging: `tools/dev/audit.js` (budget audit),
+- Calibration and debugging: `tools/dev/profile_step.js` (per-build STEP
+  profile: items reserved vs real, needed base reserve, overruns, rates at
+  DT 2/10/20, STEP_ISR paths, STEPs per segment; `--json`/`--base` deltas),
+  `tools/dev/isr_profile.js` and `tools/dev/step_profile.js` (per-label time
+  of the STEP_ISR paths and of an idle STEP), `tools/dev/audit.js` (budget audit),
   `tools/dev/overrun.js` (overruns, needed base reserve, per-item worst case,
   per-STEP profile), `tools/dev/trace.js` (per-STEP states and budget calls),
   `tools/dev/e2e.js` (end-to-end smoke), `tools/dev/sweep_loop.js` (GLOOP

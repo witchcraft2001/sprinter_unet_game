@@ -4,7 +4,7 @@
 ; phase as resumable states in ctx.hwsm; every card access is one bounded
 ; PORTION (<= NIC_CHUNK bytes) under the shared ISA lock.  Protocol work
 ; (classification, checksum verdicts, ARP/TCP/UDP) runs between portions
-; with interrupts enabled.  HW_ISR only samples the card status.
+; with interrupts enabled.  STEP_ISR only samples the card status (ISRP_POLL).
 ;
 ; Card layer contract (src/hw/<card>): routines marked (P) run inside
 ; PORTION with IX = ctx.hwsm and must stay within the DI limit.
@@ -32,47 +32,197 @@ NTX_PENDING	EQU	0
 NTX_OK		EQU	1
 NTX_ERROR	EQU	2
 
-; Qualified upper bounds (units, 21 MHz).  Stand-calibrated in M2/M3.
-; Measured on the stand (21 MHz, isaWaitT 8): lock + map + unmap +
-; release = 49 us around the card routine.
-COST_PORTION	EQU	110	; bracket + a short card step (<= 35 us)
-COST_BRINGUP	EQU	190	; bracket + the longest bring-up step (16 ID bytes)
-COST_CHUNK	EQU	COST_PORTION + 3 * NIC_CHUNK + PROF_DMA_EXTRA_US	; 40-byte card copy with sum (stand: 216 us EL3)
-COST_TX_BEGIN	EQU	250	; TX room check, preamble and a 54-byte header
-COST_TX_WAIT	EQU	150	; completion check + transport notification
-COST_CLASSIFY	EQU	200	; Ethernet/ARP/IPv4 checks and the IP header checksum
-COST_SUM0	EQU	120	; pseudo header + up to 30 segment bytes in scratch
-COST_ACCEPT	EQU	200	; transport accept: ports, state, header fields (stand: 162 us)
-COST_STORE	EQU	170	; payload placement in the RX ring (TCP)
-COST_FINISH	EQU	240	; checksum verdict + transport input incl. ACK processing (stand: 219 us)
-COST_PREPARE	EQU	60	; NIC_PREPARE + bring-up deadline
-COST_POLL	EQU	COST_PORTION + PROF_POLL_EXTRA_US	; status poll that may find a frame
-COST_ARP_PULL	EQU	110	; ARP frame into ctx.txh
-COST_TP_PULL	EQU	230	; IPv4 + TCP/UDP header with checksums
+; Qualified upper bounds (units, 21 MHz): COST = max(real * 1.1, real + 15)
+; rounded up to 5, real = the worst time of the item on the stand over the
+; stream scenario at STEP periods of 2/10/20 ms on both cards
+; (tools/dev/profile_step.js --items; docs/MEASUREMENTS.md).
+; Lock + map + unmap + release ~ 30 us around the card routine.
+COST_PORTION	EQU	110	; bracket + a short card step (EL3 poll 94 us)
+COST_BRINGUP	EQU	195	; bracket + the longest bring-up step (RTL 177 us)
+COST_RX_CHUNK	EQU	COST_PORTION + 3 * NIC_CHUNK + PROF_DMA_EXTRA_US	; 40 bytes read + summed (EL3 200, RTL 221 us)
+COST_TX_CHUNK	EQU	COST_PORTION + 2 * NIC_CHUNK + PROF_DMA_EXTRA_US	; 40 bytes written (EL3 164, RTL 185 us)
+COST_TX_BEGIN	EQU	250	; TX room check, preamble and a 54-byte header (228 us)
+COST_TX_WAIT	EQU	125	; completion check + transport notification (108 us)
+COST_CLASSIFY	EQU	205	; Ethernet/ARP/IPv4 checks and the IP header checksum (186 us)
+COST_SUM0	EQU	145	; pseudo header + up to 30 segment bytes in scratch (130 us)
+COST_ACCEPT	EQU	205	; transport accept: ports, state, header fields (186 us)
+COST_STORE	EQU	150	; payload placement in the RX ring (TCP, 133 us)
+COST_FINISH	EQU	240	; checksum verdict + transport input incl. ACK processing (219 us)
+COST_PREPARE	EQU	70	; NIC_PREPARE + bring-up deadline (58 us)
+COST_POLL	EQU	COST_PORTION + PROF_POLL_EXTRA_US	; status poll that may find a frame (RTL 131 us)
+COST_ARP_PULL	EQU	125	; ARP frame into ctx.txh (112 us)
+COST_TP_PULL	EQU	130	; UDP: IPv4 + UDP header with checksums (113 us)
 BRINGUP_MS	EQU	3000	; whole bring-up deadline
 TX_TIMEOUT_MS	EQU	50	; transmit completion
 	ASSERT	COST_POLL <= PROF_MAX_ITEM_US && COST_BRINGUP <= PROF_MAX_ITEM_US
-	ASSERT	COST_CHUNK <= PROF_MAX_ITEM_US && COST_TX_BEGIN <= PROF_MAX_ITEM_US
+	ASSERT	COST_RX_CHUNK <= PROF_MAX_ITEM_US && COST_TX_CHUNK <= PROF_MAX_ITEM_US && COST_TX_BEGIN <= PROF_MAX_ITEM_US
 	ASSERT	COST_CLASSIFY <= PROF_MAX_ITEM_US && COST_ACCEPT <= PROF_MAX_ITEM_US
 	ASSERT	COST_STORE <= PROF_MAX_ITEM_US && COST_FINISH <= PROF_MAX_ITEM_US
 	ASSERT	COST_SUM0 <= PROF_MAX_ITEM_US
 	ASSERT	COST_TP_PULL <= PROF_MAX_ITEM_US && COST_TX_WAIT <= PROF_MAX_ITEM_US
 
-; Receive and transmit take turns to go first (bit 1 of the STEP counter;
-; bit 0 alternates hardware and transport), so a long frame in one
-; direction does not starve the other.
+; ----------------------------------------------------------------------
+; ETH_SCHED: the work of a STEP with a running card (sched.asm), in an
+; order that lets a frame in progress finish and still polls the card
+; once per STEP (ТЗ §4.2) and runs the transport every STEP:
+;  1. poll reserve: while the RX pipeline is idle (and STEP_ISR did not
+;     just sample the card empty), COST_POLL is set aside for step 5 when
+;     the largest item still fits besides it;
+;  2. frames in progress: RX and TX continue (who goes first alternates
+;     with bit 0 of the STEP counter), at most ETH_CONT_ITEMS items each
+;     while the other direction is busy too, never past the frame end;
+;  3. the transport step (timers, the next segment);
+;  4. TX: ARP / transport pull for an idle pipeline, then its portions
+;     while the budget lasts;
+;  5. the poll (the reserve is given back first) and a found frame;
+;  6. what is left goes to TX again.
+; ----------------------------------------------------------------------
+ETH_CONT_ITEMS	EQU	3
+; HW_RUN (HW_STEP with a running card): sched.asm calls ETH_SCHED instead;
+; kept as plain RX + TX for the hardware state machine's dispatch.
 HW_RUN
+	LD	(IY+CX_SCHED_ITEMS),0xFF
+	CALL	ETH_RX_STEP
+	LD	(IY+CX_SCHED_ITEMS),0xFF
+	JP	ETH_TX_STEP
+ETH_SCHED
+	XOR	A
+	LD	(IY+CX_SCHED_FLAGS),A
+	; 1. poll reserve
+	LD	A,(IY+EX_RXS)
+	OR	A
+	JR	NZ,.no_rsvd		; a frame is in progress: no poll this STEP
+	LD	A,(IY+CX_ISR_PENDING)
+	AND	(1 << UPEND_POLLED) | (1 << UPEND_RX)
+	CP	1 << UPEND_POLLED
+	JR	Z,.no_rsvd		; STEP_ISR just found the card empty
+	; every other STEP (bit 0 of the STEP counter) the poll comes first;
+	; otherwise only while the largest item still fits besides it, so a
+	; small budget serves the frames and a busy TX does not starve RX
+	CALL	ETH_STEP_ODD
+	JR	NZ,.rsvd
+	LD	L,(IY+CX_UNITS)
+	LD	H,(IY+CX_UNITS+1)
+	LD	DE,-(COST_POLL + PROF_MAX_ITEM_US)
+	ADD	HL,DE
+	JR	NC,.no_rsvd
+.rsvd
+	LD	HL,COST_POLL
+	CALL	TAKE
+	JR	C,.no_rsvd
+	SET	USCH_POLL_RSVD,(IY+CX_SCHED_FLAGS)
+.no_rsvd
+	; 2. frames in progress
+	SET	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	CALL	ETH_STEP_ODD
+	JR	Z,.tx_cont
+	CALL	ETH_RX_CONT
+	CALL	ETH_TX_CONT
+	JR	.tp
+.tx_cont
+	CALL	ETH_TX_CONT
+	CALL	ETH_RX_CONT
+.tp
+	RES	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	; 3. transport
+	CALL	TP_IF_RUNNING
+	; 4. TX: a new frame and its portions
+	CALL	ETH_TX_PHASE
+	; 5. the card poll and a frame it finds (the reserve is given back
+	; first: what stopped for lack of budget may fit again)
+	BIT	USCH_POLL_RSVD,(IY+CX_SCHED_FLAGS)
+	JR	Z,.poll
+	LD	A,(IY+CX_SCHED_FLAGS)
+	AND	~((1 << USCH_POLL_RSVD) | (1 << USCH_RX_STOP) | (1 << USCH_TX_STOP))
+	LD	(IY+CX_SCHED_FLAGS),A
+	LD	HL,COST_POLL
+	CALL	UNITS_REFUND
+.poll
+	BIT	USCH_RX_STOP,(IY+CX_SCHED_FLAGS)
+	JR	NZ,.rest
+	CALL	ETH_AFFORD
+	RET	C
+	LD	(IY+CX_SCHED_ITEMS),0xFF
+	CALL	ETH_RX_STEP
+.rest
+	; 6. the rest to a frame in progress
+	LD	A,(IY+EX_TXS)
+	OR	A
+	RET	Z
+	CP	ETX_WAIT
+	RET	Z
+ETH_TX_PHASE
+	BIT	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	RET	NZ			; stopped earlier in this STEP
+	CALL	ETH_AFFORD
+	RET	C
+	LD	(IY+CX_SCHED_ITEMS),0xFF
+	CALL	ETH_TX_STEP
+	RET	NC
+	SET	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	RET
+
+; ETH_STEP_ODD: NZ on odd STEPs (bit 0 of steps_total).  Clobbers BC, HL.
+ETH_STEP_ODD
 	LD	BC,UCTX_STATS - 4 + UNETG_STATS_STEPS_TOTAL - CTX_BIAS
 	PUSH	IY
 	POP	HL
 	ADD	HL,BC
-	BIT	1,(HL)
-	JR	Z,.tx_first
+	BIT	0,(HL)
+	RET
+
+; ETH_RX_CONT / ETH_TX_CONT: continue a frame in progress (USCH_CONT), at
+; most ETH_CONT_ITEMS items while the other pipeline is busy too.  A
+; pipeline that stops (CF) is not tried again in this STEP.
+ETH_RX_CONT
+	LD	A,(IY+EX_RXS)
+	OR	A
+	RET	Z			; RX idle
+	CALL	ETH_AFFORD
+	RET	C
+	LD	A,(IY+EX_TXS)
+	CALL	ETH_CONT_LIMIT
 	CALL	ETH_RX_STEP
-	JP	ETH_TX_STEP
-.tx_first
+	RET	NC
+	SET	USCH_RX_STOP,(IY+CX_SCHED_FLAGS)
+	RET
+ETH_TX_CONT
+	LD	A,(IY+EX_TXS)
+	OR	A
+	RET	Z			; TX idle
+	CP	ETX_WAIT
+	RET	Z			; on the wire: the completion check is step 4
+	CALL	ETH_AFFORD
+	RET	C
+	LD	A,(IY+EX_RXS)
+	CALL	ETH_CONT_LIMIT
 	CALL	ETH_TX_STEP
-	JP	ETH_RX_STEP
+	RET	NC
+	SET	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	RET
+; A = state of the other pipeline: limit this one while that one is busy.
+ETH_CONT_LIMIT
+	OR	A
+	LD	A,0xFF
+	JR	Z,.set
+	LD	A,ETH_CONT_ITEMS
+.set
+	LD	(IY+CX_SCHED_ITEMS),A
+	RET
+
+; ETH_AFFORD: CF=1 (UWK_YIELD) when not even the cheapest card item is
+; left: the phase is skipped instead of refusing item by item.
+; Clobbers A, DE, HL.
+ETH_MIN_ITEM	EQU	COST_PORTION
+ETH_AFFORD
+	LD	L,(IY+CX_UNITS)
+	LD	H,(IY+CX_UNITS+1)
+	LD	DE,-ETH_MIN_ITEM
+	ADD	HL,DE
+	CCF
+	RET	NC
+	SET	4,(IY+CX_WORK)		; UWK_YIELD
+	RET
 
 ; ======================================================================
 ; RX pipeline
@@ -97,8 +247,12 @@ ETH_RX_STEP
 	CALL	.one			; CF=1: stop; A=1: a frame was finished
 	POP	BC
 	RET	C			; budget, bus or nothing to do
+	DEC	(IY+CX_SCHED_ITEMS)	; ETH_SCHED: items of this phase
+	RET	Z
 	DEC	A
 	JR	NZ,.next
+	BIT	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	RET	NZ			; continuation ends with the frame
 	DEC	C
 	JR	NZ,.next
 	RET
@@ -175,7 +329,7 @@ ETH_RX_STEP
 	XOR	A
 	RET
 .header
-	LD	HL,COST_CHUNK
+	LD	HL,COST_RX_CHUNK
 	CALL	TAKE
 	RET	C
 	LD	HL,RXP_HEADER
@@ -191,7 +345,7 @@ ETH_RX_STEP
 	XOR	A
 	RET
 .copy
-	LD	HL,COST_CHUNK
+	LD	HL,COST_RX_CHUNK
 	CALL	TAKE
 	RET	C
 	LD	HL,RXP_COPY
@@ -767,7 +921,7 @@ ETH_TX_STEP
 .busy
 	CP	ETX_WAIT
 	JR	Z,.wait
-	LD	HL,COST_CHUNK
+	LD	HL,COST_TX_CHUNK
 	HWSM_IX
 	LD	A,(IX+HS_TXS)
 	CP	ETX_BEGIN
@@ -788,11 +942,14 @@ ETH_TX_STEP
 .run
 	CALL	RUN_PORTION
 	RET	C
-	HWSM_IX
-	LD	A,(IX+HS_TXS)
+	LD	A,(IY+EX_TXS)
 	CP	ETX_BEGIN
 	RET	Z			; the card has no room: next STEP (no spinning)
 	SET	2,(IY+CX_WORK)
+	CP	ETX_WAIT
+	RET	Z			; started: the completion is checked next STEP
+	DEC	(IY+CX_SCHED_ITEMS)	; ETH_SCHED: items of this phase
+	RET	Z
 	JP	ETH_TX_STEP		; continue while the budget lasts
 .wait
 	LD	HL,COST_TX_WAIT
@@ -927,19 +1084,10 @@ TXP_CHECK
 	RET
 
 ; ----------------------------------------------------------------------
-; HW_ISR: STEP_ISR body -- only a status sample: a waiting frame sets
-; UPEND_RX for the next STEP.  No protocol work, no events.
+; ISRP_POLL (P): the STEP_ISR body of a running card (sched.asm) -- only a
+; status sample: a waiting frame sets UPEND_RX for the next STEP.  No
+; protocol work, no events.
 ; ----------------------------------------------------------------------
-HW_ISR
-	LD	A,(IY+CX_HW_STATE)
-	CP	UHW_RUN
-	RET	NZ
-	LD	HL,PROF_ISR_POLL_US
-	CALL	TAKE
-	RET	C
-	LD	HL,ISRP_POLL
-	CALL	RUN_PORTION
-	RET
 ISRP_POLL
 	STAT_INC UNETG_STATS_POLLS_TOTAL
 	SET	UPEND_POLLED,(IY+CX_ISR_PENDING)

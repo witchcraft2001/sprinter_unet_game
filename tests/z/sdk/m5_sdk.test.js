@@ -297,11 +297,11 @@ test('gtcp509b: CBL flag, key opportunity, SHUTDOWN with the channel open, exit 
 
 // ---- ТЗ targets not met with the current core ----------------------------------------
 for (const dll of CARDS) {
-  test(`${dll}: network quotas within 2000 us per period (ТЗ §5.1)`, { todo: 'core speed: STEP_ISR and STEP costs exceed the quota example of ТЗ §7' }, () => {
+  test(`${dll}: network quotas within 2000 us per period (ТЗ §5.1)`, { todo: 'core speed: 10 polls x (empty poll + 45) + 2 STEPs x (min_useful + 50) = 2500..2600 us (docs/MEASUREMENTS.md)' }, () => {
     const a = boot(dll);
     assert.ok(a.block().sum <= 2000, `quota sum ${a.block().sum} us`);
   });
-  test(`${dll}: ISR path bound (STEP_ISR budget + gateway + tick) <= 200 us (ТЗ §3)`, { todo: 'core speed: STEP_ISR minimum budget 145 us leaves 55 us for the gateway and the tick' }, () => {
+  test(`${dll}: ISR path bound (STEP_ISR budget + gateway + tick) <= 200 us (ТЗ §3)`, () => {
     const a = boot(dll);
     const bound = a.block().isrBudget + UG.UG_OVH_ISR_US + 30 + 12 + 5;   // tick with a period boundary, FIXED clock, entry/RETI
     assert.ok(bound <= 200, `bound ${bound} us`);
