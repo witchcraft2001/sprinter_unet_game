@@ -5,7 +5,7 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "H card bring-up and SHUTDOWN, no channel",
   "wall_s": 3.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 20434",
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 31628",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -66,8 +66,8 @@
   },
   "timing_us": {
     "tick_isr_max": 302,
-    "admitted_ug_step_max": 735,
-    "largest_tick_gap": 2041,
+    "admitted_ug_step_max": 736,
+    "largest_tick_gap": 2038,
     "late_ticks": 0
   }
 }

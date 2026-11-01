@@ -5,7 +5,7 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
   "wall_s": 18.2,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 35501",
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 25443",
   "info": {
     "min_useful_budget_us": 425,
     "empty_poll_us": 55,

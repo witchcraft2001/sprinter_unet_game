@@ -28,6 +28,7 @@
 | `make profile-check` | Профиль STEP всех сборок на потоке 8 КиБ при шаге 2, 10 и 20 мс (`tools/dev/profile_step.js --check`): ни одного STEP сверх бюджета |
 | `make check` | Всё перечисленное; обязательный шлюз перед сдачей |
 | `make mame` | Стенд M: клон holub/mame в `../../../mame-holub`, патч `tools/mame/patches/sprinter_esp.patch`, сборка драйвера Sprinter (`tools/mame/build_holub.sh`) |
+| `make hw-image` | Стенд Ж: `tools/hw/build_hw.sh` собирает `build/hw/` (UGTEST/NETDEMO с `-DUG_HW=1`, `UGPROBE.EXE`, DLL, `UGRUN*.BAT`, `README.TXT`) и `build/hw/unetgame_hw.img` по `tools/hw/hw.env` (без него — `hw.env.example`; `hw.env` в git не входит), затем проверяет имена 8.3; хост — `tools/hw/echo_hw.sh` |
 | `make test-m` | Стенд M: сценарии UGTEST и NETDEMO шести сборок с картами в MAME (`tools/mame/run_m.py`), отчёты в `docs/evidence/m4_esp/`, `docs/evidence/m5_sdk/` и `docs/evidence/m3_eth/`; сетевые сценарии Ethernet требуют пары feth (`sudo tools/mame/net_feth.sh`), без неё — `M SKIP`; в `make check` не входит |
 
 Собственное дерево MAME разработчика (`../../../mame`) стенд M не трогает:

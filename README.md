@@ -44,9 +44,21 @@
   GTCPESP** (1,95, 1996 Б/с): пассивное чтение TCP ждёт `CIPRECVDATA`, которую
   выдаёт только main-STEP, и второй дренаж STEP_ISR не успевает набрать
   байты до конца этого обмена ([замеры](docs/MEASUREMENTS.md)).
+- Этап «подготовка Ж»: для реального Sprinter готовы программы и разбор.
+  - `make hw-image` собирает папку `build/hw/` под адреса из
+    `tools/hw/hw.env`: UGTEST и NETDEMO в режиме `UG_HW` (сценарий из
+    командной строки, отчёт в файл, выход в DSS), зонд платформы
+    `UGPROBE.EXE` (такты и ожидания DRAM, ISA, окно ISA, замер CTC, порог
+    FIFO и возврат auto-RTS TL16C550C), BAT-файлы и чеклист.
+  - Новые замеры: задержка TX_DONE/эха, 10-минутный soak, стоимость
+    STEP_ISR/BUS_BUSY/пустого STEP, CBL → опрос.
+  - `tools/measure/parse_hw.py` переводит возвращённые отчёты в
+    `docs/evidence/hw/`.
+  - Программы проверены на стенде M (`run_m.py --hw`, `--probe`).
 - Реальный Sprinter не запускался ни для одной сборки: ни общая
   функциональность, ни порог автопотока RTS ESP, ни поведение TL16C550C
-  при двух читателях FIFO (main и STEP_ISR).
+  при двух читателях FIFO (main и STEP_ISR). Порядок прогонов — в
+  [стендах](docs/TESTING.md), раздел «Стенд Ж».
 - Остальное: [SDK](docs/SDK.md), [архитектура](docs/ARCHITECTURE.md), [сборка](docs/BUILD.md),
   [стенды](docs/TESTING.md), [замеры](docs/MEASUREMENTS.md),
   [матрица приёмки](docs/acceptance/matrix.md).

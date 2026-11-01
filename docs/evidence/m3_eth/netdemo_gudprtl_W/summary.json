@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "W pause 2 s between two echoes",
-  "wall_s": 20.5,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 30319",
+  "wall_s": 20.8,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40814",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -42,7 +42,7 @@
       "isr": 0,
       "step": 642,
       "early": 1330,
-      "frames": 106,
+      "frames": 107,
       "ticks": 1300,
       "unknown": 0,
       "mask": 0,
@@ -72,8 +72,8 @@
   },
   "timing_us": {
     "tick_isr_max": 305,
-    "admitted_ug_step_max": 1104,
-    "largest_tick_gap": 2034,
+    "admitted_ug_step_max": 1105,
+    "largest_tick_gap": 2035,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 2.0 s)"

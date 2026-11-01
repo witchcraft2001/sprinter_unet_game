@@ -8,7 +8,9 @@
 ;  2. the CTC1 timer tick (2 ms): the time adapter (FIXED_SCHEDULE), the
 ;     gateway tick (budget periods of 10 ticks) and the guaranteed poll
 ;     (UG_ISR_NET -> STEP_ISR); the frame interrupt (#FF) is counted and
-;     gives an extra poll opportunity; no CBL, no keyboard in this program;
+;     gives an extra poll opportunity; no keyboard in this program; no
+;     CBL either, except the UG_HW build, where every frame interrupt also
+;     raises UG_ISR_CBL and the CBL line times flag -> admitted poll;
 ;  3. the main loop: UG_STEP from the main quota, events, RX / TX;
 ;  4. pause (scenario W): no game work for 2 s, the clocks, periods, polls
 ;     and STEP go on;
@@ -62,12 +64,21 @@ V_TICK		EQU	0x02		; CTC1, vector base 0
 V_FRAME		EQU	0xFF
 SH_1FFD		EQU	0x01		; DSS values when the program starts
 SH_9FBD		EQU	0x00
-UART		EQU	0xC3E8
+UART		EQU	0xC000 + UG_IO_BASE	; the card's io_base in the ISA window
 RP_STATUS	EQU	8
 RP_TEXT		EQU	16
 UHW_RUN		EQU	2
+DSS_EXIT	EQU	0x41		; B = exit code (ughw.inc hw_exit)
 	ASSERT	IM2_DEFAULT + 3 <= UG_ISTK, "default IM2 handler below the ISR stack"
 	ASSERT	(IM2_TABLE & 0xFF) == 0
+
+	; UG_HW (the Ж / real-hardware stand): a file replaces .spin at exit.
+	; Default off, so a plain build (no -DUG_HW) is the M-stand program
+	; unchanged.  See ugtest.asm for why ughw.inc is included further
+	; down (inside the ORG'd EXE image), never here before ORG.
+	IFNDEF	UG_HW
+	DEFINE	UG_HW 0
+	ENDIF
 
 ; ugstand.lua samples these (CLOCK_RATE line): now_ms of the time adapter,
 ; timer ticks, admitted STEPs
@@ -89,6 +100,10 @@ exe_header
 	ASSERT	$ == EXE_LOAD
 
 start
+	IF	UG_HW
+	LD	A,SCEN			; hw_build_fname's file name needs it;
+	LD	(scen_char),A		; NETDEMO keeps -DSCEN even under UG_HW
+	ENDIF
 	LD	SP,STACK_TOP
 	LD	A,0x03			; turbo on (21 MHz, the v1 profile)
 	OUT	(P_SYS),A
@@ -98,6 +113,13 @@ start
 	LD	HL,dll_name
 	CALL	rp_str
 	CALL	rp_nl
+	IF	UG_HW
+	LD	HL,s_scen
+	CALL	rp_str
+	LD	A,SCEN
+	CALL	rp_char
+	CALL	rp_nl
+	ENDIF
 	; 1. before the game -----------------------------------------------
 	LD	A,SH_1FFD
 	LD	E,SH_9FBD
@@ -231,11 +253,29 @@ finish
 	LD	A,(loaded)
 	OR	A
 	CALL	NZ,UG_FREE		; FINI through libman, in IM1
+	IF	UG_HW
+	; the report is already fully composed (rp_result just ran): save
+	; it BEFORE the 0xA5 completion marker below, so a harness polling
+	; once per video frame (M stand, ugstand.lua) can never observe
+	; 0xA5 while hw_save is still running.
+	CALL	hw_build_fname
+	LD	HL,hw_fname
+	CALL	hw_save
+	ENDIF
 	LD	HL,UG_REPORT + RP_TEXT
 	LD	C,DSS_PCHARS
 	RST	DSS
 	LD	A,0xA5
 	LD	(UG_REPORT + RP_STATUS + 2),A	; done: ugstand.lua collects the report
+	IF	UG_HW
+	; ugstand.lua waits 25 frames after it SEES 0xA5 before it actually
+	; reads the report text ("let the DSS print finish"); outlast that
+	; grace period before hw_exit's DSS EXIT can disturb anything the
+	; harness has not captured yet (irq_stop already ran above: no tick
+	; source left to wait on, hence the plain CPU busy-wait).
+	CALL	hw_delay
+	CALL	hw_exit			; does not return
+	ENDIF
 .spin
 	JR	.spin
 
@@ -341,6 +381,9 @@ isr_tick
 	CALL	UG_TICK
 	LD	A,UNETG_SRC_TIMER
 	CALL	UG_ISR_NET
+	IF	UG_HW
+	CALL	cbl_check
+	ENDIF
 	CALL	UGT_TICK
 	CALL	sw_now
 	LD	DE,(sw_isr0)
@@ -360,6 +403,9 @@ isr_frame
 	PUSH	BC
 	PUSH	DE
 	PUSH	HL
+	IF	UG_HW
+	CALL	cbl_raise
+	ENDIF
 	CALL	UG_ISR_FRAME
 	POP	HL
 	POP	DE
@@ -706,8 +752,11 @@ event
 	LD	A,(evbuf + UNETG_EVT_STATUS)
 	OR	A
 	RET	Z
+	CP	UNETG_TXDONE_CANCEL	; ABI §5: CANCEL is the documented outcome
+	JR	Z,.txcancel		; of ABORT/SHUTDOWN on an unfinished TX, not a failure
 	LD	A,'t'
 	LD	(fail_code),A
+.txcancel
 	LD	A,(evbuf + UNETG_EVT_TYPE)
 .log
 	PUSH	AF
@@ -759,6 +808,25 @@ report_gw
 	CALL	rp_char
 	LD	HL,(sw_late)
 	CALL	rp_hex16
+	IF	UG_HW
+	CALL	rp_nl
+	; CBL n max sum(32): CBL flag raised (frame ISR) -> the guaranteed
+	; poll it turned into admitted (stopwatch counts, like TIMING)
+	LD	HL,s_cbl
+	CALL	rp_str
+	LD	HL,(cbl_n)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(cbl_max)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(cbl_sum + 2)
+	CALL	rp_hex16
+	LD	HL,(cbl_sum)
+	CALL	rp_hex16
+	ENDIF
 	JP	rp_nl
 
 min_de_hl
@@ -876,7 +944,7 @@ isa_open
 	OR	0x10
 	LD	BC,0x1FFD
 	OUT	(C),A
-	LD	A,0xD6			; ISA slot 1, I/O space
+	LD	A,0xD4 | (UG_ISA_SLOT << 1)	; the card's ISA slot, I/O space (slot 1: #D6)
 	LD	BC,0x00E2
 	OUT	(C),A
 	XOR	A
@@ -982,6 +1050,84 @@ rp_dump
 	INC	DE
 	DJNZ	.b
 	JP	rp_nl
+
+	IF	UG_HW
+; UG_HW (Ж stand) only: ughw.inc's hw_save/hw_exit, plus a plain CPU
+; busy-wait (no tick/IRQ dependency: by the time `finish` runs below,
+; irq_stop may already have torn down CTC1/IM2) long enough to outlast
+; ugstand.lua's 25-frame "let the DSS print finish" grace period before
+; hw_exit's DSS EXIT.  NETDEMO keeps -DSCEN (build_hw.sh: one NETDEMO.EXE
+; per scenario) -- no hw_args, no runtime dispatch.
+	INCLUDE	"ughw.inc"
+
+; ~1.3 s at 21 MHz (16 x 65536 x 26 T; ugstand.lua waits 25 frames = 0.5 s).
+; DEC DE sets no flags: the loop tests D|E.
+hw_delay
+	LD	B,16
+.l1
+	LD	DE,0
+.l2
+	DEC	DE
+	LD	A,D
+	OR	E
+	JR	NZ,.l2
+	DJNZ	.l1
+	RET
+
+; cbl_raise: frame ISR (IFF = 0) -- stand in for a sound interrupt (ТЗ §3):
+; UG_ISR_CBL every frame; the first flag not yet followed by its poll
+; starts a sample (sw_now).  Clobbers AF, BC, HL.
+cbl_raise
+	LD	A,(cbl_armed)
+	OR	A
+	JR	NZ,.raise
+	CALL	sw_now
+	LD	(cbl_t0),HL
+	LD	A,1
+	LD	(cbl_armed),A
+.raise
+	JP	UG_ISR_CBL
+
+; cbl_check: tick ISR (IFF = 0) after UG_TICK + UG_ISR_NET.  The sample
+; ends once UG_TICK consumed the CBL flag (UGF_CBL clear) and the poll it
+; armed was admitted (UGF_POLL_DUE clear); a refused poll keeps it open
+; for the next tick.  Clobbers AF, BC, DE, HL.
+cbl_check
+	LD	A,(cbl_armed)
+	OR	A
+	RET	Z
+	LD	A,(UG_BLOCK + UGW_FLAGS)
+	AND	(1 << UGF_CBL) | (1 << UGF_POLL_DUE)
+	RET	NZ
+	LD	(cbl_armed),A
+	CALL	sw_now
+	LD	DE,(cbl_t0)
+	OR	A
+	SBC	HL,DE
+	LD	DE,(cbl_max)
+	CALL	sw_max
+	LD	(cbl_max),DE
+	LD	DE,(cbl_sum)
+	ADD	HL,DE
+	LD	(cbl_sum),HL
+	JR	NC,.nc
+	LD	HL,(cbl_sum + 2)
+	INC	HL
+	LD	(cbl_sum + 2),HL
+.nc
+	LD	HL,(cbl_n)
+	INC	HL
+	LD	(cbl_n),HL
+	RET
+
+s_scen		DB	"SCEN ", 0
+s_cbl		DB	"CBL ", 0
+cbl_armed	DB	0
+cbl_t0		DW	0
+cbl_max		DW	0
+cbl_sum		DD	0
+cbl_n		DW	0
+	ENDIF
 
 ; ----------------------------------------------------------------------
 ; Profile of this program (ugate.inc UGP_*): CTC1 tick 1999.238 us,

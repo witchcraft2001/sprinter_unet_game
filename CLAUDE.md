@@ -38,7 +38,9 @@ sdk/        source-included SDK: loader/ugload.asm (over libman), gateway/
             ТЗ §7 example, M stand), example/ugtest.asm (M4 libman tester)
 third_party/libman/  git submodule (libman + sprinter-mkdll), never copied
 tools/      build.sh, build_sdk.sh, size_report.py, gen_abi.py, check_names.py,
-            measure/ (Z80 cost probes), harness/ (Node Z80 stand; appstand.js
+            measure/ (ugprobe.asm platform probe, parse_hw.py Ж reports),
+            hw/ (Ж stand: hw.env.example, build_hw.sh, echo_hw.sh),
+            harness/ (Node Z80 stand; appstand.js
             runs the SDK with interrupts, devices/ctc.js),
             mame/ (M stand: holub MAME build + card patch, ugstand.lua, run_m.py,
             net_feth.sh)
@@ -71,6 +73,7 @@ make check        # everything above; run before every hand-off
 make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
 make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME
                   # (not in check; Ethernet needs the feth pair, else M SKIP)
+make hw-image     # Ж stand file set build/hw/ (+ .img) from tools/hw/hw.env
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -423,6 +426,28 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - The vendored Z80 core applies DI one instruction late (`do_delayed_di`):
   stand code that injects interrupts must skip that state, as a real Z80
   takes none after DI.
+
+## Ж stand (real Sprinter)
+
+- The Ж programs are UGTEST/NETDEMO built with `-DUG_HW=1` plus
+  `tools/measure/ugprobe.asm`; everything Ж-only stays under `IF UG_HW` /
+  inside `sdk/example/ughw.inc`, so the M-stand programs and their reports
+  are unchanged (`make test-m` never sets `UG_HW`). Shared stand-program
+  code (frame hook, CTC durations, deadlines, report) lives in
+  `sdk/example/ugbase.inc`. Check every Ж change on M with
+  `run_m.py --hw` / `--probe` (the saved file must equal the report).
+- Ж results enter the repository only through
+  `tools/measure/parse_hw.py` into `docs/evidence/hw/`; the acceptance
+  matrix Ж column is filled only from those `summary.json` files, never
+  from M numbers. Until then every Ж cell says «не проверено».
+- `tools/hw/hw.env` holds the user's LAN addresses: never commit it (it is
+  git-ignored; `hw.env.example` is the template).
+- A stand program's own ISA accesses (NETUP's UART) use `UG_ISA_SLOT` /
+  `UG_IO_BASE` from mkcfg.js, never a literal slot 1 / 0x3E8.
+- DSS: the command line is IX at entry (load - #80: length, text), not
+  APPINFO #47; `#0A` creates or truncates a file. A UG_HW program saves
+  its report before the 0xA5 marker and waits out ugstand.lua's grace
+  frames before DSS EXIT (`wait_tick` clobbers B: push it around DJNZ).
 
 ## Testing policy
 

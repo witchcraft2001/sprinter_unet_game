@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "W pause 2 s between two echoes",
-  "wall_s": 3.4,
+  "wall_s": 3.7,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -16,10 +16,10 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3375
+    "quota_sum_us": 3425
   },
   "info": {
-    "min_useful_budget_us": 415,
+    "min_useful_budget_us": 425,
     "empty_poll_us": 55,
     "bus_busy_us": 25
   },
@@ -27,22 +27,22 @@
     "quota_full": {
       "poll": 950,
       "card": 0,
-      "main": 2325,
+      "main": 2375,
       "service": 100
     },
     "cost_poll_us": 95,
-    "cost_step_us": 465,
-    "periods": 250,
-    "largest_period_debit_us": 3275,
-    "now_ms": 5002,
+    "cost_step_us": 475,
+    "periods": 238,
+    "largest_period_debit_us": 3340,
+    "now_ms": 4764,
     "stats": {
-      "refuse": 0,
+      "refuse": 1,
       "busy": 0,
       "isr": 0,
-      "step": 1236,
-      "early": 2577,
-      "frames": 197,
-      "ticks": 2502,
+      "step": 1176,
+      "early": 2453,
+      "frames": 192,
+      "ticks": 2383,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,21 +57,21 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 3181,
-    "steps_total": 1236,
-    "steps_useful": 1236,
-    "budget_yields": 929,
+    "polls_total": 3027,
+    "steps_total": 1176,
+    "steps_useful": 1176,
+    "budget_yields": 883,
     "max_step_gap_ms": 10,
     "tx_frames": 3,
-    "rx_frames": 4,
+    "rx_frames": 3,
     "tx_bytes": 900,
     "rx_bytes": 900
   },
   "timing_us": {
-    "tick_isr_max": 307,
-    "admitted_ug_step_max": 1137,
+    "tick_isr_max": 314,
+    "admitted_ug_step_max": 1127,
     "largest_tick_gap": 2053,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.975 now_ms per emulated ms, TICK_MS 2.050, FRAME_MS 20.480, STEP_CALLS_PER_S 240 (over 4.6 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 4.1 s)"
 }

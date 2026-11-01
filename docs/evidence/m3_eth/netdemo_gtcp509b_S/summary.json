@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "S 8 KiB stream",
-  "wall_s": 26.2,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 33359",
+  "wall_s": 26.7,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 24360",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -72,7 +72,7 @@
   },
   "timing_us": {
     "tick_isr_max": 312,
-    "admitted_ug_step_max": 1204,
+    "admitted_ug_step_max": 1195,
     "largest_tick_gap": 2291,
     "late_ticks": 0
   },

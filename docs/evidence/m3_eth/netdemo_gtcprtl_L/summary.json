@@ -4,7 +4,7 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "L load, check and free the DLL",
-  "wall_s": 3.1,
+  "wall_s": 3.4,
   "network": "none",
   "steps_per_period": 5,
   "load": {

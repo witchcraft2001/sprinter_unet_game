@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 4.1,
+  "wall_s": 3.7,
   "info": {
     "min_useful_budget_us": 425,
     "empty_poll_us": 55,
@@ -27,12 +27,12 @@
     "tx_bytes": 8192,
     "rx_bytes": 8192
   },
-  "clock": "CLOCK_RATE 0.715 now_ms per emulated ms, TICK_MS 27.849, FRAME_MS 20.480, STEP_CALLS_PER_S 536 (over 6.7 s)",
+  "clock": "CLOCK_RATE 0.730 now_ms per emulated ms, TICK_MS 27.279, FRAME_MS 20.480, STEP_CALLS_PER_S 536 (over 6.7 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.265,
+  "ticks_missed_ratio": 0.249,
   "step": {
-    "max_us": 1203,
+    "max_us": 1204,
     "mean_us": 848,
     "steps": 3604,
     "over_budget": 3604

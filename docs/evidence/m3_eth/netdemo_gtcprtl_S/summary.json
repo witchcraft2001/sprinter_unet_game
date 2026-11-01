@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 22.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 46164",
+  "wall_s": 22.6,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 26811",
   "steps_per_period": 5,
   "load": {
     "status": 0,

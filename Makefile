@@ -1,5 +1,5 @@
 # UNET-GAME -- build and checks.  See CLAUDE.md and docs/BUILD.md.
-.PHONY: all gen dlls sdk verify size names test-host test-z check profile-check clean mame test-m libman
+.PHONY: all gen dlls sdk verify size names test-host test-z check profile-check clean mame test-m libman hw-image
 
 all: dlls sdk
 
@@ -73,6 +73,13 @@ test-m: dlls libman
 	  d=$${r%%:*}; s=$${r##*:}; p=netdemo; log=build/mame-netdemo-$$d-$$s.log; \
 	  tools/mame/run_m.py --prog netdemo $$d $$s --evidence >$$log 2>&1; $(M_ONE); \
 	done; exit $$fail
+
+# Ж stand (real Sprinter): build/hw/ = UGTEST/NETDEMO (UG_HW), UGPROBE, the
+# DLLs, run BATs and README.TXT for tools/hw/hw.env (hw.env.example when
+# absent), plus build/hw/unetgame_hw.img; host side: tools/hw/echo_hw.sh
+hw-image: dlls
+	tools/hw/build_hw.sh
+	python3 tools/check_names.py
 
 clean:
 	rm -rf build

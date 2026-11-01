@@ -32,16 +32,24 @@ DSS		EQU	0x10
 DSS_EXIT	EQU	0x41
 DSS_PCHARS	EQU	0x5C
 P_SYS		EQU	0x3C		; SYS port, user mode
-P_CTC2		EQU	0x12
-P_CTC3		EQU	0x13
-CTC_CHAIN	EQU	0x57		; counter mode, constant follows, reset, no interrupt
 STEP_BUDGET	EQU	500
 UHW_RUN		EQU	2
 SH_1FFD		EQU	0x01		; DSS value: RAM in WIN0, ISA closed
 SH_9FBD		EQU	0x00
-UART		EQU	0xC3E8		; io_base 0x3E8 in the ISA window
-RP_STATUS	EQU	8		; report: "UGTREP1",0, status ('R' running, 'P', 'F'), reason
-RP_TEXT		EQU	16
+UART		EQU	0xC000 + UG_IO_BASE	; the card's io_base in the ISA window
+
+	; UG_HW (the Ж / real-hardware stand, tools/hw/build_hw.sh): the
+	; scenario comes from the DSS command line (ughw.inc hw_args) instead
+	; of -DSCEN, a file replaces the M-stand's .spin, and extra core-cost
+	; and latency measurements run.  Default off, so a plain build (no
+	; -DUG_HW) is the M-stand program unchanged.  ughw.inc is pulled in
+	; further down, inside the ORG'd EXE image (see "UG_HW helpers") --
+	; never here, before ORG: code assembled before the first ORG lands
+	; near address 0, outside the loaded EXE, so a CALL into it would
+	; jump into whatever happens to be there at runtime.
+	IFNDEF	UG_HW
+	DEFINE	UG_HW 0
+	ENDIF
 
 	ORG	EXE_LOAD - EXE_HEADER_SIZE
 exe_header
@@ -57,7 +65,32 @@ exe_header
 	ASSERT	$ == EXE_LOAD
 
 start
+	IF	UG_HW
+	; IX = the DSS command-line buffer (load-#80, the PSP's lower half:
+	; [IX+0] length, [IX+1].. text) -- save it before anything clobbers
+	; IX (every export call below sets it for its own argument).
+	LD	(cmdline_ptr),IX
+	ENDIF
 	LD	SP,STACK_TOP
+	IF	UG_HW
+	; parse it now, before anything can fail: `finish` names the saved
+	; report after scen_char even when the run stops at the DLL load
+	CALL	hw_args
+	LD	A,(scen_char)
+	CP	'E'
+	JR	Z,.scen_ok
+	CP	'S'
+	JR	Z,.scen_ok
+	CP	'P'
+	JR	Z,.scen_ok
+	CP	'D'
+	JR	Z,.scen_ok
+	CP	'K'
+	JR	Z,.scen_ok
+	LD	A,'E'			; unknown or absent -> E
+	LD	(scen_char),A
+.scen_ok
+	ENDIF
 	; turbo on (21 MHz, the v1 profile): SYS port, user mode, bit 1 = write
 	; the turbo latch, bit 0 = its value (Worms ports.inc, P_SYS_OFF)
 	LD	A,0x03
@@ -68,6 +101,13 @@ start
 	LD	HL,dll_name
 	CALL	rp_str
 	CALL	rp_nl
+	IF	UG_HW
+	LD	HL,s_scen
+	CALL	rp_str
+	LD	A,(scen_char)
+	CALL	rp_char
+	CALL	rp_nl
+	ENDIF
 	CALL	tick_install
 	CALL	ctc_init
 	CALL	calibrate
@@ -159,6 +199,9 @@ start
 .hw_ok
 	LD	HL,s_hw
 	CALL	rp_str
+	IF	UG_HW
+	CALL	hw_costs16		; channel idle: core-cost measurements first
+	ENDIF
 	CALL	scenario
 	CALL	stats			; while the context is configured
 	; SHUTDOWN until OK (3 s)
@@ -184,7 +227,8 @@ start
 	CALL	rp_nl
 	LD	A,(fail_code)
 	OR	A
-	JP	NZ,fail
+	LD	A,'F'			; a soft failure (t, q): stats are already in
+	JR	NZ,finish		; the report, `fail` would print them again
 	LD	A,'P'
 	JR	finish
 
@@ -214,12 +258,37 @@ finish
 	CALL	LIBMAN.l_free
 .freed
 	CALL	ctc_stop
-	CALL	tick_remove
+	IF	UG_HW
+	; the report is already fully composed (rp_result ran in `finish`,
+	; above): save it BEFORE the 0xA5 completion marker below, so a
+	; harness polling once per video frame (M stand, ugstand.lua) can
+	; never observe 0xA5 while hw_save is still running.
+	CALL	hw_build_fname
+	LD	HL,hw_fname
+	CALL	hw_save
+	ENDIF
 	LD	HL,UG_REPORT + RP_TEXT
 	LD	C,DSS_PCHARS
 	RST	DSS
 	LD	A,0xA5
 	LD	(UG_REPORT + RP_STATUS + 2),A	; done: ugstand.lua collects the report
+	IF	UG_HW
+	; ugstand.lua waits 25 frames after it SEES 0xA5 before it actually
+	; reads the report text ("let the DSS print finish"); outlast that
+	; grace period (tick_remove is below, not above: wait_tick needs the
+	; IM1 hook still installed) before hw_exit's DSS EXIT can disturb
+	; anything the harness has not captured yet.
+	LD	B,30
+.hw_wait
+	PUSH	BC			; wait_tick clobbers B
+	CALL	wait_tick
+	POP	BC
+	DJNZ	.hw_wait
+	CALL	tick_remove
+	CALL	hw_exit			; does not return
+	ELSE
+	CALL	tick_remove
+	ENDIF
 .spin
 	JR	.spin
 
@@ -243,6 +312,70 @@ rp_result
 ; ----------------------------------------------------------------------
 scenario
 	CALL	open_wait
+	IF	UG_HW
+	; the scenario comes from the DSS command line (hw_args in `start`,
+	; already checked: E/S/P/D/K, anything else became E), not -DSCEN
+	LD	A,(scen_char)
+	CP	'E'
+	JR	Z,.hw_e
+	CP	'S'
+	JR	Z,.hw_s
+	CP	'P'
+	JR	Z,.hw_p
+	CP	'D'
+	JR	Z,.hw_d
+	CP	'K'
+	JR	Z,.hw_k
+.hw_e
+	LD	HL,300
+	LD	(tx_total),HL
+	CALL	send_all
+	CALL	close_wait
+	RET
+.hw_s
+	LD	HL,8192
+	LD	(tx_total),HL
+	CALL	send_all
+	CALL	close_wait
+	RET
+.hw_p
+	; the echo server closes after 64 bytes: PEER_CLOSED, then CLOSED
+	LD	HL,64
+	LD	(tx_total),HL
+	CALL	send_all
+	LD	HL,5000
+	CALL	dl_set
+.hw_pc
+	CALL	pump
+	LD	A,(ev_closed)
+	OR	A
+	JR	NZ,.hw_pc_done
+	CALL	dl_due
+	JR	NC,.hw_pc
+	LD	A,'p'
+	JP	fail
+.hw_pc_done
+	LD	A,(ev_peer)
+	OR	A
+	RET	NZ
+	LD	A,'q'
+	LD	(fail_code),A
+	RET
+.hw_d
+	LD	HL,100
+	LD	(tx_total),HL
+	CALL	send_one
+	LD	HL,200
+	CALL	dl_set
+.hw_dw
+	CALL	pump
+	CALL	dl_due
+	JR	NC,.hw_dw
+	RET
+.hw_k
+	CALL	soak
+	RET
+	ELSE
 	IF	SCEN == 'E'
 	LD	HL,300
 	LD	(tx_total),HL
@@ -290,6 +423,7 @@ scenario
 	JR	NC,.d
 	ENDIF
 	RET
+	ENDIF
 
 ; open_wait: OPEN, CONNECTED within 15 s
 open_wait
@@ -379,6 +513,29 @@ send_one
 	PUSH	DE
 	LD	A,(tx_slot)
 	LD	IX,(tx_tag)
+	IF	UG_HW
+	; LAT (ТЗ §8.3, see lat_on_txdone/lat_mark_echo): one measurement in
+	; flight at a time -- arm a new one only while idle (lat_state == 0).
+	; DE (piece length) and IX (tag) survive ctc_phase untouched; A is
+	; the only register it clobbers besides HL.
+	PUSH	AF
+	LD	A,(lat_state)
+	OR	A
+	JR	NZ,.lat_skip
+	CALL	ctc_phase
+	LD	(lat_t0),HL
+	LD	A,(ticks)
+	LD	(lat_tick0),A
+	LD	HL,(tx_tag)
+	LD	(lat_tag),HL
+	LD	HL,(tx_sent)
+	ADD	HL,DE
+	LD	(lat_target_rx),HL
+	LD	A,1
+	LD	(lat_state),A
+.lat_skip
+	POP	AF
+	ENDIF
 	LD	B,UNETG_TX_COMMIT
 	CALL	dll
 	POP	DE
@@ -429,6 +586,9 @@ pump
 	LD	DE,(st_t0)
 	OR	A
 	SBC	HL,DE			; modulo the 65536-count CTC3 period
+	IF	UG_HW
+	LD	(st_last),HL		; this call's delta, for soak's per-frame accounting
+	ENDIF
 	; STEP time statistics (CTC counts, 875 kHz): n, sum, > 500 us, max
 	PUSH	HL
 	LD	DE,(st_n)
@@ -512,9 +672,22 @@ pump
 	CALL	dll
 	POP	BC
 	DJNZ	.peek
-	RET
+	JR	.pump_tail
 .rx_end
 	POP	BC
+.pump_tail
+	IF	UG_HW
+	LD	A,(lat_state)
+	CP	2
+	JR	NZ,.lat_pump_skip
+	LD	HL,(rx_count)
+	LD	DE,(lat_target_rx)
+	OR	A
+	SBC	HL,DE
+	JR	C,.lat_pump_skip	; the echo has not fully arrived yet
+	CALL	lat_mark_echo
+.lat_pump_skip
+	ENDIF
 	RET
 
 ; event: evbuf holds one event; flags + a report entry "tt/ss "
@@ -537,10 +710,16 @@ event
 	CP	UNETG_EV_TX_DONE
 	JR	NZ,.log
 	LD	A,(evbuf + UNETG_EVT_STATUS)
+	IF	UG_HW
+	CALL	lat_on_txdone		; preserves A
+	ENDIF
 	OR	A
 	RET	Z			; TX_DONE OK: not logged
+	CP	UNETG_TXDONE_CANCEL	; ABI §5: CANCEL is the documented outcome
+	JR	Z,.txcancel		; of ABORT/SHUTDOWN on an unfinished TX, not a failure
 	LD	A,'t'
 	LD	(fail_code),A
+.txcancel
 	LD	A,(evbuf + UNETG_EVT_TYPE)
 .log
 	PUSH	AF
@@ -610,7 +789,11 @@ stats
 	CALL	rp_hex16
 	LD	HL,(now_ms)
 	CALL	rp_hex16
-	JP	rp_nl
+	CALL	rp_nl
+	IF	UG_HW
+	CALL	lat_report
+	ENDIF
+	RET
 
 ; dll: call export B with A, DE, IX, IY; returns A, DE.  libman refusal
 ; (CF) is fatal.
@@ -634,154 +817,503 @@ min_de_hl				; DE = min(DE, HL)
 	EX	DE,HL
 	RET
 
+	IF	UG_HW
 ; ----------------------------------------------------------------------
-; Time.  now_ms = frame ticks x 20: an IM1 hook counts the 50 Hz frame
-; interrupts (DSS lets a program replace the JP target at #0039).
-; Durations: CTC2 in timer mode (prescaler 16, /256) -> CTC3 counting its
-; zero counts (/256): a phase in units of 16 CTC clocks, calibrated against
-; the frame tick at start (cal_ctc = counts per frame, cal_loop = loops of
-; a 35-T loop per frame: the CPU speed).
+; UG_HW (Ж stand) only: hw_args/hw_save/hw_exit (ughw.inc), latency
+; sampling, core-cost bursts, the soak scenario and the report file name.
+; CTC counts throughout, like the rest of the report;
+; tools/mame/ugreport.py scales by CAL.  ughw.inc is included here, not
+; before ORG, so its code lands inside the loaded EXE image.
 ; ----------------------------------------------------------------------
-IM1_VECTOR	EQU	0x0039
-tick_install
-	DI
-	LD	HL,(IM1_VECTOR)
-	LD	(im1_old),HL
-	LD	HL,im1_tick
-	LD	(IM1_VECTOR),HL
-	EI
-	RET
-tick_remove
-	DI
-	LD	HL,(im1_old)
-	LD	(IM1_VECTOR),HL
-	EI
-	RET
-im1_tick
-	PUSH	HL
-	LD	HL,(ticks)
-	INC	HL
-	LD	(ticks),HL
-	POP	HL
-	DB	0xC3			; JP to the DSS handler
-im1_old	DW	0
+	INCLUDE	"ughw.inc"
 
-ctc_init
-	DI
-	LD	A,0x07			; timer, prescaler 16, constant follows, reset
-	OUT	(P_CTC2),A
-	XOR	A			; 256
-	OUT	(P_CTC2),A
-	LD	A,CTC_CHAIN		; counter of CTC2 zero counts
-	OUT	(P_CTC3),A
-	XOR	A
-	OUT	(P_CTC3),A
-	EI
-	RET
-ctc_stop
-	LD	A,0x03			; channel reset
-	OUT	(P_CTC2),A
-	OUT	(P_CTC3),A
-	RET
-
-; ctc_phase: HL = elapsed counts (16 CTC clocks) in the CTC3 period
-; (CTC3, CTC2, CTC3 again, as Worms ctcnow.inc).  Clobbers A, BC.
-ctc_phase
-.retry
-	IN	A,(P_CTC3)
-	LD	B,A
-	IN	A,(P_CTC2)
-	LD	C,A
-	IN	A,(P_CTC3)
-	CP	B
-	JR	NZ,.retry
-	XOR	A
-	SUB	B
-	LD	H,A
-	XOR	A
-	SUB	C
-	LD	L,A
-	RET
-
-wait_tick
-	LD	A,(ticks)
-	LD	B,A
-.w
-	LD	A,(ticks)
-	CP	B
-	JR	Z,.w
-	RET
-
-calibrate
-	CALL	wait_tick
-	CALL	ctc_phase
-	LD	(cal_p0),HL
-	CALL	wait_tick
-	CALL	ctc_phase
-	LD	DE,(cal_p0)
-	OR	A
-	SBC	HL,DE
-	LD	(cal_ctc),HL
-	CALL	wait_tick
-	LD	DE,0
-	LD	HL,(ticks)
-.loop
-	INC	DE			; 6 + 13 + 4 + 12 = 35 T
-	LD	A,(ticks)
-	CP	L
-	JR	Z,.loop
-	LD	(cal_loop),DE
-	RET
-
-; clk_update: now_ms = ticks x 20.  Clobbers A, BC, DE, HL.
-clk_update
-	LD	HL,(ticks)		; one instruction: no torn read
-	XOR	A
-	ADD	HL,HL
-	ADC	A,A			; x2
-	ADD	HL,HL
-	ADC	A,A			; x4
+; lat_on_txdone: called from `event` with A = the TX_DONE status (kept).
+; Checks evbuf's tag against the one send_one armed; a miss (another
+; packet's TX_DONE, or no measurement in flight) does nothing; a FAILED or
+; CANCEL TX_DONE of the armed packet drops the sample (no echo will
+; come).  Preserves AF and BC (pump's event loop counter).
+; Clobbers DE, HL.
+lat_on_txdone
+	PUSH	BC
 	PUSH	AF
-	PUSH	HL
-	ADD	HL,HL
-	ADC	A,A			; x8
-	ADD	HL,HL
-	ADC	A,A			; x16
-	POP	DE
-	POP	BC			; B = high byte of x4
-	ADD	HL,DE
-	ADC	A,B			; x20
-	LD	(now_ms),HL
-	LD	(now_ms + 2),A
-	XOR	A
-	LD	(now_ms + 3),A
-	RET
-
-; dl_set: deadline = now + HL ms (16-bit horizon is enough here)
-dl_set
-	PUSH	HL
-	CALL	clk_update
-	POP	HL
-	LD	DE,(now_ms)
-	ADD	HL,DE
-	LD	(deadline),HL
-	RET
-; dl_due: CF=1 when the deadline is reached
-dl_due
-	CALL	clk_update
-	LD	HL,(deadline)
-	LD	DE,(now_ms)
+	LD	C,A
+	LD	A,(lat_state)
+	CP	1
+	JR	NZ,.skip
+	LD	HL,(evbuf + UNETG_EVT_TAG)
+	LD	DE,(lat_tag)
 	OR	A
 	SBC	HL,DE
-	BIT	7,H
-	SCF
-	RET	NZ			; past
+	JR	NZ,.skip
+	LD	A,C
+	OR	A
+	JR	Z,.ok
+	XOR	A
+	LD	(lat_state),A
+	JR	.skip
+.ok
+	CALL	lat_mark_txdone
+.skip
+	POP	AF
+	POP	BC
+	RET
+
+; lat_elapsed: HL = ctc_phase - lat_t0 in CTC counts, or 0xFFFF (and
+; lat_sat + 1) when the 16-bit CTC3 period (~50 ms) may have wrapped:
+; frame ticks since the arm k >= 3, or k == 2 with less than one frame of
+; counts (cal_ctc) -- the true time is then 50..60 ms, not the small
+; remainder.  k <= 1 is under two frames (~41 ms), inside the period.
+; Assumes no lost frame tick (CLOCK_RATE shows the ratio: real Sprinter
+; ~1, MAME ~0.3 -- on M a long sample can hide as a short one).
+; Clobbers A, BC, DE.
+lat_elapsed
+	CALL	ctc_phase
+	LD	DE,(lat_t0)
+	OR	A
+	SBC	HL,DE
+	LD	A,(lat_tick0)
+	LD	B,A
+	LD	A,(ticks)
+	SUB	B
+	CP	2
+	RET	C
+	JR	NZ,.sat
+	LD	DE,(cal_ctc)
+	PUSH	HL
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	RET	NC
+.sat
+	LD	HL,lat_kmax		; A = k: the worst one, in frames
+	CP	(HL)
+	JR	C,.kmax
+	LD	(HL),A
+.kmax
+	LD	HL,(lat_sat)
+	INC	HL
+	LD	(lat_sat),HL
+	LD	HL,0xFFFF
+	RET
+
+; lat_mark_txdone: ctc_phase - lat_t0 into the txdone stats; lat_state -> 2
+; (now waiting for the echo at lat_target_rx, armed by send_one).
+; Clobbers A, BC, DE, HL.
+lat_mark_txdone
+	CALL	lat_elapsed
+	LD	DE,(lat_txdone_max)
+	PUSH	HL
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	JR	C,.not_max
+	LD	(lat_txdone_max),HL
+.not_max
+	LD	DE,(lat_txdone_sum)
+	ADD	HL,DE
+	LD	(lat_txdone_sum),HL
+	JR	NC,.sum_nc
+	LD	HL,(lat_txdone_sum + 2)
+	INC	HL
+	LD	(lat_txdone_sum + 2),HL
+.sum_nc
+	LD	HL,(lat_txdone_n)
+	INC	HL
+	LD	(lat_txdone_n),HL
+	LD	A,2
+	LD	(lat_state),A
+	RET
+
+; lat_mark_echo: called from pump once rx_count reaches lat_target_rx.
+; ctc_phase - lat_t0 into the echo stats; lat_state -> 0 (idle: the next
+; send_one may arm a new sample).  Clobbers A, BC, DE, HL.
+lat_mark_echo
+	CALL	lat_elapsed
+	LD	DE,(lat_echo_max)
+	PUSH	HL
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	JR	C,.not_max
+	LD	(lat_echo_max),HL
+.not_max
+	LD	DE,(lat_echo_sum)
+	ADD	HL,DE
+	LD	(lat_echo_sum),HL
+	JR	NC,.sum_nc
+	LD	HL,(lat_echo_sum + 2)
+	INC	HL
+	LD	(lat_echo_sum + 2),HL
+.sum_nc
+	LD	HL,(lat_echo_n)
+	INC	HL
+	LD	(lat_echo_n),HL
+	XOR	A
+	LD	(lat_state),A
+	RET
+
+; lat_report: "LAT n_txdone max_txdone sum_txdone(32) n_echo max_echo
+; sum_echo(32) n_sat k_max" (CTC counts; the host computes the mean:
+; sum/n; n_sat samples saturated at 0xFFFF -- each over 40 ms, see
+; lat_elapsed -- the longest of them k_max frame ticks).  Echo
+; fields stay 0 on a one-way stream (nothing ever reaches lat_mark_echo).
+; For ESP, TX_DONE (SEND OK to the module) is not proof the frame left
+; the air -- only the echo round trip is.
+lat_report
+	LD	HL,s_lat
+	CALL	rp_str
+	LD	HL,(lat_txdone_n)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_txdone_max)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_txdone_sum + 2)
+	CALL	rp_hex16
+	LD	HL,(lat_txdone_sum)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_echo_n)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_echo_max)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_echo_sum + 2)
+	CALL	rp_hex16
+	LD	HL,(lat_echo_sum)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_sat)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	A,(lat_kmax)
+	CALL	rp_hex8
+	JP	rp_nl
+
+; hw_costs16: ISRTIME16 (16 x STEP_ISR source=TIMER, budget 150, the
+; gateway's own ISR-path burst), BUSYTIME16 (the same burst with the ISA
+; lock held by another owner: the BUS_BUSY path) and EMPTYSTEP16 (16 x
+; STEP with nothing pending) -- one DI section each, in CTC counts.
+; Call once, channel idle, right after bring-up.  Clobbers everything
+; `dll` and ctc_phase do.
+hw_costs16
+	DI
+	CALL	ctc_phase
+	LD	(hc_t0),HL
+	LD	B,16
+.isr
+	PUSH	BC
+	LD	A,UNETG_SRC_TIMER
+	LD	DE,150
+	LD	B,UNETG_STEP_ISR
+	CALL	dll
+	POP	BC
+	DJNZ	.isr
+	CALL	ctc_phase
+	LD	DE,(hc_t0)
+	OR	A
+	SBC	HL,DE
+	EI
+	LD	(hc_isr),HL
+
+	LD	A,3				; owner 3 (sound): not net/main(1), not net/ISR(2)
+	LD	(UG_GW),A
+	DI
+	CALL	ctc_phase
+	LD	(hc_t0),HL
+	LD	B,16
+.busy
+	PUSH	BC
+	LD	A,UNETG_SRC_TIMER
+	LD	DE,150
+	LD	B,UNETG_STEP_ISR
+	CALL	dll
+	POP	BC
+	DJNZ	.busy
+	CALL	ctc_phase
+	LD	DE,(hc_t0)
+	OR	A
+	SBC	HL,DE
+	EI
+	LD	(hc_busy),HL
+	XOR	A
+	LD	(UG_GW),A			; release
+
+	DI
+	CALL	ctc_phase
+	LD	(hc_t0),HL
+	LD	B,16
+.empty
+	PUSH	BC
+	CALL	clk_update
+	LD	IX,(now_ms)
+	LD	IY,(now_ms + 2)
+	LD	DE,STEP_BUDGET
+	XOR	A
+	LD	B,UNETG_STEP
+	CALL	dll
+	POP	BC
+	DJNZ	.empty
+	CALL	ctc_phase
+	LD	DE,(hc_t0)
+	OR	A
+	SBC	HL,DE
+	EI
+	LD	(hc_empty),HL
+
+	LD	HL,s_isrtime
+	CALL	rp_str
+	LD	HL,(hc_isr)
+	CALL	rp_hex16
+	CALL	rp_nl
+	LD	HL,s_busytime
+	CALL	rp_str
+	LD	HL,(hc_busy)
+	CALL	rp_hex16
+	CALL	rp_nl
+	LD	HL,s_emptystep
+	CALL	rp_str
+	LD	HL,(hc_empty)
+	CALL	rp_hex16
+	JP	rp_nl
+
+; soak_send_one: like send_one but unbounded (its own 32-bit byte count,
+; no tx_total/tx_sent window).  RET with HL = bytes committed this call
+; (0 = no free slot yet).  Clobbers A, BC, DE, HL, IX.
+soak_send_one
+	LD	DE,UG_SLOT
+	LD	B,UNETG_TX_RESERVE
+	CALL	dll
+	OR	A
+	JR	NZ,.none
+	LD	A,E
+	LD	(tx_slot),A
+	LD	HL,(UG_CTX + UCTX_OUT_HL)
+	LD	BC,UG_SLOT
+	LD	A,(tx_gen)
+.fill
+	LD	(HL),A
+	ADD	A,31
+	INC	HL
+	DEC	BC
+	LD	E,A
+	LD	A,B
+	OR	C
+	LD	A,E
+	JR	NZ,.fill
+	LD	(tx_gen),A
+	LD	A,(tx_slot)
+	LD	IX,(tx_tag)
+	LD	DE,UG_SLOT
+	LD	B,UNETG_TX_COMMIT
+	CALL	dll
+	OR	A
+	LD	A,'K'
+	JP	NZ,fail
+	LD	HL,(tx_tag)
+	INC	HL
+	LD	(tx_tag),HL
+	LD	HL,UG_SLOT
+	RET
+.none
+	LD	HL,0
+	RET
+
+; soak: UG_HW scenario 'K' (minutes in hw_argnum, ТЗ §8.3).  A continuous
+; two-way stream for hw_argnum real minutes (50 Hz frame ticks counted by
+; `ticks`: 3000/min), the RX pattern checked by pump exactly as every
+; other scenario (rx_bad is sticky).  Per-frame STEP-time totals (not the
+; whole-run max/mean of `stats`) catch one bad 20 ms window that an
+; overall average would hide.  Reports raw 32-bit accumulators -- no
+; on-device division, tools/measure/parse_hw.py computes the means:
+; SOAK frames(32) net_max net_sum(32) bytes(32) rx_bad
+soak
+	LD	HL,0
+	LD	(soak_framesleft),HL
+	LD	(soak_framesleft + 2),HL
+	LD	(soak_frames),HL
+	LD	(soak_frames + 2),HL
+	LD	(soak_netcur),HL
+	LD	(soak_netmax),HL
+	LD	(soak_netsum),HL
+	LD	(soak_netsum + 2),HL
+	LD	(soak_bytes),HL
+	LD	(soak_bytes + 2),HL
+	LD	A,(ticks)
+	LD	(soak_tick0),A
+	LD	HL,(hw_argnum)
 	LD	A,H
 	OR	L
-	SCF
-	RET	Z
+	JR	NZ,.have_min
+	LD	HL,1				; 0 (no argument) -> 1 minute, not a no-op
+.have_min
+.mul_loop
+	LD	A,H
+	OR	L
+	JR	Z,.mul_done
+	PUSH	HL
+	LD	HL,(soak_framesleft)
+	LD	DE,3000
+	ADD	HL,DE
+	LD	(soak_framesleft),HL
+	JR	NC,.mul_nc
+	LD	HL,(soak_framesleft + 2)
+	INC	HL
+	LD	(soak_framesleft + 2),HL
+.mul_nc
+	POP	HL
+	DEC	HL
+	JR	.mul_loop
+.mul_done
+.loop
+	CALL	soak_send_one
+	LD	DE,(soak_bytes)
+	ADD	HL,DE
+	LD	(soak_bytes),HL
+	JR	NC,.bytes_nc
+	LD	HL,(soak_bytes + 2)
+	INC	HL
+	LD	(soak_bytes + 2),HL
+.bytes_nc
+	CALL	pump
+	LD	HL,(st_last)
+	LD	DE,(soak_netcur)
+	ADD	HL,DE
+	JR	NC,.cur_nc
+	LD	HL,0xFFFF		; saturate (lost frame ticks make a long "frame")
+.cur_nc
+	LD	(soak_netcur),HL
+	LD	A,(ev_closed)
 	OR	A
-	RET
+	JR	NZ,.done		; the channel is gone (TIMEOUT, peer): report what ran
+	LD	A,(ticks)
+	LD	B,A
+	LD	A,(soak_tick0)
+	CP	B
+	JR	Z,.loop				; no frame boundary yet, keep streaming
+	LD	A,B
+	LD	(soak_tick0),A
+	LD	HL,(soak_netcur)
+	LD	DE,(soak_netmax)
+	OR	A
+	SBC	HL,DE
+	JR	C,.not_max
+	LD	HL,(soak_netcur)
+	LD	(soak_netmax),HL
+.not_max
+	LD	HL,(soak_netcur)
+	LD	DE,(soak_netsum)
+	ADD	HL,DE
+	LD	(soak_netsum),HL
+	JR	NC,.sum_nc
+	LD	HL,(soak_netsum + 2)
+	INC	HL
+	LD	(soak_netsum + 2),HL
+.sum_nc
+	LD	HL,0
+	LD	(soak_netcur),HL
+	LD	HL,(soak_frames)
+	INC	HL
+	LD	(soak_frames),HL
+	LD	A,H			; INC HL sets no flags: test the low word
+	OR	L
+	JR	NZ,.frames_nc
+	LD	HL,(soak_frames + 2)
+	INC	HL
+	LD	(soak_frames + 2),HL
+.frames_nc
+	LD	HL,(soak_framesleft)
+	LD	DE,1
+	OR	A
+	SBC	HL,DE
+	LD	(soak_framesleft),HL
+	JR	NC,.fl_nc
+	LD	HL,(soak_framesleft + 2)
+	DEC	HL
+	LD	(soak_framesleft + 2),HL
+.fl_nc
+	LD	HL,(soak_framesleft)
+	LD	A,H
+	OR	L
+	JP	NZ,.loop
+	LD	HL,(soak_framesleft + 2)
+	LD	A,H
+	OR	L
+	JP	NZ,.loop
+.done
+	LD	HL,s_soak
+	CALL	rp_str
+	LD	HL,(soak_frames + 2)
+	CALL	rp_hex16
+	LD	HL,(soak_frames)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(soak_netmax)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(soak_netsum + 2)
+	CALL	rp_hex16
+	LD	HL,(soak_netsum)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(soak_bytes + 2)
+	CALL	rp_hex16
+	LD	HL,(soak_bytes)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	A,(rx_bad)
+	CALL	rp_hex8
+	JP	rp_nl
+
+s_scen		DB	"SCEN ", 0
+s_lat		DB	"LAT ", 0
+s_isrtime	DB	"ISRTIME16 ", 0
+s_busytime	DB	"BUSYTIME16 ", 0
+s_emptystep	DB	"EMPTYSTEP16 ", 0
+s_soak		DB	"SOAK ", 0
+
+hc_t0		DW	0
+hc_isr		DW	0
+hc_busy		DW	0
+hc_empty	DW	0
+
+lat_state	DB	0			; 0 idle, 1 waiting TX_DONE, 2 waiting echo
+lat_tag		DW	0
+lat_t0		DW	0
+lat_tick0	DB	0
+lat_sat		DW	0
+lat_kmax	DB	0
+lat_target_rx	DW	0
+lat_txdone_n	DW	0
+lat_txdone_max	DW	0
+lat_txdone_sum	DD	0
+lat_echo_n	DW	0
+lat_echo_max	DW	0
+lat_echo_sum	DD	0
+
+st_last		DW	0			; pump's last STEP delta (soak's per-frame sum)
+soak_framesleft	DD	0
+soak_frames	DD	0
+soak_netcur	DW	0
+soak_netmax	DW	0
+soak_netsum	DD	0
+soak_bytes	DD	0
+soak_tick0	DB	0
+	ENDIF
+
+	INCLUDE	"ugbase.inc"		; frame hook, CTC durations, deadlines, report
 
 ; ----------------------------------------------------------------------
 ; NETUP role (ESP): module UART at 115200 8N1 with RTS/CTS, as
@@ -869,7 +1401,7 @@ isa_open
 	LD	BC,0x1FFD
 	LD	A,SH_1FFD | 0x10
 	OUT	(C),A
-	LD	A,0xD6			; ISA slot 1, I/O space
+	LD	A,0xD4 | (UG_ISA_SLOT << 1)	; the card's ISA slot, I/O space (slot 1: #D6)
 	LD	BC,0x00E2
 	OUT	(C),A
 	XOR	A
@@ -893,91 +1425,6 @@ isa_close
 	ENDIF
 
 ; ----------------------------------------------------------------------
-; Report: "UGTREP1",0 / status / text (CR LF lines, zero-terminated)
-; ----------------------------------------------------------------------
-rep_init
-	LD	HL,UG_REPORT
-	LD	DE,UG_REPORT + 1
-	LD	BC,UG_REPORT_LEN - 1
-	LD	(HL),0
-	LDIR
-	LD	HL,s_magic
-	LD	DE,UG_REPORT
-	LD	BC,8
-	LDIR
-	LD	A,'R'
-	LD	(UG_REPORT + RP_STATUS),A
-	LD	HL,UG_REPORT + RP_TEXT
-	LD	(rp_ptr),HL
-	RET
-; rp_char: append A (kept).  Clobbers nothing else.
-rp_char
-	PUSH	HL
-	PUSH	DE
-	LD	HL,(rp_ptr)
-	LD	DE,UG_REPORT + UG_REPORT_LEN - 2
-	PUSH	HL
-	OR	A
-	SBC	HL,DE
-	POP	HL
-	JR	NC,.full
-	LD	(HL),A
-	INC	HL
-	LD	(HL),0
-	LD	(rp_ptr),HL
-.full
-	POP	DE
-	POP	HL
-	RET
-rp_str
-	LD	A,(HL)
-	OR	A
-	RET	Z
-	CALL	rp_char
-	INC	HL
-	JR	rp_str
-rp_nl
-	LD	HL,s_crlf
-	JR	rp_str
-rp_hex16
-	LD	A,H
-	CALL	rp_hex8
-	LD	A,L
-rp_hex8
-	PUSH	AF
-	RRA
-	RRA
-	RRA
-	RRA
-	CALL	.nib
-	POP	AF
-.nib
-	PUSH	AF
-	AND	0x0F
-	ADD	A,'0'
-	CP	'9' + 1
-	JR	C,.d
-	ADD	A,7
-.d
-	CALL	rp_char
-	POP	AF
-	RET
-; rp_dump: label HL, then B bytes from DE in hex, one line
-rp_dump
-	PUSH	DE
-	PUSH	BC
-	CALL	rp_str
-	POP	BC
-	POP	DE
-.b
-	LD	A,(DE)
-	CALL	rp_hex8
-	INC	DE
-	DJNZ	.b
-	JP	rp_nl
-
-; ----------------------------------------------------------------------
-s_magic		DB	"UGTREP1", 0
 s_title		DB	"UGTEST ", 0
 s_info		DB	"INFO ", 0
 s_cfg		DB	"INIT_CONFIG ", 0
@@ -994,7 +1441,6 @@ s_calltime	DB	"CALLTIME16 ", 0	; 16 x RX_PEEK (EMPTY), CTC counts
 s_cal		DB	"CAL ", 0		; CTC counts per frame, 35-T loops per frame
 s_pass		DB	"PASS", 13, 10, 0
 s_failr		DB	"FAIL ", 0
-s_crlf		DB	13, 10, 0
 	IF	UG_ESP
 s_at		DB	"AT", 13, 10, 0
 s_uartcur	DB	"AT+UART_CUR=115200,8,1,0,3", 13, 10, 0
@@ -1006,12 +1452,6 @@ cfg_block	UG_CFG_BLOCK
 dll_handle	DW	0
 dll_loaded	DB	0
 fail_code	DB	0
-now_ms		DD	0
-ticks		DW	0
-cal_p0		DW	0
-cal_ctc		DW	0
-cal_loop	DW	0
-deadline	DW	0
 st_t0		DW	0
 st_max		DW	0
 st_n		DW	0
@@ -1031,7 +1471,6 @@ ev_closed	DB	0
 ev_peer		DB	0
 at_ok		DB	0
 isa_e2		DB	0
-rp_ptr		DW	0
 evbuf		DS	8, 0
 ginfo		DS	64, 0
 gstats		DS	80, 0

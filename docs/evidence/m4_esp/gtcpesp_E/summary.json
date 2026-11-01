@@ -6,7 +6,7 @@
   "scenario": "E echo 300 bytes",
   "wall_s": 3.9,
   "info": {
-    "min_useful_budget_us": 415,
+    "min_useful_budget_us": 425,
     "empty_poll_us": 55,
     "bus_busy_us": 25
   },
@@ -17,25 +17,25 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 200,
-    "steps_total": 332,
-    "steps_useful": 332,
-    "budget_yields": 296,
+    "polls_total": 209,
+    "steps_total": 344,
+    "steps_useful": 344,
+    "budget_yields": 305,
     "max_step_gap_ms": 20,
     "tx_frames": 1,
     "rx_frames": 1,
     "tx_bytes": 300,
     "rx_bytes": 300
   },
-  "clock": "CLOCK_RATE 0.326 now_ms per emulated ms, TICK_MS 59.077, FRAME_MS 20.480, STEP_CALLS_PER_S 170 (over 1.5 s)",
+  "clock": "CLOCK_RATE 0.339 now_ms per emulated ms, TICK_MS 56.889, FRAME_MS 20.480, STEP_CALLS_PER_S 162 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.653,
+  "ticks_missed_ratio": 0.64,
   "step": {
-    "max_us": 1131,
-    "mean_us": 801,
-    "steps": 332,
-    "over_budget": 332
+    "max_us": 1154,
+    "mean_us": 791,
+    "steps": 344,
+    "over_budget": 344
   },
-  "trivial_call_us": 169
+  "trivial_call_us": 163
 }

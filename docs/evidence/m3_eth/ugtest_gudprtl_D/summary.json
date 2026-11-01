@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 17.9,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 26247",
+  "wall_s": 18.1,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 34837",
   "info": {
     "min_useful_budget_us": 410,
     "empty_poll_us": 55,
@@ -18,10 +18,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 183,
+    "polls_total": 149,
     "polls_useful": 2,
-    "steps_total": 230,
-    "steps_useful": 230,
+    "steps_total": 196,
+    "steps_useful": 196,
     "budget_yields": 42,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
@@ -36,9 +36,9 @@
   "ticks_missed_ratio": 0.84,
   "step": {
     "max_us": 1103,
-    "mean_us": 753,
-    "steps": 230,
-    "over_budget": 230
+    "mean_us": 754,
+    "steps": 196,
+    "over_budget": 196
   },
   "trivial_call_us": 174
 }

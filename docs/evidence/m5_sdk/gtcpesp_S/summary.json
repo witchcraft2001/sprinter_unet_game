@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 5.1,
+  "wall_s": 4.6,
   "steps_per_period": 5,
   "load": {
     "status": 0,

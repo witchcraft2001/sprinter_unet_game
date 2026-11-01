@@ -10,3 +10,5 @@ node_modules/
 # and summary.json)
 docs/evidence/**/server.log
 docs/evidence/**/command.txt
+# the Ж stand configuration (addresses of the local network)
+tools/hw/hw.env

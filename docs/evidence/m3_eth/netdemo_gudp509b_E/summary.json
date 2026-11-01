@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "E echo 300 bytes",
-  "wall_s": 21.9,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40695",
+  "wall_s": 22.0,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40478",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -41,8 +41,8 @@
       "busy": 0,
       "isr": 0,
       "step": 1090,
-      "early": 2287,
-      "frames": 172,
+      "early": 2285,
+      "frames": 178,
       "ticks": 2200,
       "unknown": 0,
       "mask": 0,
@@ -76,5 +76,5 @@
     "largest_tick_gap": 2018,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 3.6 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 3.6 s)"
 }

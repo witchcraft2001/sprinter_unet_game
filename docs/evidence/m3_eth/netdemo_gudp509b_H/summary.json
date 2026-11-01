@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 2.8,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 29509",
+  "wall_s": 3.1,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 34699",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -41,8 +41,8 @@
       "busy": 0,
       "isr": 0,
       "step": 39,
-      "early": 79,
-      "frames": 5,
+      "early": 78,
+      "frames": 6,
       "ticks": 76,
       "unknown": 0,
       "mask": 0,
@@ -67,7 +67,7 @@
   "timing_us": {
     "tick_isr_max": 302,
     "admitted_ug_step_max": 770,
-    "largest_tick_gap": 2049,
+    "largest_tick_gap": 2052,
     "late_ticks": 0
   }
 }

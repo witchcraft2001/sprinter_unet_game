@@ -5,7 +5,7 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
   "wall_s": 18.5,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 27926",
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40934",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -42,7 +42,7 @@
       "isr": 0,
       "step": 93,
       "early": 192,
-      "frames": 16,
+      "frames": 14,
       "ticks": 188,
       "unknown": 0,
       "mask": 0,
