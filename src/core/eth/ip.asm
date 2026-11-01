@@ -21,36 +21,42 @@
 ; peer through the cached next hop, the local port taken from tp+2 (same
 ; offset for TCP and UDP).  Clobbers A, BC, DE, HL, IX.
 IP_TEMPLATE
-	PUSH	AF
-	TXH_IX
-	PUSH	IX
-	POP	DE
-	LD	HL,UCTX_ARP + AR_MAC - CTX_BIAS
-	PUSH	DE
+	PUSH	AF			; protocol
 	PUSH	IY
-	POP	DE
+	POP	HL
+	LD	DE,UCTX_TXH - CTX_BIAS
 	ADD	HL,DE
-	POP	DE
+	EX	DE,HL			; DE -> ctx.txh (moves along the frame)
+	LD	HL,UCTX_ARP + AR_MAC - UCTX_TXH
+	ADD	HL,DE
 	LD	BC,6
 	LDIR				; destination: next-hop MAC
-	CALL	TXH_OUR_MAC
+	LD	HL,UCTX_HWSM + HS_MAC - UCTX_TXH - 6
+	ADD	HL,DE
+	LD	C,6
+	LDIR				; source: the station address
 	LD	HL,IP_FIXED
-	LD	BC,IP_FIXED_LEN
+	LD	C,IP_FIXED_LEN
 	LDIR				; type 0800, 45 00, length 0, id 0, DF, TTL 64
 	POP	AF
+	PUSH	AF
 	LD	(DE),A			; protocol
 	INC	DE
 	XOR	A
 	LD	(DE),A			; checksum 0
 	INC	DE
 	LD	(DE),A
-	INC	DE
-	LD	HL,CX_LOCAL_IP
-	CALL	.ctx_copy4		; source
-	LD	HL,CX_PEER_IP
-	CALL	.ctx_copy4		; destination
-	LD	HL,UCTX_TP + 3 - CTX_BIAS
-	CALL	.ctx_hl
+	INC	DE			; DE -> ETH_IP_SRC
+	LD	HL,UCTX_LOCAL_IP - UCTX_TXH - ETH_IP_SRC
+	ADD	HL,DE
+	LD	C,4
+	LDIR				; source
+	LD	HL,UCTX_PEER_IP - UCTX_TXH - ETH_IP_SRC - 4
+	ADD	HL,DE
+	LD	C,4
+	LDIR				; destination; DE -> ETH_L4
+	LD	HL,UCTX_TP + 3 - UCTX_TXH - ETH_L4
+	ADD	HL,DE
 	LD	A,(HL)			; local port, network order
 	LD	(DE),A
 	INC	DE
@@ -63,53 +69,51 @@ IP_TEMPLATE
 	INC	DE
 	LD	A,(IY+CX_PEER_PORT)
 	LD	(DE),A
-	; TPT_IPS0: the 20-byte IPv4 header as it stands
-	PUSH	IX
-	POP	HL
-	LD	DE,ETH_IP
-	ADD	HL,DE
-	EX	DE,HL
-	LD	HL,0
-	LD	BC,IP_HDR
-	CALL	CSUM_RAM
-	PUSH	HL
-	LD	HL,UCTX_TP + TPT_IPS0 - CTX_BIAS
-	CALL	.ctx_hl
-	POP	DE
-	LD	(HL),E
-	INC	HL
-	LD	(HL),D
-	; TPT_L4S0: addresses + ports (12 bytes from offset 26) + protocol
-	PUSH	IX
-	POP	HL
-	LD	DE,ETH_IP_SRC
-	ADD	HL,DE
-	EX	DE,HL
-	LD	HL,0
-	LD	BC,12
-	CALL	CSUM_RAM
-	LD	E,(IX+ETH_IP_PROTO)
-	LD	D,0
-	CALL	CSUM_ADD_BE
-	PUSH	HL
-	LD	HL,UCTX_TP + TPT_L4S0 - CTX_BIAS
-	CALL	.ctx_hl
-	POP	DE
-	LD	(HL),E
-	INC	HL
-	LD	(HL),D
-	RET
-.ctx_copy4				; copy 4 context bytes at CX offset HL to DE
-	CALL	.ctx_hl
-	LD	BC,4
-	LDIR
-	RET
-.ctx_hl					; HL = IY + HL.  Preserves DE.
-	PUSH	DE
+	; sums (byte-swapped domain, csum.asm): S = the 8 address bytes;
+	; TPT_IPS0 = S + the first 10 header bytes (checksum 0 follows),
+	; TPT_L4S0 = S + both ports + protocol
+	LD	HL,UCTX_TXH + ETH_IP_SRC - CTX_BIAS
 	PUSH	IY
 	POP	DE
 	ADD	HL,DE
-	POP	DE
+	EX	DE,HL
+	LD	HL,0
+	LD	BC,8
+	CALL	CSUM_RAM		; HL = S, DE -> ports
+	PUSH	HL			; [protocol][S]
+	LD	BC,4
+	CALL	CSUM_RAM		; HL = S + ports
+	POP	BC			; S
+	POP	AF			; protocol
+	PUSH	BC
+	LD	E,A
+	LD	D,0
+	CALL	CSUM_ADD_BE
+	EX	DE,HL			; DE = L4S0
+	LD	HL,UCTX_TP + TPT_L4S0 - CTX_BIAS
+	PUSH	IY
+	POP	BC
+	ADD	HL,BC
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
+	POP	HL			; S
+	LD	DE,UCTX_TXH + ETH_IP - CTX_BIAS
+	PUSH	IY
+	POP	BC
+	EX	DE,HL
+	ADD	HL,BC
+	EX	DE,HL			; DE -> the IPv4 header
+	LD	BC,10
+	CALL	CSUM_RAM		; HL = IPS0
+	EX	DE,HL
+	LD	HL,UCTX_TP + TPT_IPS0 - CTX_BIAS
+	PUSH	IY
+	POP	BC
+	ADD	HL,BC
+	LD	(HL),E
+	INC	HL
+	LD	(HL),D
 	RET
 
 IP_FIXED
@@ -158,7 +162,8 @@ L4_SUM0
 	RET
 
 ; TX_FRAME_SET: the transport frame in ctx.txh is ready: A = header bytes,
-; HL = payload source, BC = payload length.
+; HL = payload source, BC = payload length.  HS_TXREM counts the header
+; and the payload still to write (the header goes first, as DATA portions).
 TX_FRAME_SET
 	PUSH	HL
 	PUSH	BC
@@ -168,13 +173,13 @@ TX_FRAME_SET
 	ADD	IX,DE
 	LD	(IX+HS_TXHDR),A
 	POP	BC
-	LD	(IX+HS_TXREM),C
-	LD	(IX+HS_TXREM+1),B
 	LD	L,A
 	LD	H,0
 	ADD	HL,BC
 	LD	(IX+HS_TXLEN),L
 	LD	(IX+HS_TXLEN+1),H
+	LD	(IX+HS_TXREM),L
+	LD	(IX+HS_TXREM+1),H
 	POP	HL
 	LD	(IX+HS_TXSRC),L
 	LD	(IX+HS_TXSRC+1),H

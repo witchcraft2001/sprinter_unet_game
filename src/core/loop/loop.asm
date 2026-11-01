@@ -5,8 +5,8 @@
 ; dropped (and counted) when no slot is free.
 
 LOOP_CHUNK	EQU	128		; largest copy portion (bytes)
-COST_LOOP_ITER	EQU	80		; one pass over the TX cursor, taken before it
-COST_LOOP_FIXED	EQU	110		; copy portion besides LDIR, incl. slot completion
+COST_LOOP_ITER	EQU	60		; one pass over the TX cursor, taken before it (42 us)
+COST_LOOP_FIXED	EQU	150		; copy portion besides LDIR, incl. slot completion
 	ASSERT	COST_LOOP_ITER + COST_LOOP_FIXED + 16 <= PROF_MAX_ITEM_US	; progress of 16 bytes per STEP
 
 TP_OPEN

@@ -16,33 +16,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4150
+    "quota_sum_us": 3375
   },
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 85,
+    "min_useful_budget_us": 415,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1300,
+      "poll": 950,
       "card": 0,
-      "main": 2750,
+      "main": 2325,
       "service": 100
     },
-    "cost_poll_us": 130,
-    "cost_step_us": 550,
-    "periods": 43,
-    "largest_period_debit_us": 4050,
-    "now_ms": 867,
+    "cost_poll_us": 95,
+    "cost_step_us": 465,
+    "periods": 45,
+    "largest_period_debit_us": 3275,
+    "now_ms": 899,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 214,
-      "early": 442,
-      "frames": 35,
-      "ticks": 434,
+      "step": 221,
+      "early": 463,
+      "frames": 36,
+      "ticks": 450,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,19 +57,17 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 316,
-    "steps_total": 214,
-    "steps_useful": 214,
-    "budget_yields": 204,
-    "max_step_gap_ms": 6,
-    "tx_frames": 1,
-    "tx_bytes": 100
+    "polls_total": 334,
+    "steps_total": 221,
+    "steps_useful": 221,
+    "budget_yields": 203,
+    "max_step_gap_ms": 6
   },
   "timing_us": {
-    "tick_isr_max": 389,
-    "admitted_ug_step_max": 1115,
+    "tick_isr_max": 306,
+    "admitted_ug_step_max": 979,
     "largest_tick_gap": 2053,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.734 now_ms per emulated ms, TICK_MS 2.723, FRAME_MS 20.480, STEP_CALLS_PER_S 174 (over 0.5 s)"
+  "clock": "CLOCK_RATE 0.785 now_ms per emulated ms, TICK_MS 2.547, FRAME_MS 20.480, STEP_CALLS_PER_S 186 (over 0.5 s)"
 }

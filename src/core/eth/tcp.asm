@@ -64,19 +64,19 @@ TCP_PREP_SUM	EQU	1
 TCP_PREP_READY	EQU	2
 TCP_PREP_PRE	EQU	3	; IPv4 header done, TC_SUM = pseudo header + payload
 
-TCP_SUM_CHUNK	EQU	128
-COST_TCP_STEP	EQU	165	; timers + segment choice (148 us)
-COST_TCP_IDLE	EQU	45	; segment choice without due timers (31 us)
-COST_TCP_DATA	EQU	155	; choosing a data segment (slot cursor, window; 139 us)
-COST_TCP_INPUT	EQU	160
-COST_TEMPLATE	EQU	210	; SYN: IP_TEMPLATE + control segment (stand: 198 us)
+TCP_SUM_CHUNK	EQU	96		; bytes summed per item (100 + 96 units)
+COST_TCP_STEP	EQU	205	; timers + segment choice (183 us)
+COST_TCP_CTRL	EQU	50	; a control segment (pure ACK, FIN) prepared by TCP_CHOOSE (32 us)
+COST_TCP_DATA	EQU	180	; choosing a data segment (slot cursor, window, stall timer; 162 us)
+COST_TP_ACK	EQU	215	; TCP_ACKED: released slots, rewind, timers, window (ERX_TCPACK; 191 us)
+COST_TEMPLATE	EQU	195	; SYN: IP_TEMPLATE + control segment (177 us)
 	ASSERT	COST_TCP_STEP <= PROF_MAX_ITEM_US
-	ASSERT	COST_TCP_INPUT <= PROF_MAX_ITEM_US
-	ASSERT	COST_TCP_IDLE + COST_TEMPLATE <= PROF_MAX_ITEM_US	; idle step -> SYN in one STEP
-	ASSERT	COST_TCP_IDLE + COST_TCP_DATA <= PROF_MAX_ITEM_US
+	ASSERT	COST_TP_ACK <= PROF_MAX_ITEM_US
+	ASSERT	COST_TEMPLATE <= PROF_MAX_ITEM_US	; SYN: taken without the idle step
+	ASSERT	COST_TCP_DATA <= PROF_MAX_ITEM_US && COST_TCP_CTRL <= PROF_MAX_ITEM_US && COST_TCP_DATA < 256
 COST_TERMINATE	EQU	60	; CH_TERMINATE (stand: 51 us)
-COST_TP_PRE	EQU	110	; TX pull, stage 1: IPv4 header, pseudo-header sum (58 us)
-COST_TP_HDR	EQU	190	; TX pull, stage 2: TCP header fields + their sum, frame, RTX (175 us)
+COST_TP_PRE	EQU	75	; TX pull, stage 1: IPv4 header, pseudo-header sum (59 us)
+COST_TP_HDR	EQU	195	; TX pull, stage 2: TCP header fields + their sum, frame, RTX (174 us)
 	ASSERT	COST_TP_PRE <= PROF_MAX_ITEM_US && COST_TP_HDR <= PROF_MAX_ITEM_US
 
 	MACRO	TP_IX
@@ -250,18 +250,10 @@ TP_STEP
 .active
 	BIT	4,(IY+CX_TMR_FLAGS)	; UTMR_TPDUE: timers owed
 	JR	NZ,.due
-	; no timer due, a segment prepared for the engine and no window to
-	; announce: nothing to choose, no budget taken
-	LD	A,(IX+TC_PREP)
-	CP	TCP_PREP_READY
-	JR	C,.idle
-	BIT	2,(IY+CX_CHAN_FLAGS)	; UCHF_WINUPD
-	RET	Z
-.idle
-	LD	HL,COST_TCP_IDLE
-	CALL	TAKE
-	RET	C
-	TP_IX
+	; no timer due: every choice takes its own cost (TCP_CHOOSE: SYN
+	; template, data segment, control segment, terminate; summing per
+	; byte); the checks around them and the window flag are base time, so
+	; no idle step eats the budget of the item it leads to
 	LD	A,(IX+TC_ST)
 	CP	TCS_ARP
 	RET	Z			; ARP progress always invalidates the cache
@@ -374,7 +366,16 @@ TCP_REWIND
 	SET	1,(IX+TC_FL)
 	RET
 
+; TCP_REARM_RTX: the same for a running timer whose interval index was
+; and stays 0 (a partial ACK): the deadline only moves later, the timer
+; cache stays early without a check (DL_ARM).
+TCP_REARM_RTX
+	LD	BC,DL_ARM
+	JR	TCP_ARM_RTX.idx
 TCP_ARM_RTX
+	LD	BC,DL_SET_MIN
+.idx
+	PUSH	BC			; the arming routine is the return address
 	SET	0,(IX+TC_TMR)
 	LD	A,(IX+TC_RTXI)
 	ADD	A,A
@@ -392,18 +393,22 @@ TCP_ARM_RTX
 	POP	HL
 	LD	BC,TC_RTXDL
 	ADD	HL,BC
-	JP	DL_SET
+	RET				; -> DL_SET_MIN / DL_ARM
 
-; TCP_ARM_STALL: stall deadline = now + send_stall_timeout_ms.
+; TCP_ARM_STALL: stall deadline = now + send_stall_timeout_ms.  Re-armed
+; while running (progress) it only moves later: DL_ARM keeps the timer
+; cache early; a new stall timer goes through DL_SET_MIN.
 TCP_ARM_STALL
-	SET	1,(IX+TC_TMR)
 	LD	E,(IY+CX_SEND_STALL_TIMEOUT_MS)
 	LD	D,(IY+CX_SEND_STALL_TIMEOUT_MS+1)
 	PUSH	IX
 	POP	HL
 	LD	BC,TC_STALL
 	ADD	HL,BC
-	JP	DL_SET
+	BIT	1,(IX+TC_TMR)
+	SET	1,(IX+TC_TMR)		; (SET keeps Z)
+	JP	NZ,DL_ARM
+	JP	DL_SET_MIN
 
 ; ----------------------------------------------------------------------
 ; TCP_CHOOSE: decide the next segment (RST is not sent in v1: ABORT just
@@ -449,6 +454,15 @@ TCP_CHOOSE
 	CP	UTX_SENDING
 	JP	NZ,.fin
 .slot
+	LD	A,(IY+CX_UNITS+1)	; a refusal without TAKE (base time)
+	OR	A
+	JR	NZ,.slot_take
+	LD	A,(IY+CX_UNITS)
+	CP	COST_TCP_DATA
+	JR	NC,.slot_take
+	SET	4,(IY+CX_WORK)		; UWK_YIELD: next STEP
+	RET
+.slot_take
 	PUSH	HL
 	LD	HL,COST_TCP_DATA
 	CALL	TAKE
@@ -549,6 +563,9 @@ TCP_CHOOSE
 	; no data waiting at the cursor: FIN when asked for
 	BIT	1,(IX+TC_FL)
 	JR	Z,.ack_only
+	LD	HL,COST_TCP_CTRL
+	CALL	TAKE			; keeps IX
+	RET	C
 	RES	1,(IX+TC_FL)
 	SET	2,(IX+TC_FL)		; TCF_FINSENT
 	SEQ_COPY TC_TXSEQ, TC_NXT
@@ -583,6 +600,9 @@ TCP_CHOOSE
 	RET	NZ
 	JR	.finished
 .pure_ack
+	LD	HL,COST_TCP_CTRL
+	CALL	TAKE			; keeps IX
+	RET	C
 	SEQ_COPY TC_TXSEQ, TC_NXT
 	LD	A,TCPF_ACK
 .control
@@ -616,7 +636,7 @@ TCP_PREP_SUMMING
 	LD	HL,TCP_SUM_CHUNK
 	CALL	MIN_DE_HL
 	PUSH	DE
-	LD	HL,80			; summing portion overhead (stand: 201 us / 128 B)
+	LD	HL,100			; summing portion overhead (stand: 1.0 us / unit at 80 + 128)
 	LD	A,0
 	CALL	BUDGET_BYTES		; BC = affordable bytes (<= DE)
 	POP	DE
@@ -701,13 +721,11 @@ TP_TX_PULL
 	LD	(IX+TC_PREP),TCP_PREP_PRE
 .hdr
 	LD	HL,COST_TP_HDR
-	CALL	TAKE
+	CALL	TAKE			; keeps IX = tp
 	RET	C
-	TP_IX
 	LD	(IX+TC_PREP),TCP_PREP_NONE
-	CALL	TCP_HDR_FILL
+	CALL	TCP_HDR_FILL		; IX = tp in and out
 	CALL	TCP_CSUM_TX
-	TP_IX
 	LD	A,(IX+TC_HLEN)
 	ADD	A,ETH_L4
 	LD	L,(IX+TC_SRC)
@@ -741,8 +759,8 @@ TCP_LEN
 
 ; TCP_HDR_FILL: the variable part of the TCP header (ports are in the
 ; template): sequence, acknowledgment, offset, flags, window, options.
+; IX = tp (kept).
 TCP_HDR_FILL
-	TP_IX
 	LD	DE,UCTX_TXH + TCP_SEQ - CTX_BIAS
 	PUSH	IY
 	POP	HL
@@ -812,21 +830,15 @@ TCP_HDR_FILL
 
 ; TCP_CSUM_TX: the TCP checksum into ctx.txh: TC_SUM (pseudo header with
 ; the ports and the length, payload; TP_TX_PULL stage 1) + the header from
-; the sequence field.  Clobbers A, BC, DE, HL.
+; the sequence field.  IX = tp (kept).  Clobbers A, BC, DE, HL.
 TCP_CSUM_TX
 	; TC_SUM = pseudo header (with ports and length) + payload (stage 1)
-	LD	A,TC_HLEN
-	CALL	TP_FIELD
-	LD	A,(HL)
+	LD	A,(IX+TC_HLEN)
 	SUB	4			; ports are already in L4S0
 	LD	C,A
 	LD	B,0
-	LD	A,TC_SUM
-	CALL	TP_FIELD
-	LD	A,(HL)
-	INC	HL
-	LD	H,(HL)
-	LD	L,A
+	LD	L,(IX+TC_SUM)
+	LD	H,(IX+TC_SUM+1)
 	PUSH	HL
 	LD	DE,UCTX_TXH + TCP_SEQ - CTX_BIAS
 	PUSH	IY
@@ -1241,11 +1253,12 @@ TP_RX_COMMIT
 	SET	1,(IY+CX_WORK)
 	RET
 .synchronized
-	LD	A,(IX+TC_RXFL)
-	BIT	4,A			; ACK
-	CALL	NZ,TCP_ACKED
-	TP_IX
-	; payload
+	; the ACK is the next item (ERX_TCPACK -> TP_RX_ACK): data and FIN
+	; first give the same final states (FW1 + FIN + ACK: CLOSING -> DONE)
+	BIT	4,(IX+TC_RXFL)		; ACK
+	JR	Z,.payload
+	LD	(IY+EX_RXS),ERX_TCPACK
+.payload
 	LD	A,(IX+TC_RXLEN)
 	OR	(IX+TC_RXLEN+1)
 	JR	Z,.fin
@@ -1309,6 +1322,14 @@ TP_RX_COMMIT
 	LD	(IX+TC_ST),TCS_DONE	; finished once the ACK is out
 	RET
 
+; TP_RX_ACK: the ACK of the segment TP_RX_COMMIT accepted (engine state
+; ERX_TCPACK, its own budget item).  Nothing when the connection went away
+; in between.
+TP_RX_ACK
+	TP_IX
+	LD	A,(IX+TC_ST)
+	CP	TCS_SYN
+	RET	C
 ; TCP_ACKED: process TC_RXACK.  IX = tp.
 TCP_ACKED
 	SEQ_SUB	TC_RXACK, TC_UNA	; BC = newly acknowledged
@@ -1347,8 +1368,7 @@ TCP_ACKED
 .data_only
 	SEQ_COPY TC_UNA, TC_RXACK
 	POP	BC
-	CALL	TCP_RELEASE		; BC data bytes acknowledged
-	TP_IX
+	CALL	TCP_RELEASE		; BC data bytes acknowledged (keeps IX)
 	; A prepared data segment that starts before the new UNA (a
 	; retransmission overtaken by the ACK of the original) points into
 	; slots that may be reused now: drop it and send again from UNA.
@@ -1384,17 +1404,28 @@ TCP_ACKED
 	LD	(IX+TC_SEGS),1
 	SEQ_COPY TC_SEG1, TC_NXT
 .restart
+	LD	A,(IX+TC_RTXI)
 	LD	(IX+TC_RTXI),0
+	OR	A
+	JR	NZ,.rtx_back		; a backed-off interval: the deadline may move earlier
+	BIT	0,(IX+TC_TMR)
+	JR	Z,.rtx_back
+	LD	BC,DL_ARM		; TCP_REARM_RTX
+	CALL	TCP_ARM_RTX.idx
+	JR	.rtx_set
+.rtx_back
 	CALL	TCP_ARM_RTX
-	TP_IX
-	CALL	TCP_ARM_STALL
-	TP_IX
-.window
-	JP	TCP_TAKE_WINDOW
+.rtx_set
+	CALL	TCP_ARM_STALL		; the arming routines keep IX
+.window					; TCP_TAKE_WINDOW
+	LD	A,(IX+TC_RXWND)
+	LD	(IX+TC_SWND),A
+	LD	A,(IX+TC_RXWND+1)
+	LD	(IX+TC_SWND+1),A
+	RET
 
-; TCP_TAKE_WINDOW: peer window from the received segment.
+; TCP_TAKE_WINDOW: peer window from the received segment.  IX = tp.
 TCP_TAKE_WINDOW
-	TP_IX
 	LD	A,(IX+TC_RXWND)
 	LD	(IX+TC_SWND),A
 	LD	A,(IX+TC_RXWND+1)

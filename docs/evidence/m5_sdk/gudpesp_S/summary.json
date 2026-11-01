@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 4.0,
+  "wall_s": 4.1,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -16,33 +16,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4150
+    "quota_sum_us": 3375
   },
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 85,
+    "min_useful_budget_us": 415,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1300,
+      "poll": 950,
       "card": 0,
-      "main": 2750,
+      "main": 2325,
       "service": 100
     },
-    "cost_poll_us": 130,
-    "cost_step_us": 550,
-    "periods": 643,
-    "largest_period_debit_us": 4065,
-    "now_ms": 12865,
+    "cost_poll_us": 95,
+    "cost_step_us": 465,
+    "periods": 662,
+    "largest_period_debit_us": 3305,
+    "now_ms": 13236,
     "stats": {
-      "refuse": 1,
+      "refuse": 6,
       "busy": 0,
       "isr": 0,
-      "step": 3152,
-      "early": 4768,
-      "frames": 491,
-      "ticks": 6435,
+      "step": 3252,
+      "early": 6606,
+      "frames": 509,
+      "ticks": 6621,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,21 +57,21 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 8135,
-    "steps_total": 3152,
-    "steps_useful": 3152,
-    "budget_yields": 2793,
-    "max_step_gap_ms": 12,
+    "polls_total": 8342,
+    "steps_total": 3252,
+    "steps_useful": 3252,
+    "budget_yields": 2867,
+    "max_step_gap_ms": 10,
     "tx_frames": 16,
     "rx_frames": 16,
     "tx_bytes": 8192,
     "rx_bytes": 8192
   },
   "timing_us": {
-    "tick_isr_max": 390,
-    "admitted_ug_step_max": 1282,
+    "tick_isr_max": 310,
+    "admitted_ug_step_max": 1193,
     "largest_tick_gap": 2053,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 245 (over 12.3 s)"
+  "clock": "CLOCK_RATE 0.995 now_ms per emulated ms, TICK_MS 2.008, FRAME_MS 20.480, STEP_CALLS_PER_S 244 (over 12.8 s)"
 }

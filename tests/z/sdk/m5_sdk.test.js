@@ -70,7 +70,7 @@ for (const dll of DLLS) {
 
 test('UG_INIT_ENV refusals: target, poll gap, budgets, profile, INIT_CONFIG', () => {
   const cases = [
-    [{ flags: 0 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_REFUSED],
+    [{ flags: 0, target: 1500 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_REFUSED],   // quotas over a strict target
     [{ tick_us: 2400 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_GAP],
     [{ step_budget: 501 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
     [{ step_budget: 300 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
@@ -295,10 +295,14 @@ test('gtcp509b: CBL flag, key opportunity, SHUTDOWN with the channel open, exit 
   clean(a);
 });
 
-// ---- ТЗ targets not met with the current core ----------------------------------------
+// ---- ТЗ §5.1 / §3 bounds of the default profile ------------------------------------
 for (const dll of CARDS) {
-  test(`${dll}: network quotas within 2000 us per period (ТЗ §5.1)`, { todo: 'core speed: 10 polls x (empty poll + 45) + 2 STEPs x (min_useful + 50) = 2500..2600 us (docs/MEASUREMENTS.md)' }, () => {
+  // 10 polls x (empty poll + return + UG_OVH_ISR_US) + 2 STEPs x (min_useful
+  // + UG_OVH_STEP_US) + service 100 (docs/MEASUREMENTS.md)
+  test(`${dll}: network quotas within 2000 us per period (ТЗ §5.1)`, () => {
     const a = boot(dll);
+    assert.equal(a.env.a, S.OK);
+    assert.equal(a.block().env, UG.UG_ENV_OK);
     assert.ok(a.block().sum <= 2000, `quota sum ${a.block().sum} us`);
   });
   test(`${dll}: ISR path bound (STEP_ISR budget + gateway + tick) <= 200 us (ТЗ §3)`, () => {

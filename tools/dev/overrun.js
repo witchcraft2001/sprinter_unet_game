@@ -7,46 +7,31 @@
 // Usage: node tools/dev/overrun.js gtcprtl [budget]
 'use strict';
 const { ethStand } = require('../harness/ethnet.js');
-const A = require('../harness/abi.json');
+const { budgetTracker } = require('./budget_calls.js');
 const dll = process.argv[2] || 'gtcprtl';
 const budget = +(process.argv[3] || 500);
 const s = ethStand({ dll });
 s.call('INIT');
 s.initConfig(s.defaultConfig({ step_budget_us: budget }));
-const ua = s.layout().ctx + A.ctx.fields.units.offset;
-const syms = Object.entries(s.syms).filter(([k]) => !k.includes('.') && /^[A-Z]/.test(k)).map(([k, v]) => [s.base + 0x20 + v, k]).sort((a, b) => a[0] - b[0]);
-const owner = (pc) => { let b = '?'; for (const [a, k] of syms) { if (a <= pc) b = k; else break; } return b; };
-const pts = { [s.sym('TAKE')]: 'T', [s.sym('BUDGET_BYTES')]: 'B' };
-if ('PARSE_BUDGET' in s.syms) pts[s.sym('PARSE_BUDGET')] = 'P';   // ESP parser rounds (BC = -threshold)
+const tr = budgetTracker(s);
 let n = 0, over = 0, baseMax = 0, baseAt = -1, needMax = 0, needAt = -1;
-const itemMax = {};                     // caller/cost -> [max real us, reserved]
+const itemMax = {};                     // caller:reserved -> max real us
 const run = (k) => { for (let i = 0; i < k; i++) {
-  const log = []; let c0 = null; const calls = [];
   s.pump(); s.t += 10;
   const prof = (process.env.PROFILE || (process.env.AT && +process.env.AT === n)) ? s.profileHook() : null;
-  const r = s.step(s.t, budget, 0, { onStep: (m, st) => {
-    if (prof) prof.hook(m, st);
-    if (c0 === null) c0 = m.cycles;
-    const l = pts[st.pc];
-    if (l) calls.push({ t: (m.cycles - (c0 ?? m.cycles)) / m.mhz, u: m.peek16(ua), cost: (st.h << 8) | st.l, who: owner(m.peek16(st.sp) - 3) + (l === 'B' ? '/bytes' : l === 'P' ? '/round' : '') });
-    if (l) log.push(`${((m.cycles - c0) / m.mhz).toFixed(0)}us ${l}${l === 'P' ? (0x10000 - ((st.b << 8) | st.c)) + ' de' + ((st.d << 8) | st.e) : (st.h << 8) | st.l}@${owner(m.peek16(st.sp) - 3)} left ${m.peek16(ua)}`);
-  } });
+  tr.reset();
+  const r = s.step(s.t, budget, 0, { onStep: (m, st) => { if (prof) prof.hook(m, st); tr.onStep(m, st); } });
   s.pump();
   // base path = the whole call minus the work bought by successful budget
-  // calls (a call succeeded when the units dropped before the next one)
-  let items = 0, reserved = 0;
-  for (let k = 0; k < calls.length; k++) {
-    const next = calls[k + 1];
-    const uAfter = next ? next.u : null;
-    const tNext = next ? next.t : r.us;
-    const used = (uAfter ?? s.m.peek16(ua));
-    if (used < calls[k].u) {                 // the base reserve is inline (no TAKE)
-      const real = tNext - calls[k].t;
-      items += real;
-      reserved += calls[k].u - used;
-      const key = `${calls[k].who}:${calls[k].u - used}`;
-      if (!itemMax[key] || itemMax[key] < real) itemMax[key] = real;
-    }
+  // calls, after refunds (budget_calls.js)
+  const { items: its, reserved, calls } = tr.finish(r.us);
+  const log = calls.map((c) => `${c.t.toFixed(0)}us ${c.kind === '/round' ? 'P' + (0x10000 - c.bc) + ' de' + c.de : c.kind === '/bytes' ? 'B' + c.cost : 'T' + c.cost}@${c.who}` +
+    ` left ${c.u} took ${c.taken}${c.refund ? ' refunded ' + c.refund : ''}`);
+  let items = 0;
+  for (const x of its) {
+    items += x.real;
+    const key = `${x.who}:${x.reserved}`;
+    if (!itemMax[key] || itemMax[key] < x.real) itemMax[key] = x.real;
   }
   const base = r.us - items;
   // what the fixed STEP reserve must cover for this call to stay in budget

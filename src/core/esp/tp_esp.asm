@@ -9,17 +9,16 @@
 ; UDP (GUDPESP): active receive ("+IPD,0,<len>:<data>"), one datagram per
 ; RX slot, dropped and counted when no slot is free or it does not fit.
 
-COST_ESP_STEP	EQU	90	; TP_STEP entry, pending / overrun checks, sequencer dispatch and job checks
-; Chains one STEP must afford after the transport entry (min_useful_budget):
-; a parse round, a pending line action, a job start, a command piece, a
-; command result.  A job start and its first piece need not share a STEP:
-; ESP_ISSUE leaves ECS_BUILD, and a refused piece is built next STEP.
-	ASSERT	COST_ESP_STEP + COST_PARSE + 8 <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_PARSE + COST_PAY + 1 <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_LINE <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_PICK <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_PIECE <= PROF_MAX_ITEM_US
-	ASSERT	COST_ESP_STEP + COST_RESULT <= PROF_MAX_ITEM_US
+; TP_STEP takes no cost of its own: the pending / overrun checks and the
+; sequencer and parser dispatch are base time, and every action takes its
+; own cost (a parse round, a pending line action, a job start, a command
+; piece, a command result), so no transport entry eats the budget of the
+; item it leads to.  A job start and its first piece need not share a
+; STEP: ESP_ISSUE leaves ECS_BUILD, and a refused piece is built next STEP.
+	ASSERT	COST_PARSE + 8 <= PROF_MAX_ITEM_US
+	ASSERT	COST_PARSE + COST_PAY + 1 <= PROF_MAX_ITEM_US
+	ASSERT	COST_LINE <= PROF_MAX_ITEM_US && COST_PICK <= PROF_MAX_ITEM_US
+	ASSERT	COST_PIECE <= PROF_MAX_ITEM_US && COST_RESULT <= PROF_MAX_ITEM_US
 
 ; TP_OPEN: CIPSTART is issued by the sequencer once the module is idle.
 TP_OPEN
@@ -108,9 +107,6 @@ TP_STEP
 .hw
 	BIT	ESF_UP,(IY+EX_FLAGS)
 	RET	Z
-	LD	HL,COST_ESP_STEP
-	CALL	TAKE
-	RET	C
 	BIT	ESF_OVERRUN,(IY+EX_FLAGS)
 	JR	Z,.parse
 	LD	HL,COST_LINE
@@ -124,11 +120,7 @@ TP_STEP
 	; STEP counter; bit 0 alternates hardware and transport), so neither a
 	; long reply nor a busy sequencer starves the other
 	CALL	ESP_PEND
-	LD	BC,UCTX_STATS - 4 + UNETG_STATS_STEPS_TOTAL - CTX_BIAS
-	PUSH	IY
-	POP	HL
-	ADD	HL,BC
-	BIT	1,(HL)
+	BIT	USCH_ODD2,(IY+CX_SCHED_FLAGS)
 	JR	Z,.seq_first
 	CALL	ESP_PARSE
 	CALL	ESP_PEND

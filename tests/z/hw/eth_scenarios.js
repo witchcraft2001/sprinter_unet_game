@@ -12,6 +12,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ethStand, C } = require('../../../tools/harness/ethnet.js');
+const A = require('../../../tools/harness/abi.json');
 
 const S = C.status;
 const UHW_RUN = 2;
@@ -104,15 +105,21 @@ function nestedIsr(s, seed = 12345) {
     0xed, 0x7b, ISR_SAVE & 255, ISR_SAVE >> 8,     // LD SP,(save)
     0xfb, 0xed, 0x4d,                               // EI : RETI
   ]);
-  let x = seed, taken = 0, insideIsr = false, c0 = 0;
-  const st = { taken: 0, statuses: [], maxUs: 0 };
+  let x = seed, taken = 0, insideIsr = false, c0 = 0, saved = null;
+  const st = { taken: 0, statuses: [], maxUs: 0, touched: new Set() };
+  // the per-call fields of the interrupted STEP: STEP_ISR writes none
+  const callFields = ['call_flags', 'work', 'units', 'flags_out'].map((k) => [k, L.ctx + A.ctx.fields[k].offset, A.ctx.fields[k].size]);
+  const snap = () => callFields.map(([, a, n]) => m.peekBytes(a, n).join(','));
   s.stepOpts = {
     slackUs: 200,                                   // the ISR runs inside the measured STEP
     onStep: (mm, cpu) => {
-      if (cpu.pc === ISR_STUB) insideIsr = true;
+      if (cpu.pc === ISR_STUB) { insideIsr = true; saved = snap(); }
       if (insideIsr && cpu.pc === e) c0 = mm.cycles;
       if (insideIsr && cpu.pc === ISR_STUB + 19) st.maxUs = Math.max(st.maxUs, (mm.cycles - c0) / mm.mhz);
-      if (insideIsr && cpu.pc === ISR_STUB + 30) { insideIsr = false; st.statuses.push(mm.peek(ISR_LOG)); }
+      if (insideIsr && cpu.pc === ISR_STUB + 30) {
+        insideIsr = false; st.statuses.push(mm.peek(ISR_LOG));
+        snap().forEach((v, i) => { if (v !== saved[i]) st.touched.add(callFields[i][0]); });
+      }
       // a real Z80 takes no interrupt right after DI (the vendored core
       // applies DI one instruction late: do_delayed_di)
       if (taken > 0 || !cpu.iff1 || cpu.do_delayed_di || !mm.pcInImage()) return;
@@ -154,7 +161,7 @@ function transportScenarios(dll) {
   test(`${dll}: the minimum useful budget from GET_INFO still moves data`, () => {
     const probe = boot(dll, {}, { noBoot: true });
     const min = probe.getInfo().info.min_useful_budget_us;
-    assert.ok(min <= 500, `min_useful_budget_us ${min}`);
+    assert.ok(min <= 425, `min_useful_budget_us ${min}`);   // the 2000 us quota of the SDK profile
     const s = boot(dll, {}, { budget: min });
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -164,6 +171,26 @@ function transportScenarios(dll) {
     const rx = s.drain().bytes;                    // ESP: passive reads come in pieces
     for (let i = 0; i < 3000 && rx.length < d.length; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
     assert.deepEqual(rx, d);
+    clean(s);
+  });
+
+  test(`${dll}: at the minimum budget STEP itself publishes the TX_DONE of a lone send`, () => {
+    // A full card poll and the TX scan left less than one publication in a
+    // minimum STEP: TX_DONE was refused in every STEP (and the scan paid
+    // again) until the game read its events -- NEXT_EVENT flushes without a
+    // budget.  UCLK_EV_FIRST: the next STEP flushes the events first.  The
+    // queue is checked without reading it.
+    const probe = boot(dll, {}, { noBoot: true });
+    const min = probe.getInfo().info.min_useful_budget_us;
+    const s = boot(dll, {}, { budget: min });
+    assert.equal(s.open().a, S.OK);
+    s.until(has('CONNECTED'), 3000, 10);
+    s.run(50, 10); s.events(); s.drain();
+    assert.equal(s.send(bytes(100, 4), 0x31).commit.a, S.OK);
+    s.run(300, 10);                                // nobody reads the events
+    assert.equal(s.ctx('ev_flags') & 0x80, 0, 'no TX outcome held (UEVF_TXDONE)');
+    assert.notEqual(s.ctx('ev_head'), s.ctx('ev_tail'), 'events queued by STEP');
+    assert.ok(s.events().some((e) => e.name === 'TX_DONE' && e.tag === 0x31));
     clean(s);
   });
 
@@ -213,6 +240,7 @@ function transportScenarios(dll) {
     assert.ok(st.maxUs <= 150, `nested STEP_ISR took ${st.maxUs.toFixed(1)} us, budget 150`);
     assert.equal(s.m.peek(s.layout().lock), 0, 'ISA lock free');
     assert.equal(s.ctx('call_flags'), 0);
+    assert.deepEqual([...st.touched], [], 'per-call fields written by STEP_ISR');
     assert.ok(st.statuses.every((a) => [S.OK, S.IDLE, S.WORK, S.BUS_BUSY].includes(a)), `STEP_ISR statuses ${[...new Set(st.statuses)]}`);
     clean(s);
   });
@@ -250,7 +278,7 @@ function transportScenarios(dll) {
     s.events();
     const info = s.getInfo().info;
     let empty = 0;
-    for (const b of [40, 60, 100, 135, 150]) {
+    for (const b of [40, 60, 64, 65, 70, 100, 135, 150]) {   // around PROF_ISR_MIN_US
       const r = s.stepIsr(C.src.TIMER, b);
       assert.deepEqual(r.problems, [], `budget ${b}`);
       assert.ok(r.a === S.IDLE || r.a === S.YIELD, `status ${r.a} on a quiet channel`);

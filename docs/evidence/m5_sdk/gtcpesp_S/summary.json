@@ -16,33 +16,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4150
+    "quota_sum_us": 3375
   },
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 85,
+    "min_useful_budget_us": 415,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1300,
+      "poll": 950,
       "card": 0,
-      "main": 2750,
+      "main": 2325,
       "service": 100
     },
-    "cost_poll_us": 130,
-    "cost_step_us": 550,
-    "periods": 811,
-    "largest_period_debit_us": 4050,
-    "now_ms": 16215,
+    "cost_poll_us": 95,
+    "cost_step_us": 465,
+    "periods": 850,
+    "largest_period_debit_us": 3305,
+    "now_ms": 17009,
     "stats": {
-      "refuse": 0,
+      "refuse": 3,
       "busy": 0,
       "isr": 0,
-      "step": 3984,
-      "early": 7088,
-      "frames": 609,
-      "ticks": 8111,
+      "step": 4188,
+      "early": 8578,
+      "frames": 678,
+      "ticks": 8508,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,21 +57,21 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 10263,
-    "steps_total": 3984,
-    "steps_useful": 3984,
-    "budget_yields": 3589,
-    "max_step_gap_ms": 12,
+    "polls_total": 10758,
+    "steps_total": 4188,
+    "steps_useful": 4188,
+    "budget_yields": 3785,
+    "max_step_gap_ms": 10,
     "tx_frames": 16,
-    "rx_frames": 23,
+    "rx_frames": 22,
     "tx_bytes": 8192,
     "rx_bytes": 8192
   },
   "timing_us": {
-    "tick_isr_max": 391,
-    "admitted_ug_step_max": 1472,
-    "largest_tick_gap": 2053,
+    "tick_isr_max": 310,
+    "admitted_ug_step_max": 1171,
+    "largest_tick_gap": 2125,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.991 now_ms per emulated ms, TICK_MS 2.018, FRAME_MS 20.480, STEP_CALLS_PER_S 243 (over 15.9 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 246 (over 16.4 s)"
 }

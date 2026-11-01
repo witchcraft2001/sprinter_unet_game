@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 17.8,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 47997",
+  "wall_s": 18.3,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 39593",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,33 +17,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4150
+    "quota_sum_us": 3350
   },
   "info": {
-    "min_useful_budget_us": 480,
-    "empty_poll_us": 95,
+    "min_useful_budget_us": 410,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1400,
+      "poll": 950,
       "card": 0,
-      "main": 2650,
+      "main": 2300,
       "service": 100
     },
-    "cost_poll_us": 140,
-    "cost_step_us": 530,
-    "periods": 10,
-    "largest_period_debit_us": 4050,
-    "now_ms": 217,
+    "cost_poll_us": 95,
+    "cost_step_us": 460,
+    "periods": 14,
+    "largest_period_debit_us": 3250,
+    "now_ms": 293,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 54,
-      "early": 92,
-      "frames": 9,
-      "ticks": 109,
+      "step": 72,
+      "early": 143,
+      "frames": 13,
+      "ticks": 147,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,12 +58,12 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 104,
+    "polls_total": 145,
     "polls_useful": 2,
-    "steps_total": 54,
-    "steps_useful": 54,
-    "budget_yields": 51,
-    "max_step_gap_ms": 8,
+    "steps_total": 72,
+    "steps_useful": 72,
+    "budget_yields": 65,
+    "max_step_gap_ms": 6,
     "arp_requests": 1,
     "tx_frames": 2,
     "rx_frames": 2,
@@ -71,9 +71,9 @@
     "rx_bytes": 300
   },
   "timing_us": {
-    "tick_isr_max": 404,
-    "admitted_ug_step_max": 1170,
-    "largest_tick_gap": 2035,
+    "tick_isr_max": 305,
+    "admitted_ug_step_max": 1006,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   }
 }

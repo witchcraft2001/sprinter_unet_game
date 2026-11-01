@@ -8,7 +8,7 @@
 ;   NIC_BRINGUP    (P) one bring-up step; HS_RES = NBR_*
 ;   NIC_STOP       (P) one stop step; HS_RES = NBR_*
 ;   HW_RUN             main: the work of a running card in this STEP
-; and the costs COST_PREPARE, COST_BRINGUP, COST_PORTION and BRINGUP_MS.
+; and the costs COST_PREPARE, COST_BRINGUP, COST_STOP and BRINGUP_MS.
 ; (P) routines run inside PORTION with IX = ctx.hwsm and IFF = 0.
 
 	INCLUDE	"unetg_hwsm.inc"
@@ -71,7 +71,7 @@ HW_STEP
 	; SHUTDOWN: stop the card in portions (t0/deadline are in sched.asm)
 .stop
 	SET	2,(IY+CX_WORK)		; UWK_MORE until the card is safe
-	LD	HL,COST_PORTION
+	LD	HL,COST_STOP
 	CALL	TAKE
 	RET	C
 	LD	HL,NIC_STOP

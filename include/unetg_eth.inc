@@ -67,7 +67,14 @@ TCPF_ACK	EQU	0x10
 ; ctx.scratch (64 - 34); the rest is read from the card in portions.
 L4_IN_SCRATCH	EQU	30
 RX_HDR_BYTES	EQU	64
-NIC_CHUNK	EQU	40		; largest card transfer per DI portion (DI < 200 us)
+NIC_CHUNK	EQU	56		; largest card write per DI portion (TX): a TCP header (54)
+; largest card read per DI portion (RX copy + sum): the RTL8019AS pays a
+; remote DMA setup per portion and a slower port
+	IFDEF	UGB_HW_RTL
+NIC_CHUNK_RX	EQU	32
+	ELSE
+NIC_CHUNK_RX	EQU	40
+	ENDIF
 
 ; Engine state in ctx.hwsm (IX-relative); shared fields in unetg_hwsm.inc
 	INCLUDE	"unetg_hwsm.inc"
@@ -113,6 +120,7 @@ ERX_HDR_READ	EQU	6	; frame waiting, header not read yet
 ERX_ACCEPT	EQU	7	; IPv4 checks passed, transport not asked yet
 ERX_STORE	EQU	8	; transport accepted, payload placement not set up
 ERX_SUM0	EQU	9	; IPv4 checks passed, segment checksum not started
+ERX_TCPACK	EQU	10	; TCP: the segment's ACK still to process (TP_RX_ACK)
 
 ETX_IDLE	EQU	0
 ETX_BEGIN	EQU	1	; header ready in ctx.txh

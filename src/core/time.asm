@@ -29,6 +29,55 @@ DL_ARM
 	LD	(HL),A
 	RET
 
+; DL_SET_MIN: re-arm a deadline at HL = now_ms + DE (ms) that the timer
+; evaluation merges (TCP retransmission, stall) without invalidating a
+; valid timer cache: the cache becomes min(cache, new), so it stays early
+; or exact, never late (a deadline moved later costs at most one extra
+; evaluation; a full re-evaluation per partial ACK would eat the STEP).
+; This STEP's dl_next follows the new deadline too.  Inside a STEP that
+; evaluates the timers (UTMR_DUE) DEADLINES_ALL merges it anyway.
+; Clobbers A, HL.  Preserves BC, DE.
+DL_SET_MIN
+	CALL	DL_ARM			; HL -> the last byte of now + DE
+	DEC	HL
+	DEC	HL
+	DEC	HL
+	LD	A,(IY+CX_TMR_FLAGS)
+	AND	UTMR_VALID | UTMR_NONE | UTMR_DUE
+	CP	UTMR_VALID | UTMR_NONE
+	JR	Z,.take			; the first armed deadline
+	CP	UTMR_VALID
+	RET	NZ			; invalid, or evaluated in this STEP
+	LD	A,(HL)			; new - tmr_due < 0: earlier
+	SUB	(IY+CX_TMR_DUE)
+	INC	HL
+	LD	A,(HL)
+	SBC	A,(IY+CX_TMR_DUE+1)
+	INC	HL
+	LD	A,(HL)
+	SBC	A,(IY+CX_TMR_DUE+2)
+	INC	HL
+	LD	A,(HL)
+	SBC	A,(IY+CX_TMR_DUE+3)
+	RET	P			; not earlier: the cache stays
+	DEC	HL
+	DEC	HL
+	DEC	HL
+.take
+	LD	A,(HL)
+	LD	(IY+CX_TMR_DUE),A
+	INC	HL
+	LD	A,(HL)
+	LD	(IY+CX_TMR_DUE+1),A
+	INC	HL
+	LD	A,(HL)
+	LD	(IY+CX_TMR_DUE+2),A
+	INC	HL
+	LD	A,(HL)
+	LD	(IY+CX_TMR_DUE+3),A
+	RES	1,(IY+CX_TMR_FLAGS)	; UTMR_NONE
+	JP	DL_MERGE_DE		; this STEP's deadline follows
+
 ; DL_LEFT: HL -> u32 deadline.
 ; Out: CF=1 when due; otherwise DE = min(deadline - now, 0xFFFE) ms.
 ; Clobbers A, C, DE, HL.

@@ -8,7 +8,7 @@
 ; CSUM_RAM: HL = accumulator, DE -> data, BC = bytes (even, except for the
 ; last call of a segment: an odd last byte is padded with zero).
 ; Out: HL = accumulator, DE advanced.  Clobbers A, BC.
-; Cost: ~48 T per word (2-word unrolled loop) + 70 T per call.
+; Cost: ~48 T per word (unrolled twice) + 90 T per call.
 CSUM_RAM
 	SRL	B
 	RR	C			; BC = words, CF = odd byte left
@@ -38,8 +38,17 @@ CSUM_RAM
 	LD	H,A
 	JR	CSUM_FOLD
 .run					; B words (0 = 256), carry chain inside
-	OR	A
-.word
+	LD	A,B
+	OR	A			; CF = 0
+	JR	Z,.full
+	SRL	B			; B = word pairs, CF = an odd word
+	JR	NC,.w1
+	INC	B
+	OR	A			; CF = 0
+	JR	.w2			; the odd word first
+.full
+	LD	B,128
+.w1
 	LD	A,(DE)
 	INC	DE
 	ADC	A,L
@@ -48,7 +57,16 @@ CSUM_RAM
 	INC	DE
 	ADC	A,H
 	LD	H,A
-	DJNZ	.word
+.w2
+	LD	A,(DE)
+	INC	DE
+	ADC	A,L
+	LD	L,A
+	LD	A,(DE)
+	INC	DE
+	ADC	A,H
+	LD	H,A
+	DJNZ	.w1
 	; fall through: fold the carry of this run
 
 ; CSUM_FOLD: add the carry flag into HL (end-around).  Clobbers A.

@@ -13,6 +13,9 @@ HS_IO		EQU	8	; u16 0xC000 + io_base
 HS_RES		EQU	45	; u8  result of the last portion
 HS_BDL		EQU	48	; u32 deadline of the whole bring-up
 HWSM_BYTES	EQU	56	; ctx.hwsm size (abi/ctx.toml)
+; HS_IO straight through IY (STEP_ISR samples the card without IX)
+EX_IO		EQU	UCTX_HWSM + HS_IO - CTX_BIAS
+	ASSERT	EX_IO + 1 <= 127
 
 ; Results of NIC_BRINGUP / NIC_STOP (HS_RES)
 NBR_CONTINUE	EQU	0	; more bring-up steps in this STEP

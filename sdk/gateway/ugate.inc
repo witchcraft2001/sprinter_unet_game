@@ -54,7 +54,7 @@ UGW_PERIOD_NO	EQU	52	; u16 budget period number
 UGW_DEBIT	EQU	54	; u16 debit of the current period (us)
 UGW_DEBIT_MAX	EQU	56	; u16 largest debit of a finished period (folded by UG_STEP)
 UGW_MASK_PER	EQU	58	; u8  period (low byte) of the last route mask
-UGW_ISR_A	EQU	59	; u8  status of the last STEP_ISR
+UGW_RES59	EQU	59	; u8  reserved
 UGW_STATS	EQU	60	; u16 counters, UGS_*
 UGW_NOW		EQU	88	; u32 now_ms: tick ISR (FIXED_SCHEDULE) or UG_NOW (APP_COUNTER)
 UGW_T_REM	EQU	92	; u16 us (FIXED_SCHEDULE, ISR) or counts (APP_COUNTER, main) below 1 ms
@@ -152,8 +152,8 @@ UG_ST_OFF	EQU	0x82	; UG_STEP: gateway not running
 ; Z application stand (tests/z/sdk, docs/MEASUREMENTS.md).  The full debit of
 ; an admitted entry is body budget + overhead; refusals before the core pay
 ; their own path.
-UG_OVH_ISR_US	EQU	35	; UG_ISR_NET around STEP_ISR (admission, lock, SP, page); stand 29.1
-UG_OVH_STEP_US	EQU	50	; UG_STEP around STEP (admission, clock, page); stand 46.1
+UG_OVH_ISR_US	EQU	30	; UG_ISR_NET around STEP_ISR (lock, admission, SP, page); stand 26.7 (tools/dev/gw_costs.js)
+UG_OVH_STEP_US	EQU	50	; UG_STEP around STEP (admission, clock, page); stand 47.6
 UG_BUSY_PATH_US	EQU	22	; UG_ISR_NET refused by a held ISA lock; stand 19.6
 UG_REFUSE_US	EQU	15	; admission refused for lack of quota
 UG_FLAG_US	EQU	5	; processing a CBL pending flag

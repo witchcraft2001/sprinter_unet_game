@@ -31,10 +31,18 @@ test-z: dlls sdk
 check: dlls sdk verify size names test-host test-z profile-check
 	@echo "check: all gates passed"
 
-# STEP profile of every build: 8 KiB stream at STEP periods of 2/10/20 ms,
-# no STEP over its budget (tools/dev/profile_step.js, docs/MEASUREMENTS.md)
+# STEP profile of every build: 8 KiB stream at STEP periods of 2/10/20 ms
+# at the 500 us budget and at the published minimum, no STEP over its
+# budget, publication rules held (tools/dev/profile_step.js,
+# docs/MEASUREMENTS.md); the same accounting over foreign broadcast
+# traffic, SHUTDOWN in a send and a lone send (tools/dev/scenario_budget.js)
+SCEN_ETH = gtcprtl gudprtl gtcp509b gudp509b
+SCEN_CARD = $(SCEN_ETH) gtcpesp gudpesp
 profile-check: dlls
 	node tools/dev/profile_step.js --check
+	node tools/dev/profile_step.js --check --budget min
+	@for d in $(SCEN_ETH); do node tools/dev/scenario_budget.js $$d broadcast --check | tail -1 || exit 1; done
+	@for d in $(SCEN_CARD); do for sc in shutdown lone; do node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
 
 # M stand (MAME): not part of check -- it needs the MAME builds
 # (tools/mame/build_holub.sh; 3C509B: the user's ../../../mame/mame, read-only)

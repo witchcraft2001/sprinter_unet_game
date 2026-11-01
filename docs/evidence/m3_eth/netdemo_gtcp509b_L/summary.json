@@ -4,7 +4,7 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "L load, check and free the DLL",
-  "wall_s": 3.2,
+  "wall_s": 3.3,
   "network": "none",
   "steps_per_period": 5,
   "load": {

@@ -74,13 +74,17 @@ RTL_BURST	EQU	8		; table entries per portion (DI budget)
 RTL_RDC_READS	EQU	4		; ISR samples for the end of a TX write
 
 ; card fields in ctx.hwsm (the 3C509B meaning in brackets)
-HS_NEXT		EQU	HS_LFSR		; page of the next frame (= BNRY + 1)
-HS_RFLAGS	EQU	HS_WIN		; RF_* below
+HS_NEXT		EQU	HS_WIN		; page of the next frame (= BNRY + 1)
+HS_RFLAGS	EQU	HS_LFSR		; RF_* below
+EX_RFLAGS	EQU	UCTX_HWSM + HS_RFLAGS - CTX_BIAS	; STEP_ISR, through IY
+	ASSERT	EX_RFLAGS <= 127
 HS_RXPTR	EQU	HS_TMP		; card address of the next RX byte
 RF_MACSET	EQU	0		; station address comes from INIT_CONFIG
 RF_RECOVER	EQU	1		; the recovery table is running
 RF_TXFAIL	EQU	2		; the frame being sent will not be started
 RF_TXSTUCK	EQU	3		; TXP outlived the engine timeout
+RF_MORE		EQU	4		; the ring may hold a frame the main poll
+					; has not seen: STEP_ISR answers WORK
 
 ; HS_PHASE: bit 0 = waiting for the table deadline, bit 7 = stop table.
 
@@ -175,7 +179,7 @@ NIC_PREPARE
 	XOR	A
 	LD	(IX+HS_PHASE),A
 	LD	(IX+HS_STEP),A		; init table
-	LD	(IX+HS_RFLAGS),A
+	LD	(IX+HS_RFLAGS),1 << RF_MORE
 	LD	(IX+HS_NEXT),RTL_CURR0
 	; a configured MAC overrides the PROM
 	LD	DE,CX_MAC
@@ -450,18 +454,26 @@ RTL_STOP_OFS	EQU	$ - RTL_TABLES
 ; NIC_RX_STATUS (P): CF=1 no frame; else HL = frame length (FCS
 ; included when the chip stores it, at most ETH_MAX_FRAME), A = 0.
 ; Runs the ring recovery while it is active (one portion per call).
+; The receive notices (ISR.PRX/RXE) are acknowledged BEFORE CURR is read:
+; a frame that completes later sets PRX again, the hint STEP_ISR samples
+; (NIC_ISR_POLL).  RF_MORE stays set from a found frame until a poll sees
+; the ring empty, so frames that were already waiting keep the hint too.
 NIC_RX_STATUS
 	BIT	RF_RECOVER,(IX+HS_RFLAGS)
-	JR	NZ,.recover
+	JP	NZ,.recover
 	BIT	RF_TXSTUCK,(IX+HS_RFLAGS)
 	JR	NZ,.reset
+	LD	A,RTL_ISR		; page 0: every portion ends there
+	CALL	RTL_REG
+	LD	(HL),ISR_PRX | ISR_RXE
 	CALL	RTL_CURR		; A = CURR, HL = CR
 	CP	RTL_RX_START
-	JR	C,.none			; bus glitch: try again later
+	JP	C,.glitch		; bus glitch: try again later
 	CP	RTL_RX_STOP
-	JR	NC,.none
+	JP	NC,.glitch
 	CP	(IX+HS_NEXT)
 	JR	Z,.empty
+	SET	RF_MORE,(IX+HS_RFLAGS)
 	; receive header: status, next page, count (header included)
 	LD	D,(IX+HS_NEXT)
 	LD	E,0
@@ -506,6 +518,7 @@ NIC_RX_STATUS
 	XOR	A			; A = 0, CF = 0
 	RET
 .empty
+	RES	RF_MORE,(IX+HS_RFLAGS)
 	LD	A,L
 	OR	RTL_ISR
 	LD	L,A
@@ -526,26 +539,26 @@ NIC_RX_STATUS
 	CP	NBR_DONE
 	JR	NZ,.none
 	RES	RF_RECOVER,(IX+HS_RFLAGS)
-	JR	.none
-
-; NIC_ISR_POLL (P): CF=0 when the main STEP has receive work: a frame, an
-; overflow or a running recovery (STEP_ISR never runs the recovery, but
-; must not make the main poll skip it).
-NIC_ISR_POLL
-	LD	A,(IX+HS_RFLAGS)
-	AND	(1 << RF_RECOVER) | (1 << RF_TXSTUCK)
-	RET	NZ			; CF=0
-	CALL	RTL_CURR
-	CP	(IX+HS_NEXT)
-	JR	Z,.empty
-	OR	A
+.glitch
+	SET	RF_MORE,(IX+HS_RFLAGS)	; poll again: the notice may be gone
+	SCF
 	RET
-.empty
-	LD	A,L
+
+; NIC_ISR_POLL (P, STEP_ISR: IY only, see engine.asm ISRP_POLL): CF=0
+; when the main STEP has receive work: a frame (PRX since the main poll's
+; acknowledgement, or RF_MORE), an overflow or a running recovery
+; (STEP_ISR never runs the recovery, but must not make the main poll skip
+; it).  One register read: ISR on page 0.  Clobbers A, HL.
+NIC_ISR_POLL
+	LD	A,(IY+EX_RFLAGS)
+	AND	(1 << RF_RECOVER) | (1 << RF_TXSTUCK) | (1 << RF_MORE)
+	RET	NZ			; CF=0
+	LD	A,(IY+EX_IO)
 	OR	RTL_ISR
 	LD	L,A
-	LD	A,(HL)
-	AND	ISR_OVW
+	LD	H,(IY+EX_IO+1)
+	LD	A,(HL)			; (0xFF from an idle bus: WORK, the main
+	AND	ISR_PRX | ISR_OVW	; poll rejects it)
 	RET	NZ			; CF=0
 	SCF
 	RET
@@ -609,10 +622,7 @@ NIC_RX_DISCARD
 	LD	A,L
 	OR	RTL_BNRY
 	LD	L,A
-	LD	(HL),C
-	XOR	RTL_BNRY ^ RTL_ISR
-	LD	L,A
-	LD	(HL),ISR_PRX | ISR_RXE
+	LD	(HL),C			; the notices are acknowledged by the next poll
 	RET
 NIC_RX_DISC_DONE
 	OR	A			; immediate
@@ -665,12 +675,7 @@ NIC_TX_WRITE
 	EX	DE,HL			; DE = data port
 	POP	BC
 	POP	HL
-.loop
-	LD	A,(HL)
-	LD	(DE),A
-	INC	HL
-	DJNZ	.loop
-	RET
+	JP	NIC_PORT_WRITE
 
 ; NIC_TX_END (P): zero padding up to 60 bytes, then TBCR, TPSR and one
 ; CR.TXP once the last remote write has completed (RDC).

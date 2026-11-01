@@ -69,7 +69,7 @@ fields = [
   ["rx_slot_size", "u16", ""],
   ["event_ptr", "u16", ""],
   ["event_cap", "u8", ""],
-  ["pad2", "u8", ""],
+  ["isa_e2", "u8", "#E2 value of the ISA window: 0xD4 | isa_slot << 1 (INIT_CONFIG, over cfg.reserved1)"],
   ["hw_ring_ptr", "u16", ""],
   ["hw_ring_len", "u16", ""],
   ["isa_lock_ptr", "u16", ""],

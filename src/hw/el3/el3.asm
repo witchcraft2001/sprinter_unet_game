@@ -512,9 +512,27 @@ NIC_RX_STATUS
 	OR	A			; CF=0
 	RET
 
-; NIC_ISR_POLL (P): CF=0 when a complete frame waits.
+; NIC_ISR_POLL (P, STEP_ISR: IY only, see engine.asm ISRP_POLL): CF=0
+; when a complete frame waits (NIC_RX_STATUS without the length: io_base
+; is a multiple of 16, low byte then high byte back to back).
+; Clobbers A, HL.
 NIC_ISR_POLL
-	JP	NIC_RX_STATUS
+	LD	A,(IY+EX_IO)
+	OR	EL3_W1_RX_STATUS
+	LD	L,A
+	LD	H,(IY+EX_IO+1)
+	LD	A,(HL)
+	INC	HL
+	LD	H,(HL)
+	ASSERT	EL3_RX_INCOMPLETE_H == 0x80
+	BIT	7,H			; EL3_RX_INCOMPLETE_H
+	SCF
+	RET	NZ
+	OR	H
+	SCF
+	RET	Z
+	CCF				; CF=0
+	RET
 
 ; NIC_RX_READ (P): DE = destination, B = bytes (1..64), C = NRX_* mode.
 ; The RX FIFO data register is window 1 register 0; the copy/sum loop is
@@ -605,12 +623,7 @@ NIC_TX_WRITE
 	CALL	EL3_REG
 	EX	DE,HL			; DE = FIFO port
 	POP	HL
-.loop
-	LD	A,(HL)
-	LD	(DE),A
-	INC	HL
-	DJNZ	.loop
-	RET
+	JP	NIC_PORT_WRITE
 
 ; NIC_TX_END (P): zero padding up to max(len, 60) rounded to a DWORD.
 NIC_TX_END

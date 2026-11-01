@@ -17,7 +17,7 @@
 
 COST_PICK	EQU	85	; choice of the next job (TX slot, RX space, ring cursor; 72 us)
 COST_PIECE	EQU	160	; one literal run (<= 16 bytes) + one substitution of a command (142 us)
-COST_RESULT	EQU	185	; a finished command: slot outcome, RX commit (164 us)
+COST_RESULT	EQU	185	; a finished command: slot outcome, RX commit (165 us)
 
 ESP_AT_TRIES	EQU	5	; "AT" until the module answers (boot <= 2 s)
 ESP_AT_MS	EQU	500
@@ -334,7 +334,7 @@ ESP_SEQ
 ; ----------------------------------------------------------------------
 ; ESP_PICK: choose the next job.  IX = tp.
 ; ----------------------------------------------------------------------
-; The checks are cheap (inside COST_ESP_STEP); COST_PICK is taken only
+; The checks are cheap (base time of TP_STEP); COST_PICK is taken only
 ; when a job is about to start, so an idle channel costs no budget.
 ESP_PICK
 	CALL	ES_TX_IDLE
@@ -369,11 +369,7 @@ ESP_PICK
 	BIT	1,(IY+CX_CHAN_FLAGS)	; UCHF_FINISHED
 	RET	NZ
 	; OPEN or CLOSING: TX and RX take turns to go first
-	LD	BC,UCTX_STATS - 4 + UNETG_STATS_STEPS_TOTAL - CTX_BIAS
-	PUSH	IY
-	POP	HL
-	ADD	HL,BC
-	BIT	1,(HL)
+	BIT	USCH_ODD2,(IY+CX_SCHED_FLAGS)
 	JR	Z,.rx_first
 	CALL	.try_tx
 	RET	NC

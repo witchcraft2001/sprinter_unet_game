@@ -429,6 +429,10 @@ UGH_DEBIT
 	LD	(UG_BLOCK + UGW_DEBIT),HL
 	RET
 
+; UGH_JP_HL: CALL target for a computed entry (UG_ISR_NET -> STEP_ISR).
+UGH_JP_HL
+	JP	(HL)
+
 ; UGH_INC: u16 counter at HL += 1.  Clobbers HL, F.
 UGH_INC
 	INC	(HL)
@@ -670,10 +674,10 @@ UG_PERIOD_RET				; (stand probe: quotas of the new period)
 ; UG_ISR_NET: network entry from an application ISR (IFF = 0, after the
 ; handler's own device; never EI).  A = UNETG_SRC_TIMER / KEY / FRAME (the
 ; guaranteed poll when it is due, poll quota) or UNETG_SRC_CARD_IRQ (card
-; quota, not while the route is masked).  Before the core: quota, then the
-; try-lock (owner 2); a held bus pays UG_BUSY_PATH_US from the source
-; quota and the core is not entered; a short quota pays UG_REFUSE_US from
-; the service quota (a card source is masked).  Admitted: full debit, the
+; quota, not while the route is masked).  Before the core: the try-lock
+; (owner 2), then the quota; a held bus pays UG_BUSY_PATH_US from the
+; source quota and the core is not entered; a short quota pays
+; UG_REFUSE_US from the service quota (a card source is masked).  Admitted: full debit, the
 ; network ISR stack, STEP_ISR(source | PREACQ, body budget), lock release
 ; after the core restored mapping and shadows.
 ; Any STEP_ISR entry samples the card, so it also counts as the guaranteed
@@ -688,16 +692,14 @@ UG_ISR_NET
 	LD	HL,UG_BLOCK + UGW_FLAGS
 	LD	A,C
 	CP	UNETG_SRC_CARD_IRQ
-	JR	Z,.card
+	JP	Z,.card
 	BIT	UGF_POLL_DUE,(HL)
 	RET	Z
 	LD	HL,UG_BLOCK + UGW_Q + UGQ_POLL
-	JR	.quota
-.card
-	BIT	UGF_MASKED,(HL)
-	RET	NZ
-	LD	HL,UG_BLOCK + UGW_Q + UGQ_CARD
-.quota
+.quota					; HL -> the source quota
+	LD	A,(UG_BLOCK + UGW_LOCK)
+	OR	A
+	JP	NZ,.busy
 	LD	DE,(UG_BLOCK + UGW_COST_POLL)
 	LD	A,(HL)
 	SUB	E
@@ -706,17 +708,12 @@ UG_ISR_NET
 	LD	A,(HL)
 	SBC	A,D
 	JP	C,.refuse
-	LD	E,A			; the new quota, kept until the lock is ours
-	LD	A,(UG_BLOCK + UGW_LOCK)
-	OR	A
-	JP	NZ,.busy
-	LD	A,UNETG_LOCK_NET_ISR	; IFF = 0: test-and-set is indivisible
-	LD	(UG_BLOCK + UGW_LOCK),A
-	LD	(HL),E
+	LD	(HL),A
 	DEC	HL
 	LD	(HL),B
+	LD	A,UNETG_LOCK_NET_ISR	; IFF = 0: test-and-set is indivisible
+	LD	(UG_BLOCK + UGW_LOCK),A
 	LD	HL,(UG_BLOCK + UGW_DEBIT)	; a period's debits stay far below 64 K
-	LD	DE,(UG_BLOCK + UGW_COST_POLL)
 	ADD	HL,DE
 	LD	(UG_BLOCK + UGW_DEBIT),HL
 	LD	HL,UG_BLOCK + UGW_FLAGS
@@ -732,21 +729,15 @@ UG_ISR_NET
 	JR	Z,.mapped
 	OUT	(UG_WINPORT),A
 .mapped
-	LD	HL,.back
-	PUSH	HL
 	LD	HL,(UG_BLOCK + UGW_EP_ISR)
 	LD	DE,(UG_BLOCK + UGW_ISR_BUDGET)
 	LD	A,C
 	OR	UNETG_SRC_FLAG_PREACQ
-	JP	(HL)
-.back
+	CALL	UGH_JP_HL
 	POP	BC
-	LD	E,A
 	LD	A,B
 	OUT	(UG_WINPORT),A
 	LD	SP,(UG_BLOCK + UGW_ISR_SP)
-	LD	A,E
-	LD	(UG_BLOCK + UGW_ISR_A),A
 	XOR	A
 	LD	(UG_BLOCK + UGW_LOCK),A	; after the core restored mapping and shadows
 	BIT	0,L			; UNETG_FLAG_MASK_ROUTE
@@ -773,8 +764,12 @@ UG_ISR_NET
 	LD	(UG_BLOCK + UGW_MASK_PER),A
 	LD	HL,UG_BLOCK + UGW_STATS + UGS_MASK
 	JP	UGH_INC
-.busy
-	DEC	HL			; HL -> the source quota
+.card
+	BIT	UGF_MASKED,(HL)
+	RET	NZ
+	LD	HL,UG_BLOCK + UGW_Q + UGQ_CARD
+	JP	.quota
+.busy					; HL -> the source quota
 	LD	DE,(UG_BLOCK + UGW_COST_BUSY)
 	CALL	UGH_QSUB
 	CALL	UGH_DEBIT

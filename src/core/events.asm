@@ -34,8 +34,12 @@ EV_MAKE
 	LD	(IY+CX_EV_TMP+UNETG_EVT_DETAIL+1),A
 	RET
 
-COST_EVENT	EQU	60		; one publication incl. EV_MAKE (units)
-COST_TXSCAN	EQU	80		; walking the TX slots for outcomes (units)
+	IFDEF	UGB_HW_ESP
+COST_EVENT	EQU	110		; one publication incl. EV_MAKE and the rest of the TX scan (units; stand 94 us)
+	ELSE
+COST_EVENT	EQU	70		; one publication incl. EV_MAKE (units; stand 51 us)
+	ENDIF
+COST_TXSCAN	EQU	65	; walking the TX slots for outcomes (units; stand 48 us)
 
 ; EV_AFFORD: in a budgeted call (STEP) take the cost of one publication
 ; BEFORE the event is built.  Out: CF=1 when it does not fit (the
@@ -44,7 +48,11 @@ EV_AFFORD
 	BIT	3,(IY+CX_CALL_FLAGS)	; UCF_BUDGET
 	RET	Z			; CF=0 (BIT leaves CF alone; callers clear it)
 	LD	HL,COST_EVENT
-	JP	TAKE
+	CALL	TAKE
+	RET	NC
+EV_STARVED				; refused: the next STEP flushes first (CF=1 kept)
+	SET	6,(IY+CX_CLK_FLAGS)	; UCLK_EV_FIRST
+	RET
 
 ; EV_PUT: append ev_tmp.  Out: CF=1 when the queue is full (nothing
 ; written).  Clobbers A, BC, DE, HL.
@@ -137,7 +145,7 @@ EV_FLUSH
 	JR	Z,.tx_scan
 	LD	HL,COST_TXSCAN
 	CALL	TAKE
-	RET	C
+	JP	C,EV_STARVED
 .tx_scan
 	LD	C,(IY+CX_TX_NEXT)
 	LD	B,(IY+CX_TX_SLOT_COUNT)

@@ -21,10 +21,10 @@ UDS_OPEN	EQU	2
 UDP_PREP_NONE	EQU	0
 UDP_PREP_SUM	EQU	1
 UDP_PREP_READY	EQU	2
-UDP_SUM_CHUNK	EQU	128
-COST_UDP_STEP	EQU	170
-COST_UDP_IDLE	EQU	70	; (61 us)
-COST_TEMPLATE	EQU	200	; IP_TEMPLATE (180 us)
+UDP_SUM_CHUNK	EQU	96		; bytes summed per item (100 + 96 units)
+COST_UDP_STEP	EQU	115	; ARP timers (96 us)
+COST_UDP_IDLE	EQU	75	; (59 us)
+COST_TEMPLATE	EQU	180	; IP_TEMPLATE (162 us)
 	ASSERT	COST_UDP_STEP <= PROF_MAX_ITEM_US
 	ASSERT	COST_TEMPLATE <= PROF_MAX_ITEM_US	; taken before the idle step (TP_STEP .open)
 
@@ -116,13 +116,31 @@ TP_STEP
 	LD	A,(IX+UD_PREP)
 	CP	UDP_PREP_READY
 	RET	Z
+	; nothing for .send (its conditions, checked without budget: a refused
+	; idle step costs base time too) -> no budget taken
+	LD	A,(IX+UD_ST)
+	CP	UDS_OPEN
+	RET	NZ
+	LD	A,(IX+UD_PREP)
+	OR	A
+	JR	NZ,.idle		; UDP_PREP_SUM: payload being summed
+	LD	C,(IY+CX_TX_SEND)
+	CALL	TX_STATE_PTR		; keeps IX
+	LD	A,(HL)
+	CP	UTX_COMMITTED
+	JR	Z,.idle
+	CP	UTX_SENDING
+	RET	Z			; in the card
+	LD	A,(IY+CX_CHAN)		; nothing queued: only a closing channel
+	CP	UCH_CLOSING		; has work (finish it)
+	RET	NZ
+	BIT	1,(IY+CX_CHAN_FLAGS)	; UCHF_FINISHED
+	RET	NZ
+.idle
 	LD	HL,COST_UDP_IDLE
 	CALL	TAKE
 	RET	C
 	TP_IX
-	LD	A,(IX+UD_ST)
-	CP	UDS_OPEN
-	RET	NZ
 	JP	.send
 .due
 	LD	HL,COST_UDP_STEP
@@ -212,7 +230,7 @@ TP_STEP
 	LD	HL,UDP_SUM_CHUNK
 	CALL	MIN_DE_HL
 	PUSH	DE
-	LD	HL,80			; summing portion overhead (stand: 201 us / 128 B)
+	LD	HL,100			; summing portion overhead (stand: 1.0 us / unit at 80 + 128)
 	XOR	A
 	CALL	BUDGET_BYTES
 	POP	DE
@@ -504,6 +522,11 @@ TP_RX_STORE
 	RET
 
 ; TP_RX_COMMIT: A = 1 valid.  Publishes or abandons the filled slot.
+; TP_RX_ACK: no acknowledgements in UDP (ERX_TCPACK is never entered).
+COST_TP_ACK	EQU	COST_PORTION
+TP_RX_ACK
+	RET
+
 TP_RX_COMMIT
 	PUSH	AF
 	TP_IX

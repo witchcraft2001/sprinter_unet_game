@@ -16,11 +16,11 @@
 
 ES_PARSE_MAX	EQU	48	; line bytes per parse round
 ES_PAY_MAX	EQU	128	; payload bytes per parse round
-COST_PARSE	EQU	110	; round: ring head, sizing, tail, refund (+ 16 units per line byte)
-COST_PAY	EQU	70	; payload round: ESP_PAY twice (RX ring wrap), datagram publish
-COST_LINE	EQU	210	; a pending action: line classification, header, prompt (ESP_PEND
-				; max 204.5, p99 196 us; ESP_STEP + LINE = PROF_MAX_ITEM_US)
-	ASSERT	ES_PAY_MAX < 256 && ES_PARSE_MAX < 256
+COST_PARSE	EQU	150	; round: ring head, sizing, tail, refund, two slow line bytes (+ 16 units per line byte)
+COST_PAY	EQU	40	; payload round: ESP_PAY twice (RX ring wrap), datagram publish (COST_PARSE covers the rest)
+COST_LINE	EQU	220	; a pending action: line classification, header, prompt (ESP_PEND
+				; max 199 us)
+	ASSERT	ES_PAY_MAX < 256 && ES_PARSE_MAX < 256 && COST_PARSE + 1 < 256
 
 ; IX = ctx.tp (preserves DE)
 	MACRO	ET_IX
@@ -48,6 +48,18 @@ ESP_PARSE
 	OR	A
 	SCF
 	RET	NZ			; the pending action first
+	; not even a one-byte round fits: no sizing (a refused attempt costs
+	; base time too)
+	LD	A,(IY+CX_UNITS+1)
+	OR	A
+	JR	NZ,.sizing
+	LD	A,(IY+CX_UNITS)
+	CP	COST_PARSE + 1
+	JR	NC,.sizing
+	SET	4,(IY+CX_WORK)		; UWK_YIELD
+	SCF
+	RET
+.sizing
 	CALL	ER_HEAD			; HL = waiting, DE = tail
 	LD	A,H
 	OR	L

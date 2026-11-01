@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 3.0,
+  "wall_s": 3.1,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -16,33 +16,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4150
+    "quota_sum_us": 3375
   },
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 85,
+    "min_useful_budget_us": 415,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1300,
+      "poll": 950,
       "card": 0,
-      "main": 2750,
+      "main": 2325,
       "service": 100
     },
-    "cost_poll_us": 130,
-    "cost_step_us": 550,
-    "periods": 40,
-    "largest_period_debit_us": 4050,
-    "now_ms": 805,
+    "cost_poll_us": 95,
+    "cost_step_us": 465,
+    "periods": 41,
+    "largest_period_debit_us": 3275,
+    "now_ms": 837,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 198,
-      "early": 410,
+      "step": 206,
+      "early": 429,
       "frames": 33,
-      "ticks": 403,
+      "ticks": 419,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,17 +57,15 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 315,
-    "steps_total": 198,
-    "steps_useful": 198,
-    "budget_yields": 188,
-    "max_step_gap_ms": 6,
-    "tx_frames": 1,
-    "tx_bytes": 100
+    "polls_total": 334,
+    "steps_total": 206,
+    "steps_useful": 206,
+    "budget_yields": 190,
+    "max_step_gap_ms": 6
   },
   "timing_us": {
-    "tick_isr_max": 389,
-    "admitted_ug_step_max": 1122,
+    "tick_isr_max": 307,
+    "admitted_ug_step_max": 984,
     "largest_tick_gap": 2053,
     "late_ticks": 0
   }

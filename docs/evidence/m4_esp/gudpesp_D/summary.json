@@ -4,10 +4,10 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 3.4,
+  "wall_s": 3.5,
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 85,
+    "min_useful_budget_us": 415,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "stats": {
@@ -17,25 +17,25 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 223,
-    "steps_total": 323,
-    "steps_useful": 323,
-    "budget_yields": 258,
+    "polls_total": 272,
+    "steps_total": 355,
+    "steps_useful": 355,
+    "budget_yields": 259,
     "max_step_gap_ms": 20,
     "tx_frames": 1,
     "rx_frames": 1,
     "tx_bytes": 100,
     "rx_bytes": 100
   },
-  "clock": "CLOCK_RATE 0.313 now_ms per emulated ms, TICK_MS 61.440, FRAME_MS 20.480, STEP_CALLS_PER_S 180 (over 1.5 s)",
+  "clock": "CLOCK_RATE 0.326 now_ms per emulated ms, TICK_MS 59.077, FRAME_MS 20.480, STEP_CALLS_PER_S 178 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.667,
+  "ticks_missed_ratio": 0.653,
   "step": {
-    "max_us": 1124,
-    "mean_us": 814,
-    "steps": 323,
-    "over_budget": 323
+    "max_us": 1077,
+    "mean_us": 793,
+    "steps": 355,
+    "over_budget": 355
   },
   "trivial_call_us": 174
 }

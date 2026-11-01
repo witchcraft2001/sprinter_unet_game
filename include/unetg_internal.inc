@@ -37,6 +37,8 @@ UCLK_EXPIRED	EQU	0x04	; CONFIG_EXPIRED already raised
 UCLK_OP_ARMED	EQU	0x08	; op_deadline_ms is valid
 UCLK_OP_ARM	EQU	0x10	; arm op_deadline_ms at the next STEP
 UCLK_FAULT_SEEN	EQU	0x20	; DEVICE_FAULT of the last stop attempt reported
+UCLK_EV_FIRST	EQU	0x40	; an event publication was refused for budget: the
+				; next STEP flushes events before the card work
 
 ; UCTX.tmr_flags
 UTMR_VALID	EQU	0x01	; tmr_due holds the earliest deadline
@@ -56,7 +58,7 @@ UTMR_TPDUE	EQU	0x10	; the transport still owes its timer evaluation
 
 ; UCTX.call_flags (valid during one export call)
 UCF_PREACQ	EQU	0x01	; gateway holds the ISA lock for this portion
-UCF_ISR		EQU	0x02	; inside STEP_ISR
+; 0x02 was UCF_ISR: STEP_ISR writes no call field (lock.asm ISR_PORTION)
 UCF_BUDGET	EQU	0x08	; budgeted call (STEP): publication costs are taken
 
 ; UCTX.ev_flags -- notifications waiting for room in the event queue
@@ -93,6 +95,9 @@ USCH_POLL_RSVD	EQU	0	; COST_POLL set aside for this STEP's card poll
 USCH_CONT	EQU	1	; continuation phase: stop a pipeline at its frame end
 USCH_RX_STOP	EQU	2	; RX stopped in this STEP (budget, bus, nothing to do)
 USCH_TX_STOP	EQU	3	; TX stopped in this STEP
+USCH_ODD	EQU	4	; bit 0 of steps_total (this STEP), latched by EXP_STEP
+USCH_ODD2	EQU	5	; bit 1 of steps_total
+USCH_POLLED	EQU	6	; the card was polled first in this STEP (odd STEPs)
 
 ; UCTX.work bits (what the current STEP achieved)
 UWK_HW		EQU	0x01

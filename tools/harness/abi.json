@@ -1571,7 +1571,7 @@
     "elem": "u8",
     "type": "u8"
    },
-   "pad2": {
+   "isa_e2": {
     "offset": 105,
     "size": 1,
     "count": 1,

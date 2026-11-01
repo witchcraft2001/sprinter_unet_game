@@ -260,10 +260,14 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   MAME loses most IM1 frame pulses (~9 us, under DI); the latched CTC1 tick
   of NETDEMO loses none. `CLOCK_RATE` is meaningful only on long runs.
 
-- STEP_ISR may interrupt STEP between two portions (ABI §1). Every per-call
-  context field (`call_flags`, `work`, `units`, `flags_out`) is saved and
-  restored by EXP_STEP_ISR; a new per-call field must be added there, and
-  STEP_ISR checks its budget before the first context write.
+- STEP_ISR may interrupt STEP between two portions (ABI §1) and writes no
+  per-call field (`call_flags`, `work`, `units`, `flags_out`): its card
+  sample is `ISR_PORTION` (lock.asm), not RUN_PORTION, and `ISRP_POLL` of
+  the card layer works through IY only (no IX), answers in CF, clobbers A
+  and HL and writes only its own hwsm flags; `isr_pending` bits are set by
+  ISR_PORTION. Hwsm bytes it reads (`EX_IO`, RTL `EX_RFLAGS`, ESP
+  `EX_ESFLAGS`) stay inside the IY window. The budget check comes before
+  the first write (the counters).
 - A card that is not running copies nothing: holds keyed on a TX pipeline
   state (`ETH_TX_COPYING`, `ESP_TX_COPYING`) check `hw_state == UHW_RUN`
   first, or SHUTDOWN in the middle of a frame never reaches OK.
@@ -295,20 +299,45 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   retransmissions). A validated frame must not be dropped for lack of
   budget: keep the state and continue next STEP. Cost rule:
   `COST = max(real * 1.1, real + 15)` rounded up to 5, real = the worst
-  item time of `tools/dev/profile_step.js --items` over STEP periods
-  2/10/20 ms and both cards of the family; `make profile-check` (part of
-  `check`) fails on any STEP over its budget.
+  item time of `tools/dev/profile_step.js --items` (`tools/dev/items_max.sh`)
+  over STEP periods 2/10/20 ms, the budgets 500 and min and both cards of
+  the family; `make profile-check` (part of `check`) fails on any STEP over
+  its budget and on any broken publication rule (below).
 - `min_useful_budget_us` = `PROF_STEP_BASE_US` + `PROF_MAX_ITEM_US` +
-  `PROF_MIN_RETURN_US`. Every cost, and every chain of costs taken in one
-  STEP (idle step + template), is `ASSERT`ed against `PROF_MAX_ITEM_US`;
-  `PROF_STEP_BASE_US` must cover the "needed base reserve" that
-  `tools/dev/overrun.js` prints for the stream scenario. The minimum-budget
-  tests and `tools/dev/sweep_loop.js` must keep moving data at the published
-  minimum.
+  `PROF_MIN_RETURN_US`. Every cost is `ASSERT`ed against `PROF_MAX_ITEM_US`,
+  and no item chains two costs: an entry that only dispatches (TP_STEP of
+  TCP and ESP, the RX/TX dispatchers) takes nothing, its checks are base
+  time, and every action takes exactly its own cost (an "idle step" that
+  pays first eats the budget of the item it leads to -- a livelock at the
+  minimum budget). `PROF_STEP_BASE_US` covers the "needed base reserve" of
+  the build (profile_step.js `need` <= base at budgets 500 and min); the
+  minimum-budget tests and `tools/dev/sweep_loop.js` must keep moving data
+  at the published minimum. Refusals cost base time: check the units of a
+  known cost before the work that leads to its TAKE (dispatcher tables,
+  TCP data segment, ESP parse round and pump).
+- The needed base reserve and the item costs are checked beyond the stream:
+  smaller pieces and foreign traffic make some items dearer (FINISH over
+  RX slots) and a minimum STEP leaves room for one item only, so a
+  publication refused after the card poll and the TX scan was refused in
+  every STEP (`UCLK_EV_FIRST`: the next STEP flushes the events first;
+  NEXT_EVENT publishes without a budget and hid it).
+- Budget tools account for refunds: a reserve given back (`UNITS_REFUND`)
+  is no item (tools/dev/budget_calls.js, shared by profile_step.js and
+  overrun.js); a TAKE reached by JP from a dispatch table is named by its
+  state routine (`ETH_RX_STEP.copy`).
+- The SDK quota sum of the default profile is
+  `10 x (empty_poll + 10 + UG_OVH_ISR_US) + 2 x (min_useful + UG_OVH_STEP_US)
+  + 100` <= 2000 (ТЗ §5.1): one microsecond of the STEP_ISR or gateway ISR
+  path is worth ten of the STEP; published constants are measured + margin
+  (core: worst + 5 rounded up to 5; gateway: tools/dev/gw_costs.js).
 - Livelocks come from two items that each refuse the other's budget (timer
   recomputation vs the transport step, TCP idle + template). Deadlines that
   only their owner polls are armed with `DL_ARM` (no timer-cache reset);
-  while the transport owes a timer evaluation (`UTMR_TPDUE`) no new full
+  a merged deadline re-armed while running goes through `DL_SET_MIN` (the
+  cache becomes min(cache, new): early or exact, never late) or, when it
+  only moves later, `DL_ARM`; `DL_SET` (full invalidation) is for changes
+  of the deadline set. A full recomputation per partial ACK eats the STEP.
+  While the transport owes a timer evaluation (`UTMR_TPDUE`) no new full
   recomputation starts. Check with `tools/dev/trace.js` under load.
 - A TX slot is handed back (TX_DONE) only when no pipeline still reads it;
   a prepared TCP segment overtaken by an ACK is dropped (`TCP_REWIND`).
@@ -321,22 +350,30 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - `RUN_PORTION` (lock.asm) takes the try-lock, maps, runs, unmaps and
   releases inside ONE DI section: the core never holds the ISA lock with
   interrupts enabled. `IMG_CTX_PTR` holds ctx + `CTX_BIAS` (the IY value).
-- STEP_ISR decides source, state, budget and BUS_BUSY before any per-call
-  write, never touches `ctx.units` (the poll is checked against its own
-  units in DE) and keeps `flags_out`; it saves/restores `call_flags` and
-  `work`. It takes `hw_state == UHW_RUN` as "configured": SHUTDOWN moves
-  `hw_state` off RUN before `state` leaves CONFIGURED.
+- STEP_ISR decides source, state, budget (base + poll + return in one
+  check) and BUS_BUSY before any write; it takes `hw_state == UHW_RUN` as
+  "configured": SHUTDOWN moves `hw_state` off RUN before `state` leaves
+  CONFIGURED.
+- RTL8019AS: STEP_ISR reads only ISR (page 0). The main poll acknowledges
+  PRX/RXE before it reads CURR, and `RF_MORE` keeps STEP_ISR answering WORK
+  from a found frame until a poll sees the ring empty: without it the
+  second of two waiting frames loses its notice (a STEP skips its own poll
+  after an empty ISR sample).
 - The IY window is ctx bytes 0..255. Fields reached only through `IY_PTR`
   (arrays like `tx_tag`) live past it, so hot bytes stay inside: hwsm
   `EX_RXS`/`EX_TXS`/`EX_TXKIND` (Ethernet) and the ESP `EX_*` are read as
   `(IY+d)`; an `ASSERT` guards each.
-- Ethernet STEP order is `ETH_SCHED` (engine.asm): poll reserve, frames in
-  progress (bounded, stop at the frame end), transport, TX start, poll,
-  rest. A pipeline that stopped is not retried in the same STEP unless the
-  poll reserve was refunded, a phase is skipped below the cheapest item
-  (`ETH_AFFORD`), the TX completion is checked the STEP after the start, and
-  an idle transport step with a prepared segment takes no budget: refused
-  attempts cost base time too (found as STEP overruns at 20 ms).
+- Ethernet STEP order is `ETH_SCHED` (engine.asm): on odd STEPs the poll
+  first (its own item), on even ones a poll reserve while the largest item
+  still fits besides it; frames in progress (bounded, stop at the frame
+  end), transport, TX start, poll, rest. The RX/TX pipelines dispatch by
+  state tables (`RX_TAB`/`TX_TAB`: TAKE returns into the state routine,
+  which starts with `RET C`), check the state's cost before the TAKE, and
+  a stopped pipeline is not retried in the same STEP unless the poll
+  reserve was refunded; the TX completion is checked the STEP after the
+  start. A frame header is written as DATA portions (one remote DMA per
+  portion: header and payload never share one); a TCP segment's ACK is its
+  own item (`ERX_TCPACK`) after the payload/FIN commit.
 - TCP reports CLOSED only after its last segment (the ACK of the peer's
   FIN) has left the TX pipeline: a game calls SHUTDOWN on CLOSED, and a
   card stopped under that frame leaves the host in LAST_ACK, dropping the
@@ -378,8 +415,14 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   `tools/dev/di_find.js` (long DI sections), `tools/dev/throughput.js`,
   `tools/dev/tcpcheck.js`, `tools/dev/watch.js` (write watch on context fields),
   `tools/dev/esp_costs.js` (ESP layer routine costs), `tools/dev/sdk_rate.js`
-  (throughput through the SDK gateway by STEPs per period). Keep debug scripts in
-  `tools/dev/`, not in the session scratchpad.
+  (throughput through the SDK gateway by STEPs per period),
+  `tools/dev/gw_costs.js` (gateway path overheads, quota sum),
+  `tools/dev/items_max.sh` (worst time per budget item over builds),
+  `tools/dev/stream_stats.js` (stream with retransmissions and yields),
+  `tools/dev/scenario_budget.js` (budget accounting over foreign broadcast
+  traffic, SHUTDOWN in a send, a lone send; part of profile-check);
+  `tools/dev/budget_calls.js` is the shared budget-call accounting. Keep debug scripts in `tools/dev/`, not in the session
+  scratchpad.
 - Results are kept separate per stand: Z (model), M (MAME), Ж (real
   Sprinter). A scenario that was not run is «не проверено», never «пройдено».
   Model passes do not prove hardware IRQ routing or real ISA timing.

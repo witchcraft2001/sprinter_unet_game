@@ -26,6 +26,8 @@ COST_PUMP	EQU	165	; bracket + LSR + ring + RTS + up to ES_TX_MAX TX bytes (+ 4 p
 
 COST_BRINGUP	EQU	COST_PUMP + 4 * ES_RX_MAX	; table step, or a full pump in EUP_AT
 COST_PORTION	EQU	90	; stop step
+COST_STOP	EQU	COST_PORTION
+	ASSERT	COST_PUMP + 4 < 256
 BRINGUP_MS	EQU	5000	; UART + module set-up (AT retries, module boot)
 	ASSERT	COST_BRINGUP <= PROF_MAX_ITEM_US && COST_PORTION <= PROF_MAX_ITEM_US
 
@@ -276,8 +278,6 @@ UART_PUMP
 	LD	(IX+ES_RH),L
 	LD	(IX+ES_RH+1),A
 .tx
-	BIT	1,(IY+CX_CALL_FLAGS)	; UCF_ISR: STEP_ISR moves RX only
-	RET	NZ
 	LD	A,(IX+ES_TXN)
 	OR	(IX+ES_TXN+1)
 	RET	Z
@@ -341,6 +341,17 @@ HW_RUN
 	SET	2,(IY+CX_WORK)		; UWK_MORE
 	RET
 .pump
+	; not even one byte besides the fixed part: no sizing (a refused
+	; attempt costs base time too)
+	LD	A,(IY+CX_UNITS+1)
+	OR	A
+	JR	NZ,.size
+	LD	A,(IY+CX_UNITS)
+	CP	COST_PUMP + 4
+	JR	NC,.size
+	SET	4,(IY+CX_WORK)		; UWK_YIELD
+	RET
+.size
 	LD	HL,COST_PUMP
 	LD	A,2			; 4 units per RX byte
 	LD	DE,ES_RX_MAX
@@ -371,29 +382,26 @@ HW_RUN
 	RET
 
 ; ----------------------------------------------------------------------
-; ISRP_POLL (P): the STEP_ISR body of a running card (sched.asm) -- a
-; status sample: received bytes waiting in the FIFO set UPEND_RX and make
-; STEP_ISR return WORK; STEP moves them.  (Moving the bytes here costs
+; ISRP_POLL: the STEP_ISR body of a running card (lock.asm ISR_PORTION;
+; contract in engine.asm: IY only, CF=1 IDLE / CF=0 WORK, clobbers A, HL)
+; -- a status sample: received bytes waiting in the FIFO set UPEND_RX and
+; make STEP_ISR return WORK; STEP moves them.  Writes no per-call field.  (Moving the bytes here costs
 ; ~120 us besides the STEP_ISR base: it does not fit the 150 us STEP_ISR
 ; bound with the current core; the auto-RTS flow control holds the module
 ; meanwhile.)  No events, no TX.
 ; ----------------------------------------------------------------------
 ISRP_POLL
-	STAT_INC UNETG_STATS_POLLS_TOTAL
-	SET	UPEND_POLLED,(IY+CX_ISR_PENDING)
-	LD	A,U_LSR
-	CALL	UREG
+	LD	A,(IY+EX_IO)
+	OR	U_LSR			; io_base is a multiple of 8
+	LD	L,A
+	LD	H,(IY+EX_IO+1)
 	LD	A,(HL)
 	BIT	1,A
 	JR	Z,.no_oe
-	SET	ESF_OVERRUN,(IX+ES_FLAGS)
+	SET	ESF_OVERRUN,(IY+EX_ESFLAGS)
 .no_oe
-	RRA				; DR
-	RET	NC
-	SET	UPEND_RX,(IY+CX_ISR_PENDING)
-	LD	A,(IY+CX_WORK)
-	OR	UWK_HW | UWK_MORE	; STEP_ISR returns WORK: main has bytes to move
-	LD	(IY+CX_WORK),A
+	RRA				; DR -> CF
+	CCF				; CF=1: nothing received
 	RET
 
 ; ----------------------------------------------------------------------

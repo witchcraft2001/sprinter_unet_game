@@ -761,6 +761,10 @@ CFG_COMMIT
 	LD	A,(IY+CX_EVENT_CAP)
 	DEC	A
 	LD	(IY+CX_EVENT_MASK),A
+	LD	A,(IY+CX_ISA_SLOT)	; the window latch, outside every DI section
+	ADD	A,A
+	OR	0xD4			; I/O space: #D4 slot 0, #D6 slot 1
+	LD	(IY+CX_ISA_E2),A
 	LD	A,0xFF
 	LD	(IY+CX_RX_PEEK_SLOT),A
 	LD	(IY+CX_TX_RES_SLOT),A

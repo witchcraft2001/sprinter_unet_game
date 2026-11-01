@@ -4,11 +4,11 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "S 8 KiB stream",
-  "wall_s": 24.7,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 34621",
+  "wall_s": 23.9,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 46987",
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 90,
+    "min_useful_budget_us": 420,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "stats": {
@@ -18,27 +18,27 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 3907,
+    "polls_total": 4343,
     "polls_useful": 36,
-    "steps_total": 4901,
-    "steps_useful": 4901,
-    "budget_yields": 1345,
+    "steps_total": 4945,
+    "steps_useful": 4945,
+    "budget_yields": 853,
     "max_step_gap_ms": 20,
     "arp_requests": 4,
-    "tx_frames": 23,
+    "tx_frames": 24,
     "rx_frames": 36,
     "tx_bytes": 8192,
     "rx_bytes": 8192
   },
-  "clock": "CLOCK_RATE 0.722 now_ms per emulated ms, TICK_MS 28.077, FRAME_MS 20.480, STEP_CALLS_PER_S 563 (over 8.7 s)",
+  "clock": "CLOCK_RATE 0.719 now_ms per emulated ms, TICK_MS 28.132, FRAME_MS 20.480, STEP_CALLS_PER_S 629 (over 7.7 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.271,
+  "ticks_missed_ratio": 0.272,
   "step": {
-    "max_us": 1302,
-    "mean_us": 875,
-    "steps": 4901,
-    "over_budget": 4901
+    "max_us": 1255,
+    "mean_us": 729,
+    "steps": 4945,
+    "over_budget": 4945
   },
   "trivial_call_us": 163
 }

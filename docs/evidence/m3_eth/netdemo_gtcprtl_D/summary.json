@@ -5,7 +5,7 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
   "wall_s": 18.5,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 39477",
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 27926",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,33 +17,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4250
+    "quota_sum_us": 3425
   },
   "info": {
-    "min_useful_budget_us": 500,
-    "empty_poll_us": 95,
+    "min_useful_budget_us": 425,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1400,
+      "poll": 950,
       "card": 0,
-      "main": 2750,
+      "main": 2375,
       "service": 100
     },
-    "cost_poll_us": 140,
-    "cost_step_us": 550,
-    "periods": 16,
-    "largest_period_debit_us": 4150,
-    "now_ms": 333,
+    "cost_poll_us": 95,
+    "cost_step_us": 475,
+    "periods": 18,
+    "largest_period_debit_us": 3325,
+    "now_ms": 375,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 84,
-      "early": 164,
-      "frames": 13,
-      "ticks": 167,
+      "step": 93,
+      "early": 192,
+      "frames": 16,
+      "ticks": 188,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,12 +58,12 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 164,
+    "polls_total": 189,
     "polls_useful": 4,
-    "steps_total": 84,
-    "steps_useful": 84,
-    "budget_yields": 74,
-    "max_step_gap_ms": 4,
+    "steps_total": 93,
+    "steps_useful": 93,
+    "budget_yields": 73,
+    "max_step_gap_ms": 6,
     "arp_requests": 1,
     "tx_frames": 4,
     "rx_frames": 4,
@@ -71,9 +71,9 @@
     "rx_bytes": 100
   },
   "timing_us": {
-    "tick_isr_max": 404,
-    "admitted_ug_step_max": 1171,
-    "largest_tick_gap": 2037,
+    "tick_isr_max": 305,
+    "admitted_ug_step_max": 977,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   }
 }

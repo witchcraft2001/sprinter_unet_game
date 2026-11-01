@@ -5,7 +5,7 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "E echo 300 bytes",
   "wall_s": 21.9,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 33032",
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40695",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,33 +17,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 4100
+    "quota_sum_us": 3350
   },
   "info": {
-    "min_useful_budget_us": 480,
-    "empty_poll_us": 90,
+    "min_useful_budget_us": 410,
+    "empty_poll_us": 55,
     "bus_busy_us": 25
   },
   "gateway": {
     "quota_full": {
-      "poll": 1350,
+      "poll": 950,
       "card": 0,
-      "main": 2650,
+      "main": 2300,
       "service": 100
     },
-    "cost_poll_us": 135,
-    "cost_step_us": 530,
-    "periods": 218,
-    "largest_period_debit_us": 4000,
-    "now_ms": 4370,
+    "cost_poll_us": 95,
+    "cost_step_us": 460,
+    "periods": 220,
+    "largest_period_debit_us": 3250,
+    "now_ms": 4398,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1082,
-      "early": 2253,
-      "frames": 168,
-      "ticks": 2186,
+      "step": 1090,
+      "early": 2287,
+      "frames": 172,
+      "ticks": 2200,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,24 +58,23 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2117,
-    "polls_useful": 3,
-    "steps_total": 1082,
-    "steps_useful": 1082,
-    "budget_yields": 112,
-    "max_step_gap_ms": 8,
-    "drop_foreign": 1,
+    "polls_total": 2131,
+    "polls_useful": 2,
+    "steps_total": 1090,
+    "steps_useful": 1090,
+    "budget_yields": 120,
+    "max_step_gap_ms": 6,
     "arp_requests": 4,
     "tx_frames": 5,
-    "rx_frames": 3,
+    "rx_frames": 2,
     "tx_bytes": 300,
     "rx_bytes": 300
   },
   "timing_us": {
-    "tick_isr_max": 405,
-    "admitted_ug_step_max": 1150,
-    "largest_tick_gap": 2030,
+    "tick_isr_max": 309,
+    "admitted_ug_step_max": 1015,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 3.6 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 3.6 s)"
 }

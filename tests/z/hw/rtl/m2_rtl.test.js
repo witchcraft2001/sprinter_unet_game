@@ -5,7 +5,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { ethScenarios, boot, clean, has, bytes, stream, isUdp, UHW_RUN } = require('../eth_scenarios.js');
+const { ethScenarios, boot, clean, has, bytes, stream, isUdp, inject, UHW_RUN } = require('../eth_scenarios.js');
 const { C } = require('../../../../tools/harness/ethnet.js');
 
 const S = C.status;
@@ -118,6 +118,32 @@ for (const dll of ['gtcprtl', 'gudprtl']) {
     } else {
       s.until(has('RX_READY'), 3000);
     }
+    clean(s);
+  });
+
+  test(`${dll}: two frames waiting in the ring are both read with STEP_ISR before every STEP`, () => {
+    // The main poll acknowledges ISR.PRX before it reads CURR; the second
+    // frame must not lose its notice to that acknowledgement (STEP_ISR
+    // samples only ISR, and a STEP skips its own poll after an empty
+    // sample): RF_MORE keeps the hint until the main poll sees the ring
+    // empty.  No third frame arrives to raise PRX again.
+    const s = boot(dll);
+    assert.equal(s.open().a, S.OK);
+    s.until(has('CONNECTED'));
+    s.run(50); s.events(); s.drain();
+    const a = bytes(60, 31), b = bytes(70, 32);
+    inject(s, dll, a);
+    inject(s, dll, b);
+    assert.equal(s.card.pending(), 2, 'both frames in the ring');
+    const rx = [];
+    for (let i = 0; i < 400 && rx.length < a.length + b.length; i++) {
+      const r = s.stepIsr(C.src.TIMER, 150);
+      assert.deepEqual(r.problems, []);
+      s.run(1);
+      s.events();
+      rx.push(...s.drain().bytes);
+    }
+    assert.deepEqual(rx, [...a, ...b]);
     clean(s);
   });
 
