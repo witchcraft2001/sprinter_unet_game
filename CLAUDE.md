@@ -247,8 +247,36 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   An empty answer zeroes it: no immediate retry (ABI §5).
 - SprinterESP: MCR is only ever 0x22 (AFE+RTS), 0x20 (explicit pause while
   the parser is 64 bytes behind) or 0 (stop); OUT1/OUT2 are the module
-  RESET/PGM lines. The FIFO is reset once, before AFE is on. STEP_ISR only
-  samples LSR (moving bytes there does not fit 150 us).
+  RESET/PGM lines. The FIFO is reset once, before AFE is on. The RTS
+  pause/resume decision and the write itself stay main-only, never
+  STEP_ISR's (ESP 2 KiB/s stage).
+- SprinterESP: a UART portion checks LSR once at its start (OE cannot
+  reappear mid-drain, the FIFO only shrinks) and bails out before any
+  ring/RTS arithmetic when there is no byte and no TX stream -- an idle
+  portion must not cost the same as a working one. A full RX drain
+  (ES_RX_MAX) and a TX write do not fit the same PROF_MAX_ITEM_US item
+  together: when both are pending in one portion, RX is capped at
+  ES_RX_JOINT_MAX, never the full depth; TX stays main-only. The pump
+  reserve stays flat: refunding the unmoved RX share bought nothing on Z
+  and made the MAME ESP-AT model time out a CIPSEND (GUDPESP UGTEST S).
+- SprinterESP: STEP_ISR may run a second UART RX drain, but only from the
+  leftover budget EXP_STEP_ISR already computes and would otherwise
+  discard (sched.asm), stashed in the hwsm byte ES_ISRCAP (IY window,
+  write-once by STEP_ISR, read-only by ISRP_POLL). ISRP_POLL never writes
+  ES_RXMAX, ESF_RTSOFF/MCR or TX -- only the ring head, under the same
+  "only one of {ISR at IFF=0, main under DI} runs at a time" guarantee
+  that makes the write race-free without an atomic protocol. Every
+  main-context read of the ring head goes through ER_HEAD under DI, even
+  where it used to be safe to skip (HW_RUN's own tail) before ISRP_POLL
+  could write it too. Its sizing follows the cost rule like any item:
+  65 + ISRP_ENTRY_RESERVE + 4 per byte >= max(real * 1.1, real + 15) for
+  the whole STEP_ISR, and ISRP_RX_MAX keeps the body under 150 / 1.1 at
+  any budget.
+- SprinterESP parser: a payload round's cost (COST_PAY) never chains on
+  top of a line round's cost (COST_PARSE) -- the old single COST_LINE for
+  every deferred line action hid this and other fixed costs; each kind of
+  deferred action (end of line, header, prompt, overrun, a completed UDP
+  datagram's publish) has its own measured item.
 - The M stand shows MAME's memory waits: a STEP costs ~2x its Z model and
   every STEP of the ESP builds exceeds 500 us real. Report M timings as
   measured, never fold them into the Z constants; real costs come from Ж.
@@ -321,6 +349,16 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   publication refused after the card poll and the TX scan was refused in
   every STEP (`UCLK_EV_FIRST`: the next STEP flushes the events first;
   NEXT_EVENT publishes without a budget and hid it).
+- An item's window in `budget_calls.js` runs from its TAKE / PARSE_BUDGET
+  to the next call, refund or phase boundary (`BOUNDS`: also `HW_STEP` and
+  `ESP_PARSE`, the dispatch points of the alternating card/transport
+  order): the sizing before a round's PARSE_BUDGET and the tail after its
+  refund are base time, invisible in the item's ratio. Never lower a fixed
+  cost from the item window alone -- the needed base reserve and the STEP
+  time (`over`) are the judges (a payload round costs ~75 us in its window
+  but ~150 us in all; COST_PAY 90 overran the STEP). A change that passes
+  Z can still break M: run `make test-m` for ESP after any pump/parser
+  timing change.
 - Budget tools account for refunds: a reserve given back (`UNITS_REFUND`)
   is no item (tools/dev/budget_calls.js, shared by profile_step.js and
   overrun.js); a TAKE reached by JP from a dispatch table is named by its

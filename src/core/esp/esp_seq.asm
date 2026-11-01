@@ -17,7 +17,7 @@
 
 COST_PICK	EQU	85	; choice of the next job (TX slot, RX space, ring cursor; 72 us)
 COST_PIECE	EQU	160	; one literal run (<= 16 bytes) + one substitution of a command (142 us)
-COST_RESULT	EQU	185	; a finished command: slot outcome, RX commit (165 us)
+COST_RESULT	EQU	195	; a finished command: slot outcome, RX commit (stand 174 us: a 1024-byte answer over 3 RX slots)
 
 ESP_AT_TRIES	EQU	5	; "AT" until the module answers (boot <= 2 s)
 ESP_AT_MS	EQU	500
@@ -25,7 +25,9 @@ ESP_CMD_MS	EQU	1000
 ESP_IO_MS	EQU	2000	; CIPRECVDATA, CIPCLOSE
 ESP_START_MS	EQU	15000	; CIPSTART: the module gives up after 10 s
 ESP_BUSY_MS	EQU	100
-ESP_RECV_MAX	EQU	512	; bytes per CIPRECVDATA
+ESP_RECV_MAX	EQU	1024	; bytes per CIPRECVDATA: covers a 536-byte TCP
+				; segment (or two held ones) in one command instead
+				; of two round trips
 
 ; ----------------------------------------------------------------------
 ; Small helpers (IX = tp unless stated)

@@ -1,6 +1,12 @@
 // ТЗ §5.1 timing targets checked against the values GET_INFO publishes
 // (the measured costs plus their margin, docs/MEASUREMENTS.md).  A target
 // the core does not meet yet would be marked `todo`, never weakened.
+//
+// The ТЗ §6.1/§8.2 throughput target (2048 B/s each way) is checked
+// against the live 8 KiB stream, not GET_INFO, in
+// tests/z/hw/eth_scenarios.js ("an 8 KiB stream both ways reaches >= 2048
+// B/s"), run per card build by tests/z/hw/*/m*.test.js; GTCPESP's `todo`
+// there is this project's one open instance of that target.
 'use strict';
 
 const test = require('node:test');

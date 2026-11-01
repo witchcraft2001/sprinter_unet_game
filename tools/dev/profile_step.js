@@ -40,6 +40,7 @@ const dts = opt('--dt', '2,10,20').split(',').map(Number);
 const budgetArg = opt('--budget', '500');
 const jsonOut = opt('--json', null), baseIn = opt('--base', null);
 const check = flag('--check'), showItems = flag('--items'), showIncl = flag('--incl');
+const isrBudget = opt('--isr', null);           // inject STEP_ISR(TIMER, isrBudget) between every STEP (WP4)
 const dlls = args.length ? args : ['gtcpesp', 'gudpesp', 'gtcprtl', 'gudprtl', 'gtcp509b', 'gudp509b', 'gloop'];
 const INCL = ['TXP_DATA', 'TXP_BEGIN', 'RXP_COPY', 'RXP_HEADER', 'NIC_TX_WRITE', 'NIC_RX_READ', 'ETH_CLASSIFY', 'ETH_ACCEPT', 'ETH_SUM0', 'TP_RX_STORE', 'TP_RX_ACCEPT', 'EXP_STEP', 'CLOCK_STEP', 'DEADLINES', 'EV_FLUSH', 'HW_STEP', 'HW_RUN', 'ETH_RX_STEP', 'ETH_TX_STEP', 'TP_STEP',
   'TCP_CHOOSE', 'TP_TX_PULL', 'TP_RX_COMMIT', 'TCP_ACKED', 'TCP_RELEASE', 'IP_TEMPLATE', 'RUN_PORTION', 'PORTION',
@@ -74,13 +75,16 @@ function boot(dll, b = budget) {
 function instrument(s, b, acc) {
   const tr = budgetTracker(s);
   const incl = INCL.filter((l) => l in s.syms);
+  const isrOpt = isrBudget ? { budget: +isrBudget } : undefined;
   return (dt) => {
     tr.reset();
-    const r = s.tick(dt, b, { inclusive: showIncl ? incl : null, onStep: tr.onStep });
+    const r = s.tick(dt, b, { inclusive: showIncl ? incl : null, onStep: tr.onStep, isr: isrOpt });
     const { items: its, reserved, calls } = tr.finish(r.us);
     for (const x of its) {
       const vari = x.kind === '/bytes' || x.kind === '/round';
-      const key = vari ? x.who : `${x.who}:${x.reserved}`;
+      // a parser round is keyed by its fixed cost (PARSE_BUDGET's BC =
+      // -fixed): line rounds and payload rounds calibrate separately
+      const key = x.kind === '/round' ? `${x.who}@${(0x10000 - x.call.bc) & 0xffff}` : vari ? x.who : `${x.who}:${x.reserved}`;
       const it = (acc.items[key] ||= { reserved: x.reserved, real: [] });
       it.reserved = Math.min(it.reserved, x.reserved);
       // variable-size items: compare the real time with this call's reserve
@@ -112,6 +116,7 @@ function streamRun(dll, dt) {
   acc.steps = 0;
   const piece = dll.startsWith('gudp') ? 512 : 536, d = bytes(8192, 11);
   const t0 = s.t;
+  const pollsUseful0 = isrBudget ? s.getStats().stats.polls_useful : 0;
   let off = 0, tag = 1, got = 0, errors = [];
   for (let i = 0; i < 20000 && got < d.length; i++) {
     if (off < d.length) {
@@ -130,9 +135,10 @@ function streamRun(dll, dt) {
     items[k] = { reserved: v.reserved, max: +max.toFixed(1), p99: +p99(v.real).toFixed(1), n: v.real.length,
       ratio: +(k.includes('/') ? 1 / max : v.reserved / max).toFixed(2) };
   }
+  const isrPolls = isrBudget ? s.getStats().stats.polls_useful - pollsUseful0 : undefined;
   return { echoed: got, of: d.length, ms, rate: +(got / ms * 1000 / 1024).toFixed(2), steps: acc.steps,
     need: +acc.need.toFixed(0), maxUs: +acc.maxUs.toFixed(0), maxDi: +acc.maxDi.toFixed(0), over: acc.over,
-    errors: [...new Set(errors)], problems: acc.problems.slice(0, 3), items,
+    errors: [...new Set(errors)], problems: acc.problems.slice(0, 3), items, isrPolls,
     incl: Object.fromEntries(Object.entries(acc.incl).map(([k, x]) => [k, { max: +x.max.toFixed(1), avg: +(x.sum / x.n).toFixed(1), n: x.n }])) };
 }
 
@@ -207,7 +213,8 @@ for (const dll of dlls) {
     const low = Object.entries(r.items).filter(([, v]) => v.ratio < 1);
     console.log(`  DT ${String(dt).padStart(2)} ms: echoed ${r.echoed}/${r.of} in ${r.ms} ms = ${r.rate} KiB/s${delta(r.rate, b.rate)}, ` +
       `${r.steps} STEPs${delta(r.steps, b.steps)}, need base ${r.need}${delta(r.need, b.need)}, max STEP ${r.maxUs}${delta(r.maxUs, b.maxUs)}, ` +
-      `DI ${r.maxDi}, over ${r.over}${r.errors.length ? ', events ' + r.errors : ''}${low.length ? ', ratio<1: ' + low.map(([k]) => k) : ''}`);
+      `DI ${r.maxDi}, over ${r.over}${r.errors.length ? ', events ' + r.errors : ''}${low.length ? ', ratio<1: ' + low.map(([k]) => k) : ''}` +
+      `${r.isrPolls !== undefined ? `, ISR drains with bytes ${r.isrPolls}` : ''}`);
     if (r.problems.length) console.log('     problems:', r.problems.join('; '));
     if (showItems) for (const [k, v] of Object.entries(r.items).sort()) {
       const bv = b.items?.[k];

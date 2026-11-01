@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "S 8 KiB stream",
-  "wall_s": 4.1,
+  "wall_s": 4.8,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -16,10 +16,10 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3375
+    "quota_sum_us": 3425
   },
   "info": {
-    "min_useful_budget_us": 415,
+    "min_useful_budget_us": 425,
     "empty_poll_us": 55,
     "bus_busy_us": 25
   },
@@ -27,22 +27,22 @@
     "quota_full": {
       "poll": 950,
       "card": 0,
-      "main": 2325,
+      "main": 2375,
       "service": 100
     },
     "cost_poll_us": 95,
-    "cost_step_us": 465,
-    "periods": 662,
-    "largest_period_debit_us": 3305,
-    "now_ms": 13236,
+    "cost_step_us": 475,
+    "periods": 630,
+    "largest_period_debit_us": 3340,
+    "now_ms": 12601,
     "stats": {
-      "refuse": 6,
+      "refuse": 1,
       "busy": 0,
       "isr": 0,
-      "step": 3252,
-      "early": 6606,
-      "frames": 509,
-      "ticks": 6621,
+      "step": 3096,
+      "early": 6233,
+      "frames": 493,
+      "ticks": 6303,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 8342,
-    "steps_total": 3252,
-    "steps_useful": 3252,
-    "budget_yields": 2867,
+    "polls_total": 7859,
+    "steps_total": 3096,
+    "steps_useful": 3096,
+    "budget_yields": 2824,
     "max_step_gap_ms": 10,
     "tx_frames": 16,
     "rx_frames": 16,
@@ -68,10 +68,10 @@
     "rx_bytes": 8192
   },
   "timing_us": {
-    "tick_isr_max": 310,
-    "admitted_ug_step_max": 1193,
+    "tick_isr_max": 317,
+    "admitted_ug_step_max": 1208,
     "largest_tick_gap": 2053,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.995 now_ms per emulated ms, TICK_MS 2.008, FRAME_MS 20.480, STEP_CALLS_PER_S 244 (over 12.8 s)"
+  "clock": "CLOCK_RATE 0.985 now_ms per emulated ms, TICK_MS 2.030, FRAME_MS 20.480, STEP_CALLS_PER_S 242 (over 12.3 s)"
 }

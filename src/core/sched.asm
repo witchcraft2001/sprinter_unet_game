@@ -562,6 +562,19 @@ EXP_STEP_ISR
 	LD	DE,-(PROF_MIN_RETURN_US + PROF_ISR_BASE_US + PROF_ISR_POLL_US)
 	ADD	HL,DE
 	JR	NC,ISR_YIELD
+	IFDEF	UGB_HW_ESP
+	; stash the leftover units (this call's budget for the card's own
+	; ISR-side byte pump, ES_ISRCAP, unetg_esp.inc) before HL is reused
+	; for the stats pointer below; ISRP_POLL (uart.asm) reads it, and
+	; only when it actually finds DR set -- an empty channel pays only
+	; this write.  L alone (no min(255,HL) clamp: that branch cost the
+	; empty path too much margin against PROF_EMPTY_POLL_US): ISRP_POLL
+	; clamps its own cap to ISRP_RX_MAX right after, so a leftover
+	; above 255 (STEP_ISR body <= 150 us; unreachable at the 21 MHz
+	; 1 unit/us scale, and still only ever under-caps at other speeds)
+	; costs nothing extra and never over-runs the real budget.
+	LD	(IY+EX_ISRCAP),L
+	ENDIF
 	; isr_calls[source] and irq_count through ctx.isr_stats_ptr (INC (HL)
 	; is atomic per byte, see STAT_INC); HL = that pointer afterwards
 	LD	L,(IY+CX_ISR_STATS_PTR)

@@ -80,12 +80,13 @@ PROF_CPU_KHZ		EQU	21000
 ; over the 8 KiB stream at STEP periods of 2/10/20 ms and the budgets 500
 ; and min (tools/dev/profile_step.js; make profile-check fails above it).
 ; Stand: GTCPRTL 199, GTCP509B 190, GUDPRTL 178, GUDP509B 174, GTCPESP
-; 184, GUDPESP 172, GLOOP 57 us.  PROF_MIN_RETURN_US stays on top of it.
+; 189 (ESP 2 KiB/s stage, WP1: HW_RUN's joint RX/TX sizing), GUDPESP 172,
+; GLOOP 57 us.  PROF_MIN_RETURN_US stays on top of it.
 	IFDEF	UGB_HW_LOOP
 PROF_STEP_BASE_US	EQU	140
 	ELSE
 	IFDEF	UGB_HW_ESP
-PROF_STEP_BASE_US	EQU	185
+PROF_STEP_BASE_US	EQU	195
 	ELSE
 	IFDEF	UGB_TP_TCP
 	IFDEF	UGB_HW_RTL
@@ -113,7 +114,7 @@ PROF_MAX_ITEM_US	EQU	210	; COST_RX_CHUNK of the RTL8019AS (stand 181 us)
 	IFDEF	UGB_HW_LOOP
 PROF_MAX_ITEM_US	EQU	230	; COST_LOOP_ITER + COST_LOOP_FIXED + a 16-byte portion (60 + 150 + 16)
 	ELSE
-PROF_MAX_ITEM_US	EQU	220	; ESP: COST_LINE (a pending line action, stand 199 us)
+PROF_MAX_ITEM_US	EQU	220	; ESP: COST_BRINGUP / a full line round (COST_PARSE + bytes)
 	ENDIF
 	ENDIF
 PROF_MIN_USEFUL_US	EQU	PROF_STEP_BASE_US + PROF_MAX_ITEM_US + PROF_MIN_RETURN_US
@@ -133,7 +134,15 @@ PROF_ISR_POLL_US	EQU	30	; ISR_PORTION: lock + map + status + unmap + release
 	ENDIF
 PROF_MIN_RETURN_US	EQU	10
 PROF_ISR_MIN_US		EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US + PROF_MIN_RETURN_US
-PROF_MAX_ATOMIC_US	EQU	60
+; max_atomic_us: the longest indivisible (DI) section any export may start
+; (ТЗ §5.1: an indivisible operation is refused if it and its return do not
+; fit).  Stale at 60 since before this stage; the stand's hard DI <= 200 us
+; rule was passing regardless, so nothing enforced this number against
+; reality.  Stand worst DI over the 8 KiB stream (all budgets/DT, all
+; cards): GTCPRTL 160, GUDPRTL 159, GTCP509B 151, GUDP509B 150, GUDPESP
+; 152, GTCPESP 121 us (tools/dev/profile_step.js).  Published = worst * 1.1
+; rounded up to 5 (ESP 2 KiB/s stage, WP5).
+PROF_MAX_ATOMIC_US	EQU	180
 PROF_EMPTY_POLL_US	EQU	PROF_ISR_BASE_US + PROF_ISR_POLL_US
 PROF_BUS_BUSY_US	EQU	25	; stand 24.8 us: lock byte read before any per-call write
 PROF_MAX_STEP_GAP_MS	EQU	20

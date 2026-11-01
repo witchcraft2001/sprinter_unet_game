@@ -208,6 +208,33 @@ function transportScenarios(dll) {
     clean(s);
   });
 
+  // ТЗ §6.1/§8.2 "базовая нагрузка": 2048 B/s useful payload each way, at
+  // the default STEP period (2 ms) and budget (500).  Ethernet already
+  // clears this with the SDK's default ISR budget; SprinterESP needs a
+  // game to raise UGP_ISR_BUDGET (docs/SDK.md) so STEP_ISR's leftover
+  // budget can run a second UART drain (WP4, ES_ISRCAP) -- modelled here
+  // by injecting STEP_ISR at budget 150 between STEPs, same as
+  // `profile_step.js --isr 150` (docs/MEASUREMENTS.md, "Этап ESP 2
+  // КиБ/с").  GUDPESP clears the target this way; GTCPESP does not --
+  // CIPRECVDATA's main-STEP-only round trip still caps it, so it stays a
+  // `todo` test, never a weakened assert, until closed or accepted as the
+  // Ж (real hardware) outcome.
+  test(`${dll}: an 8 KiB stream both ways reaches >= 2048 B/s (ТЗ §6.1/§8.2)`,
+    { todo: dll === 'gtcpesp' ? 'GTCPESP: CIPRECVDATA round trip caps it below 2048 B/s even with the STEP_ISR RX pump' : false }, () => {
+    const s = boot(dll);
+    if (s.isEsp) s.stepOpts = { isr: { budget: 150 } };
+    assert.equal(s.open().a, S.OK);
+    s.until(has('CONNECTED'));
+    const d = bytes(8192, 3);
+    const t0 = s.t;
+    const rx = stream(s, d, isUdp(dll) ? 512 : 536);
+    const ms = s.t - t0;
+    assert.deepEqual(rx, d);
+    const rate = d.length / (ms / 1000);
+    assert.ok(rate >= 2048, `${rate.toFixed(0)} B/s both ways in ${ms} ms`);
+    clean(s);
+  });
+
   // The SDK gateway spreads STEPs over the budget period (ТЗ §7: 2 per
   // 20 ms); GET_INFO allows gaps up to max_step_gap_ms = 20
   // (tools/dev/profile_step.js --dt 2,10,20).  Ethernet TCP holds since the

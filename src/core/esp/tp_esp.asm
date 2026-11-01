@@ -16,8 +16,11 @@
 ; item it leads to.  A job start and its first piece need not share a
 ; STEP: ESP_ISSUE leaves ECS_BUILD, and a refused piece is built next STEP.
 	ASSERT	COST_PARSE + 8 <= PROF_MAX_ITEM_US
-	ASSERT	COST_PARSE + COST_PAY + 1 <= PROF_MAX_ITEM_US
-	ASSERT	COST_LINE <= PROF_MAX_ITEM_US && COST_PICK <= PROF_MAX_ITEM_US
+	ASSERT	COST_PAY + ES_PAY_MAX <= PROF_MAX_ITEM_US
+	ASSERT	COST_EOL <= PROF_MAX_ITEM_US && COST_HDR <= PROF_MAX_ITEM_US
+	ASSERT	COST_PROMPT <= PROF_MAX_ITEM_US && COST_OVERRUN <= PROF_MAX_ITEM_US
+	ASSERT	COST_PUBLISH <= PROF_MAX_ITEM_US
+	ASSERT	COST_PICK <= PROF_MAX_ITEM_US
 	ASSERT	COST_PIECE <= PROF_MAX_ITEM_US && COST_RESULT <= PROF_MAX_ITEM_US
 
 ; TP_OPEN: CIPSTART is issued by the sequencer once the module is idle.
@@ -109,7 +112,7 @@ TP_STEP
 	RET	Z
 	BIT	ESF_OVERRUN,(IY+EX_FLAGS)
 	JR	Z,.parse
-	LD	HL,COST_LINE
+	LD	HL,COST_OVERRUN
 	CALL	TAKE
 	RET	C			; the realignment comes first: next STEP
 	HWSM_IX
@@ -118,7 +121,16 @@ TP_STEP
 	; a pending parser action goes first (bytes are taken in order); then
 	; the parser and the sequencer take turns to go first (bit 1 of the
 	; STEP counter; bit 0 alternates hardware and transport), so neither a
-	; long reply nor a busy sequencer starves the other
+	; long reply nor a busy sequencer starves the other.  Each visit pays
+	; only its own item (no item chains two costs): WP2 priced the pending
+	; action by kind (COST_EOL / COST_HDR / COST_PROMPT) instead of one
+	; flat COST_LINE, freeing budget for the rest of the STEP, but a
+	; second parse/pend visit the same STEP was measured to find nothing
+	; new (HW_RUN delivers at most ES_RX_MAX bytes once per STEP; a round
+	; sized ES_PARSE_MAX/ES_PAY_MAX already drains all of it) while still
+	; taxing every STEP for the dispatch overhead of trying -- so TP_STEP
+	; stays at one parse/pend visit per call; see WP4 (a second UART
+	; drain, in STEP_ISR) before revisiting this.
 	CALL	ESP_PEND
 	BIT	USCH_ODD2,(IY+CX_SCHED_FLAGS)
 	JR	Z,.seq_first

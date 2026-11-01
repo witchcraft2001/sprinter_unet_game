@@ -42,17 +42,22 @@ ER_SIZE		EQU	512
 ER_MASK		EQU	ER_SIZE - 1
 ER_PAUSE_AT	EQU	64	; parser backlog at which RTS is dropped explicitly
 ER_RESUME_AT	EQU	24	; backlog below which RTS is raised again
-ES_RX_MAX	EQU	12	; RX bytes per main portion (DI bound)
-ES_TX_MAX	EQU	12	; TX bytes per main portion (FIFO is 16)
+ES_RX_MAX	EQU	16	; RX bytes per main portion (FIFO depth)
+ES_TX_MAX	EQU	16	; TX bytes per main portion (written only while THRE)
 
 ; ---- ctx.hwsm (IX = hwsm); shared fields in unetg_hwsm.inc ---------------
-; The hot fields sit in the first 13 bytes of hwsm, which IY reaches
+; The hot fields sit in the first 14 bytes of hwsm, which IY reaches
 ; directly (EX_* = IY offsets); the layer does not use HS_DL.
 ES_FLAGS	EQU	3	; u8  ESF_* (bit operations only: shared with STEP_ISR)
 ES_RT		EQU	4	; u16 ring tail: written by the parser (main)
 ES_TXN		EQU	6	; u16 TX stream bytes left (main only)
 ES_RH		EQU	10	; u16 ring head: written by the pump (any context)
 ES_MCR		EQU	12	; u8  last MCR value written
+ES_ISRCAP	EQU	13	; u8  STEP_ISR's own RX byte budget: EXP_STEP_ISR
+				; (sched.asm) writes min(255, leftover units) here
+				; every call on a running card; ISRP_POLL reads it
+				; (cap = min(ISRP_RX_MAX, (ES_ISRCAP - reserve) / 4)) to size its own
+				; drain.  Was a 1-byte gap before ES_TXP (kept even).
 ES_TXP		EQU	14	; u16 TX stream source (main only)
 ES_TXKIND	EQU	16	; u8  ETXK_*
 ES_RXMAX	EQU	17	; u8  RX bytes the next pump may move
@@ -63,6 +68,8 @@ EX_RT		EQU	UCTX_HWSM + ES_RT - CTX_BIAS
 EX_TXN		EQU	UCTX_HWSM + ES_TXN - CTX_BIAS
 EX_RH		EQU	UCTX_HWSM + ES_RH - CTX_BIAS
 EX_ESFLAGS	EQU	UCTX_HWSM + ES_FLAGS - CTX_BIAS	; STEP_ISR, through IY
+EX_ISRCAP	EQU	UCTX_HWSM + ES_ISRCAP - CTX_BIAS	; STEP_ISR writes, ISRP_POLL reads, both through IY
+	ASSERT	EX_ISRCAP <= 127
 	ASSERT	EX_ESFLAGS <= 127
 	ASSERT	EX_RH + 1 <= 127 && EX_TXN + 1 <= 127 && EX_RT + 1 <= 127
 
@@ -139,6 +146,9 @@ EPD_EOL		EQU	1	; a line is complete
 EPD_COLON	EQU	2	; ':' after "+..." (+IPD datagram header?)
 EPD_COMMA	EQU	3	; ',' after "+..." (+CIPRECVDATA header?)
 EPD_PROMPT	EQU	4	; '>' at the line start (CIPSEND)
+EPD_PUBLISH	EQU	5	; a UDP datagram's payload just completed (WP2:
+				; deferred out of ESP_PAY so a payload round's own cost
+				; stays bytes-only, not RXD_PUBLISH's fixed overhead)
 
 EPS_LINE	EQU	0
 EPS_PAY		EQU	1

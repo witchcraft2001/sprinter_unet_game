@@ -7,6 +7,14 @@ const { boot, bytes, has, stream } = require('../../tests/z/hw/eth_scenarios.js'
 const { be32 } = require('../harness/net/peer.js');
 const dlls = process.argv.slice(2).length ? process.argv.slice(2) : ['gtcprtl', 'gtcp509b', 'gudprtl', 'gudp509b'];
 for (const dll of dlls) {
+  if (dll.endsWith('esp')) {
+    // ESP's NetPeer (tools/harness/devices/esp.js) has a different, simpler
+    // API (receive/send, no TCP sequence numbers to latch onto): the
+    // per-segment ACK latency this tool reports does not apply to it.
+    // Use tools/dev/profile_step.js or esp_costs.js for ESP throughput.
+    console.log(`${dll.padEnd(9)} skipped: ESP builds use a different peer API, see profile_step.js/esp_costs.js`);
+    continue;
+  }
   const s = boot(dll, {}, { peer: { rto: 1e9 } });
   s.open(); s.until(has('CONNECTED'));
   const p = s.peer, sentAt = new Map(), lat = [];

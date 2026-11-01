@@ -14,7 +14,14 @@
 const A = require('../harness/abi.json');
 
 const BOUNDS = ['EV_FLUSH', 'DEADLINES', 'TP_IF_RUNNING', 'ETH_AFFORD', 'ETH_AFFORD_E', 'ETH_RX_CONT', 'ETH_TX_CONT',
-  'ETH_STEP_ODD', 'UNITS_REFUND'];
+  'ETH_STEP_ODD', 'UNITS_REFUND', 'ESP_SEQ', 'ESP_PARSE', 'HW_STEP'];
+// ESP_SEQ: always entered once per TP_STEP call (WP2's multiple parse/pend
+// visits can leave it, or the first visit after it, idle with no TAKE of
+// its own -- without this bound that idle dispatch time bleeds into the
+// previous visit's item instead of staying base time).  HW_STEP: the
+// other dispatch point of the alternating card/transport order
+// (sched.asm, TP_IF_RUNNING is the first) -- a refused pump's sizing
+// is base time, not the tail of the transport item before it.
 
 function budgetTracker(s, { bounds = BOUNDS } = {}) {
   const ua = s.layout().ctx + A.ctx.fields.units.offset;

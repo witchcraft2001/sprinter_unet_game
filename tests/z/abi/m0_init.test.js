@@ -56,7 +56,13 @@ for (const dll of DLLS) {
     assert.equal(i.abi_version, 0x0100);
     assert.equal(i.size, ABI.blocks.INFO.size);
     assert.equal(i.hw_profile, C.hw[s.profile.hw]);
-    assert.equal(i.image_size, s.l1.codeSize);
+    // sprinter-mkdll pads an L1 body around a loader size bug when the
+    // relocation bitmap size itself hits the buggy pattern (high byte ==
+    // low byte): up to 8 trailing zero bytes that GET_INFO's compile-time
+    // image_size does not count.
+    const pad = s.l1.codeSize - i.image_size;
+    assert.ok(pad >= 0 && pad <= 8, `codeSize - image_size ${pad}`);
+    if (pad) assert.deepEqual([...s.l1.image.slice(-pad)], new Array(pad).fill(0), 'padding must be zero');
     assert.equal(i.ctx_size, ABI.ctx.size);
     assert.equal(i.event_size, 8);
     assert.equal(i.image_mutable_bytes, 2);

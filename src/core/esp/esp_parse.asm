@@ -15,12 +15,27 @@
 ; Lines longer than ES_LINE_MAX are counted, not stored, and ignored.
 
 ES_PARSE_MAX	EQU	48	; line bytes per parse round
-ES_PAY_MAX	EQU	128	; payload bytes per parse round
-COST_PARSE	EQU	150	; round: ring head, sizing, tail, refund, two slow line bytes (+ 16 units per line byte)
-COST_PAY	EQU	40	; payload round: ESP_PAY twice (RX ring wrap), datagram publish (COST_PARSE covers the rest)
-COST_LINE	EQU	220	; a pending action: line classification, header, prompt (ESP_PEND
-				; max 199 us)
+ES_PAY_MAX	EQU	55	; payload bytes per parse round
+COST_PARSE	EQU	150	; line round: ring head, sizing, tail, refund, two slow line bytes
+				; (+ 16 units per line byte: 8 overran the STEP on the stand);
+				; its own cost only, never on top of COST_PAY
+COST_PAY	EQU	165	; payload round, its own item: ESP_PAY twice (the payload
+				; reaches the end of the RX ring and continues at its
+				; start), the round's sizing and tail (ESP_PROGRESS,
+				; ER_SET_TAIL: stand ~150 us for the whole round); a
+				; completed UDP datagram's RXD_PUBLISH is deferred to its
+				; own item (EPD_PUBLISH) so this stays bytes-only (+ 1
+				; unit per payload byte)
+; ESP_PEND: a pending action's own cost, by kind (WP2: replaces the one flat
+; COST_LINE -- no item chains two costs, and a cheap action no longer
+; reserves the worst case of every kind).
+COST_EOL	EQU	190	; EPD_EOL: ESP_LINE classification + token dispatch
+COST_HDR	EQU	165	; EPD_COLON / EPD_COMMA: a header candidate (ESP_HDR_IPD/_RECV)
+COST_PROMPT	EQU	95	; EPD_PROMPT: ESP_PROMPT (CIPSEND payload hookup)
+COST_PUBLISH	EQU	80	; EPD_PUBLISH: RXD_PUBLISH + stats of a completed UDP datagram
+COST_OVERRUN	EQU	60	; TP_STEP's realignment after LSR.OE (ESP_OVERRUN)
 	ASSERT	ES_PAY_MAX < 256 && ES_PARSE_MAX < 256 && COST_PARSE + 1 < 256
+	ASSERT	COST_PAY + ES_PAY_MAX < 256
 
 ; IX = ctx.tp (preserves DE)
 	MACRO	ET_IX
@@ -85,28 +100,25 @@ ESP_PARSE
 	CALL	MIN_DE_HL
 	LD	BC,-COST_PARSE
 .size
-	LD	A,4			; 16 units per line byte (stand: 8..14 us)
+	LD	A,4			; 16 units per line byte
 	CALL	PARSE_BUDGET
 	POP	DE			; tail
 	RET	C
 	JR	.go
 .pay_round
 	; payload bytes: a round never runs past the payload (its bytes are
-	; charged at the copy rate)
+	; charged at the copy rate); its own item (COST_PAY), never on top of
+	; COST_PARSE
 	LD	L,(IX+ET_PLEFT)
 	LD	H,(IX+ET_PLEFT+1)
 	CALL	MIN_DE_HL
 	LD	HL,ES_PAY_MAX
 	CALL	MIN_DE_HL
-	LD	BC,-(COST_PARSE + COST_PAY)
+	LD	BC,-COST_PAY
 	XOR	A			; 1 unit per payload byte (LDIR)
 	CALL	PARSE_BUDGET
 	POP	DE
 	RET	C
-	PUSH	DE			; tail (TAKE clobbers DE)
-	LD	HL,COST_PAY
-	CALL	TAKE			; fits: the round was sized with it
-	POP	DE
 .go
 	PUSH	DE			; [tail]
 	PUSH	BC			; [tail][n]
@@ -142,14 +154,17 @@ ESP_PARSE
 	RET
 
 ; PARSE_BUDGET: size a parse round.  In: DE = bytes wanted (> 0), BC =
-; -(threshold) (units that must remain besides the bytes), A = log2 of
-; units per byte.  Out: CF=0, BC = bytes (1..DE), units -= COST_PARSE +
-; (BC << A); CF=1 (UWK_YIELD) when not one byte fits.  Clobbers A, DE, HL.
+; -(fixed) (the round's own fixed cost, as its negative: the same value is
+; the affordability threshold and the charge -- a round pays only its own
+; item, never another round's fixed cost too), A = log2 of units per byte.
+; Out: CF=0, BC = bytes (1..DE), units -= fixed + (BC << A); CF=1
+; (UWK_YIELD) when not one byte fits.  Clobbers A, DE, HL.
 PARSE_BUDGET
 	LD	L,(IY+CX_UNITS)
 	LD	H,(IY+CX_UNITS+1)
-	ADD	HL,BC			; CF=1: units >= threshold
+	ADD	HL,BC			; CF=1: units >= fixed
 	JR	NC,.refuse
+	PUSH	BC			; [-(fixed)]
 	LD	C,A			; shift
 	OR	A
 	JR	Z,.aff
@@ -162,7 +177,7 @@ PARSE_BUDGET
 	CALL	MIN_DE_HL		; DE = min(wanted, affordable)
 	LD	A,D
 	OR	E
-	JR	Z,.refuse
+	JR	Z,.refuse_pop
 	LD	H,D
 	LD	L,E
 	LD	A,C
@@ -175,8 +190,9 @@ PARSE_BUDGET
 .cost
 	LD	B,D
 	LD	C,E			; BC = bytes
-	LD	DE,COST_PARSE
-	ADD	HL,DE
+	POP	DE			; DE = -(fixed)
+	OR	A
+	SBC	HL,DE			; HL += fixed (DE is -(fixed))
 	EX	DE,HL
 	LD	L,(IY+CX_UNITS)
 	LD	H,(IY+CX_UNITS+1)
@@ -185,6 +201,8 @@ PARSE_BUDGET
 	LD	(IY+CX_UNITS),L
 	LD	(IY+CX_UNITS+1),H
 	RET				; CF=0
+.refuse_pop
+	POP	BC			; stack balance (the saved -(fixed) is unused)
 .refuse
 	SET	4,(IY+CX_WORK)		; UWK_YIELD
 	SCF
@@ -262,7 +280,10 @@ ESP_BYTES
 	RET				; the action comes first
 .pay
 	CALL	ESP_PAY			; HL / BC advanced; IX = tp
-	JR	.loop
+	LD	A,(IX+ET_PEND)
+	OR	A
+	JR	Z,.loop
+	RET				; a completed datagram's publish comes first
 
 ; ----------------------------------------------------------------------
 ; ESP_PAY: payload bytes.  In: HL = source, BC = bytes available (> 0),
@@ -337,27 +358,18 @@ ESP_PAY
 	LD	A,(IX+ET_PLEFT)
 	OR	(IX+ET_PLEFT+1)
 	RET	NZ
-	; payload complete; TCP bytes are published by the final OK
+	; payload complete; TCP bytes are published by the final OK.  A UDP
+	; datagram's publish (RXD_PUBLISH, its stats, PKIND reset) is its own
+	; item (EPD_PUBLISH, ESP_PEND): not bytes-proportional, so folding it
+	; into this round would force every payload round's own cost
+	; (COST_PAY) to cover it too, shrinking ES_PAY_MAX far below what a
+	; round actually needs for the common (non-final) case.
 	LD	(IX+ET_PST),EPS_LINE
 	IFDEF	UGB_RX_DGRAM
 	LD	A,(IX+ET_PKIND)
 	CP	EPK_UDP
 	RET	NZ
-	PUSH	HL
-	PUSH	BC
-	LD	C,(IX+ET_GOT)
-	LD	B,(IX+ET_GOT+1)
-	CALL	RXD_PUBLISH
-	STAT_INC UNETG_STATS_RX_FRAMES
-	ET_IX
-	LD	E,(IX+ET_GOT)
-	LD	D,(IX+ET_GOT+1)
-	STAT_ADD32 UNETG_STATS_RX_BYTES
-	ET_IX
-	LD	(IX+ET_PKIND),0
-	SET	1,(IY+CX_WORK)		; UWK_PROTO
-	POP	BC
-	POP	HL
+	LD	(IX+ET_PEND),EPD_PUBLISH
 	ENDIF
 	RET
 
@@ -410,10 +422,19 @@ LINE_STORE
 	RET
 ESP_LBYTE.hdr
 	; ':' may end "+IPD,<link>,<len>", ',' may end "+CIPRECVDATA:<len>";
-	; only these (cheap prefix checks) become actions
+	; both headers start with '+' -- skip the (longer) prefix compare for
+	; any other line without even reading it (WP2: the candidate probe is
+	; the slow byte of a round, cheapened to this one extra check)
 	LD	A,(IX+ET_LLEN)
 	CP	ES_LINE_MAX + 1
 	JR	NC,LINE_STORE
+	PUSH	BC
+	XOR	A
+	CALL	LINE_AT
+	LD	A,(HL)
+	POP	BC
+	CP	'+'
+	JR	NZ,LINE_STORE
 	LD	A,C
 	CP	':'
 	JR	NZ,.comma
@@ -448,15 +469,27 @@ ESP_LBYTE.eol
 	RET
 
 ; ----------------------------------------------------------------------
-; ESP_PEND: the action left by the parser (COST_LINE).  CF=1 when the
-; budget refused it (the parser waits for it).  Clobbers A, BC, DE, HL, IX.
+; ESP_PEND: the action left by the parser, at its own cost by kind (WP2:
+; COST_EOL / COST_HDR / COST_PROMPT -- no item chains two costs).  CF=1
+; when the budget refused it (the parser waits for it).  Clobbers A, BC,
+; DE, HL, IX.
 ; ----------------------------------------------------------------------
 ESP_PEND
 	ET_IX
 	LD	A,(IX+ET_PEND)
 	OR	A
 	RET	Z
-	LD	HL,COST_LINE
+	CP	EPD_EOL
+	LD	HL,COST_EOL
+	JR	Z,.take
+	CP	EPD_PROMPT
+	LD	HL,COST_PROMPT
+	JR	Z,.take
+	CP	EPD_PUBLISH
+	LD	HL,COST_PUBLISH
+	JR	Z,.take
+	LD	HL,COST_HDR		; EPD_COLON / EPD_COMMA
+.take
 	CALL	TAKE
 	RET	C
 	ET_IX
@@ -466,6 +499,8 @@ ESP_PEND
 	JR	Z,.eol
 	CP	EPD_PROMPT
 	JP	Z,ESP_PROMPT
+	CP	EPD_PUBLISH
+	JR	Z,.publish
 	CP	EPD_COLON
 	JR	Z,.colon
 	CALL	ESP_HDR_RECV		; CF=1: not a header, the ',' is text
@@ -482,6 +517,23 @@ ESP_PEND
 	ET_IX
 	LD	(IX+ET_LLEN),0
 	OR	A
+	RET
+.publish
+	; a completed UDP datagram (ESP_PAY deferred this out of its own round)
+	IFDEF	UGB_RX_DGRAM
+	LD	C,(IX+ET_GOT)
+	LD	B,(IX+ET_GOT+1)
+	CALL	RXD_PUBLISH
+	STAT_INC UNETG_STATS_RX_FRAMES
+	ET_IX
+	LD	E,(IX+ET_GOT)
+	LD	D,(IX+ET_GOT+1)
+	STAT_ADD32 UNETG_STATS_RX_BYTES
+	ET_IX
+	LD	(IX+ET_PKIND),0
+	SET	1,(IY+CX_WORK)		; UWK_PROTO
+	ENDIF
+	OR	A			; CF=0: performed
 	RET
 
 ; LINE_AT: HL = line buffer + A.  Clobbers DE.

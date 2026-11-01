@@ -47,7 +47,19 @@ class RelocTests(unittest.TestCase):
             src = ROOT / "src" / "dll" / f"{d['src']}.asm"
             for base in BASES:
                 with self.subTest(dll=d["file"], base=hex(base)):
-                    self.assertEqual(relocate(dll, base), assemble_at(src, base + 0x20))
+                    relocated = relocate(dll, base)
+                    direct = assemble_at(src, base + 0x20)
+                    # sprinter-mkdll pads an L1 body around a loader size bug
+                    # (format.py _pad_l1_around_loader_size_bug) when the
+                    # relocation bitmap size itself hits the buggy pattern
+                    # (high byte == low byte): up to 8 trailing zero bytes,
+                    # not present in a direct assembly at a fixed origin.
+                    pad = len(relocated) - len(direct)
+                    self.assertTrue(0 <= pad <= 8, f"unexpected length delta {pad}")
+                    if pad:
+                        self.assertEqual(relocated[-pad:], b"\0" * pad, "padding must be zero")
+                        relocated = relocated[:-pad]
+                    self.assertEqual(relocated, direct)
 
 
 if __name__ == "__main__":

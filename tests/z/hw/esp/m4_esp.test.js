@@ -6,7 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { transportScenarios, boot, clean, has, bytes, stream, isUdp, UHW_RUN } = require('../eth_scenarios.js');
+const { transportScenarios, boot, clean, has, bytes, stream, isUdp, peerGot, UHW_RUN } = require('../eth_scenarios.js');
 const { C } = require('../../../../tools/harness/ethnet.js');
 
 const S = C.status;
@@ -255,6 +255,90 @@ for (const dll of ['gtcpesp', 'gudpesp']) {
       clean(s);
     });
   }
+
+  test(`${dll}: STEP_ISR drains the UART by itself when its budget allows`, () => {
+    // WP4: EXP_STEP_ISR (sched.asm) converts its leftover budget into
+    // ES_ISRCAP; ISRP_POLL (uart.asm) spends it moving bytes straight into
+    // the ring, so a quiet main loop (no STEP at all) still sees the data.
+    const s = boot(dll);
+    connect(s);
+    s.run(50); s.events(); s.drain();
+    const d = bytes(32, 8);
+    s.peer.sendData(d);
+    s.idle(8);                                  // the notice crosses the network and the UART line
+    const before = s.getStats().stats;
+    const r = s.stepIsr(C.src.TIMER, 150);
+    assert.deepEqual(r.problems, []);
+    assert.equal(r.a, S.WORK, 'data waiting');
+    assert.ok(r.us <= 150, `STEP_ISR took ${r.us} us`);
+    const afterIsr = s.getStats().stats;
+    assert.ok(afterIsr.polls_useful > before.polls_useful, 'the ISR itself moved bytes (not the next STEP)');
+    assert.equal(afterIsr.uart_overrun, 0);
+    const rx = [];
+    for (let i = 0; i < 500 && rx.length < d.length; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
+    assert.deepEqual(rx, d, 'the ISR-moved bytes still reach the application');
+    clean(s);
+  });
+
+  test(`${dll}: the SDK's default ISR budget (65 us) moves no bytes, only the main STEP does`, () => {
+    const s = boot(dll);
+    connect(s);
+    s.run(50); s.events(); s.drain();
+    const d = bytes(16, 3);
+    s.peer.sendData(d);
+    s.idle(8);
+    const before = s.getStats().stats;
+    const r = s.stepIsr(C.src.TIMER, 65);
+    assert.deepEqual(r.problems, []);
+    assert.equal(r.a, S.WORK, 'still reports data waiting');
+    const after = s.getStats().stats;
+    assert.equal(after.polls_useful, before.polls_useful, 'no regression to the unmodified default profile');
+    const rx = [];
+    for (let i = 0; i < 500 && rx.length < d.length; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
+    assert.deepEqual(rx, d);
+    clean(s);
+  });
+
+  test(`${dll}: STEP_ISR(150) injected between every STEP keeps an 8 KiB stream intact`, () => {
+    const s = boot(dll);
+    connect(s);
+    s.stepOpts = { isr: { budget: 150 } };
+    const d = bytes(8192, 5);
+    const rx = stream(s, d, udp ? 512 : 536);
+    assert.deepEqual(rx, d);
+    assert.deepEqual(peerGot(s, dll), d);
+    assert.equal(s.getStats().stats.uart_overrun, 0);
+    clean(s);
+  });
+
+  // TCP needs the sequencer (main STEP only) to issue CIPRECVDATA before
+  // any byte reaches the UART at all; only UDP's +IPD pushes data without
+  // a command round-trip, so only UDP can accumulate ring backlog with no
+  // main STEP running at all (same reason the RTS-by-parser-lag test below
+  // is UDP-only).
+  if (udp) test(`${dll}: ISR-only draining past the pause threshold still lets the main pump pause and resume RTS`, () => {
+    // nobody calls a main STEP for a while: STEP_ISR alone drains the UART
+    // into the ring, which nothing reads (the parser only runs in STEP) --
+    // the ring backlog grows past ER_PAUSE_AT, and the first main pump
+    // after that must still see it and pause RTS explicitly.
+    const s = boot(dll);
+    connect(s);
+    s.run(50); s.events(); s.drain();
+    const total = 40 * 16;
+    for (let k = 0; k < 40; k++) {
+      s.peer.sendData(bytes(16, k));
+      s.idle(8);
+      s.stepIsr(C.src.TIMER, 150);
+    }
+    s.run(1);
+    assert.ok(s.card.mcrWrites.some((w) => w.v === 0x20), 'RTS paused by the main pump');
+    const rx = [];
+    for (let i = 0; i < 3000 && rx.length < total; i++) { s.run(1); s.events(); rx.push(...s.drain().bytes); }
+    assert.equal(rx.length, total);
+    assert.equal(s.card.mcr, 0x22, 'RTS back once drained');
+    assert.equal(s.getStats().stats.uart_overrun, 0);
+    clean(s);
+  });
 
   if (udp) test(`${dll}: a parser behind the UART drops RTS explicitly, no overrun`, () => {
     // many small datagrams are line-heavy: at the minimum budget the pump
