@@ -1,0 +1,108 @@
+{
+  "stand": "Ж",
+  "prog": "ugtest",
+  "dll": "gtcp509b",
+  "scenario": "K",
+  "file": "U509TK.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "info": {
+    "min_useful_budget_us": 420,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 4735,
+    "polls_useful": 17612,
+    "steps_total": 36089,
+    "steps_useful": 36089,
+    "budget_yields": 30547,
+    "bus_busy": 16,
+    "max_step_gap_ms": 20,
+    "drop_foreign": 188,
+    "arp_requests": 1,
+    "tx_frames": 7451,
+    "rx_frames": 17612,
+    "tx_bytes": 3970152,
+    "rx_bytes": 3970152
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": null,
+  "step": {
+    "max_us": 1300,
+    "mean_us": 9955,
+    "steps": 36073,
+    "over_budget": 36073
+  },
+  "trivial_call_us": 177,
+  "hw": {
+    "scen": "K",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 61276,
+    "bring": {
+      "ms": 180,
+      "scratch": 0
+    },
+    "lat": {
+      "txdone": {
+        "n": 0,
+        "max_counts": 0,
+        "max_us": 0.0
+      },
+      "echo": {
+        "n": 0,
+        "max_counts": 0,
+        "max_us": 0.0
+      },
+      "saturated": 0,
+      "saturated_max_frames": 0
+    },
+    "costs16": {
+      "isr": {
+        "counts": 5562,
+        "per_call_us": 264.8
+      },
+      "busy": {
+        "counts": 4298,
+        "per_call_us": 204.6
+      },
+      "empty_step": {
+        "counts": 13592,
+        "per_call_us": 647.1
+      }
+    },
+    "soak": {
+      "frames": 30000,
+      "net_max_us": 49924.0,
+      "net_mean_us": 11964.0,
+      "bytes": 3972296,
+      "rx_bad": 0
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "step": false,
+    "soak": false,
+    "isr": true,
+    "bus_busy": false,
+    "card_found": true
+  }
+}

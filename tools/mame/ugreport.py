@@ -92,7 +92,8 @@ def parse_report(lines, frame_ms=None):
             steptime = [int(x, 16) for x in ln[9:].split()]
         if ln.startswith('CALLTIME16 '):
             calltime = int(ln[11:].strip(), 16)
-        for key in ('SCEN', 'LAT', 'ISRTIME16', 'BUSYTIME16', 'EMPTYSTEP16', 'SOAK', 'CBL'):
+        for key in ('SCEN', 'SLOT', 'LPORT', 'BRING', 'LAT', 'LATMS', 'ISRTIME16', 'BUSYTIME16', 'EMPTYSTEP16',
+                    'SOAK', 'CBL'):
             if ln.startswith(key + ' '):
                 hw[key] = ln[len(key) + 1:].split()
     if cal_ctc and frame_ms is not None and steptime is not None:
@@ -126,6 +127,19 @@ def hw_lines(hw, us_per_count):
     out = {}
     if 'SCEN' in hw and hw['SCEN']:
         out['scen'] = hw['SCEN'][0]
+    if 'SLOT' in hw and len(hw['SLOT']) >= 3:
+        # sdk/example/ughw.inc hw_slot: configured slot, mask of the slots
+        # that answered as the card (bit s = slot s), slot used
+        cfg, mask, used = int(hw['SLOT'][0]), h(hw['SLOT'][1]), int(hw['SLOT'][2])
+        out['slot'] = {'configured': cfg, 'found': [s for s in (0, 1) if mask >> s & 1], 'used': used}
+    if 'LPORT' in hw and hw['LPORT']:
+        out['local_port'] = h(hw['LPORT'][0])
+    if 'BRING' in hw and len(hw['BRING']) >= 2:
+        # sdk/example/ughw.inc hw_bring: ms from INIT_CONFIG to UHW_RUN and
+        # the card scratch byte hwsm[43] sampled at RUN (3C509B: 0 = attached,
+        # 1 = the ID-port global reset was needed; another value = the byte
+        # was already taken by a received frame)
+        out['bring'] = {'ms': h(hw['BRING'][0]), 'scratch': h(hw['BRING'][1])}
     if 'LAT' in hw and len(hw['LAT']) >= 6:
         f = [h(v) for v in hw['LAT']]
         n_sat = f[6] if len(f) > 6 else 0
@@ -141,6 +155,14 @@ def hw_lines(hw, us_per_count):
             return d
         out['lat'] = {'txdone': side(f[0], f[1], f[2]), 'echo': side(f[3], f[4], f[5]),
                       'saturated': n_sat, 'saturated_max_frames': k_max}
+    if 'LATMS' in hw and len(hw['LATMS']) >= 6:
+        # NETDEMO T: per packet size "bytes n max sum max sum", ms of now_ms
+        # from TX_COMMIT to TX_DONE and to the whole echo (one tick each way)
+        f = [h(v) for v in hw['LATMS']]
+        out['latms'] = [{'bytes': b, 'n': n,
+                         'txdone_max_ms': tm, 'txdone_mean_ms': round(ts / n, 1) if n else None,
+                         'echo_max_ms': em, 'echo_mean_ms': round(es / n, 1) if n else None}
+                        for b, n, tm, ts, em, es in (f[i:i + 6] for i in range(0, len(f) - 5, 6))]
     for key, name in (('ISRTIME16', 'isr'), ('BUSYTIME16', 'busy'), ('EMPTYSTEP16', 'empty_step')):
         if key in hw and hw[key]:
             c = h(hw[key][0])

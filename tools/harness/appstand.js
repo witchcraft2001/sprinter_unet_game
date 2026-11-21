@@ -75,6 +75,9 @@ class AppStand {
   constructor(opts = {}) {
     this.s = ethStand({ dll: opts.dll || 'gloop', card: opts.card, peer: opts.peer });
     this.m = this.s.m;
+    // the 3C509B model times its EEPROM and reset windows on the real time
+    // of this stand (CPU cycles), not on ethStand's s.t
+    if (this.s.card && 'eepromBusyMs' in this.s.card) this.s.card.clock = () => this.us() / 1000;
     this.dll = this.s.name;
     this.isLoop = this.dll === 'gloop';
     this.syms = readSymbols(path.join(ROOT, 'build', 'ugz.sym'));
@@ -283,7 +286,7 @@ class AppStand {
     if (c.depth === 0 && (lock === C.lock.NET_MAIN || lock === C.lock.NET_ISR)) P.push(`${where}: lock byte ${lock} left held`);
     for (const g of this.gwOpen) if (g.depth === c.depth) g.coreUs += us;
     if (c.name === 'STEP' || c.name === 'STEP_ISR') {
-      const cap = c.name === 'STEP' ? 500 : 150;
+      const cap = c.name === 'STEP' ? ABI.consts.limits.STEP_BODY_MAX_US : ABI.consts.limits.ISR_BODY_MAX_US;
       const st = s.a;
       if (st !== C.status.STATE && st !== C.status.BAD_ARGUMENT && us > Math.min(c.de, cap)) P.push(`${where}: took ${us.toFixed(0)} us, budget ${c.de}`);
       this.done[c.name].push({ us, budget: c.de, stack, status: st, nested: c.depth === 0 && this.isrCycles !== c.i0, at: this.us() });

@@ -4,13 +4,13 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 3.2,
+  "wall_s": 5.5,
   "steps_per_period": 5,
   "load": {
     "status": 0,
     "libman_reason": 0,
     "handle": 0,
-    "page": 235,
+    "page": 233,
     "base": "0x4000"
   },
   "env": {
@@ -32,17 +32,17 @@
     },
     "cost_poll_us": 95,
     "cost_step_us": 475,
-    "periods": 60,
+    "periods": 61,
     "largest_period_debit_us": 3325,
-    "now_ms": 1215,
+    "now_ms": 1219,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 300,
-      "early": 616,
-      "frames": 47,
-      "ticks": 608,
+      "early": 619,
+      "frames": 50,
+      "ticks": 610,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,7 +57,7 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 570,
+    "polls_total": 569,
     "steps_total": 300,
     "steps_useful": 300,
     "budget_yields": 280,
@@ -69,9 +69,9 @@
   },
   "timing_us": {
     "tick_isr_max": 314,
-    "admitted_ug_step_max": 1069,
-    "largest_tick_gap": 2053,
+    "admitted_ug_step_max": 1070,
+    "largest_tick_gap": 2040,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 250 (over 0.5 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 0.5 s)"
 }

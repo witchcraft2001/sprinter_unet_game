@@ -32,7 +32,8 @@ check: dlls sdk verify size names test-host test-z profile-check
 	@echo "check: all gates passed"
 
 # STEP profile of every build: 8 KiB stream at STEP periods of 2/10/20 ms
-# at the 500 us budget and at the published minimum, no STEP over its
+# at the 500 us budget, at the published minimum and at 1000 and 2000 us
+# (the largest INIT_CONFIG accepts), no STEP over its
 # budget, publication rules held (tools/dev/profile_step.js,
 # docs/MEASUREMENTS.md); the same accounting over foreign broadcast
 # traffic, SHUTDOWN in a send and a lone send (tools/dev/scenario_budget.js)
@@ -41,6 +42,8 @@ SCEN_CARD = $(SCEN_ETH) gtcpesp gudpesp
 profile-check: dlls
 	node tools/dev/profile_step.js --check
 	node tools/dev/profile_step.js --check --budget min
+	node tools/dev/profile_step.js --check --budget 1000 | tail -1
+	node tools/dev/profile_step.js --check --budget 2000 | tail -1
 	@for d in $(SCEN_ETH); do node tools/dev/scenario_budget.js $$d broadcast --check | tail -1 || exit 1; done
 	@for d in $(SCEN_CARD); do for sc in shutdown lone; do node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
 
@@ -56,12 +59,12 @@ mame:
 M_RUNS = gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gudpesp:E gudpesp:S gudpesp:D \
          gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gudprtl:E gudprtl:S gudprtl:D \
          gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gudp509b:E gudp509b:S gudp509b:D
-N_RUNS = gtcpesp:L gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gtcpesp:W \
-         gudpesp:L gudpesp:E gudpesp:S gudpesp:D gudpesp:W \
-         gtcprtl:H gtcprtl:L gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gtcprtl:W \
-         gudprtl:H gudprtl:E gudprtl:S gudprtl:D gudprtl:W \
-         gtcp509b:H gtcp509b:L gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gtcp509b:W \
-         gudp509b:H gudp509b:E gudp509b:S gudp509b:D gudp509b:W
+N_RUNS = gtcpesp:L gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gtcpesp:W gtcpesp:T gtcpesp:Q gtcpesp:A gtcpesp:B gtcpesp:C \
+         gudpesp:L gudpesp:E gudpesp:S gudpesp:D gudpesp:W gudpesp:T gudpesp:Q gudpesp:A gudpesp:B gudpesp:C \
+         gtcprtl:H gtcprtl:L gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gtcprtl:W gtcprtl:T gtcprtl:Q gtcprtl:A gtcprtl:B gtcprtl:C \
+         gudprtl:H gudprtl:E gudprtl:S gudprtl:D gudprtl:W gudprtl:T gudprtl:Q gudprtl:A gudprtl:B gudprtl:C \
+         gtcp509b:H gtcp509b:L gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gtcp509b:W gtcp509b:T gtcp509b:Q gtcp509b:A gtcp509b:B gtcp509b:C \
+         gudp509b:H gudp509b:E gudp509b:S gudp509b:D gudp509b:W gudp509b:T gudp509b:Q gudp509b:A gudp509b:B gudp509b:C
 M_ONE = r=$$?; if [ $$r = 0 ]; then echo "M PASS $$p $$d $$s"; elif [ $$r = 77 ]; then echo "M SKIP $$p $$d $$s (no feth0)"; \
 	else echo "M FAIL $$p $$d $$s ($$log)"; fail=1; fi
 test-m: dlls libman

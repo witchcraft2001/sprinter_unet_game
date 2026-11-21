@@ -34,11 +34,13 @@ EV_MAKE
 	LD	(IY+CX_EV_TMP+UNETG_EVT_DETAIL+1),A
 	RET
 
-	IFDEF	UGB_HW_ESP
-COST_EVENT	EQU	110		; one publication incl. EV_MAKE and the rest of the TX scan (units; stand 94 us)
-	ELSE
-COST_EVENT	EQU	70		; one publication incl. EV_MAKE (units; stand 51 us)
-	ENDIF
+; One publication incl. EV_MAKE and the rest of EV_FLUSH behind it (units;
+; stand 95 us on every card).  The Ethernet and loopback builds had 70
+; (stand 51 us: the TX_DONE inside the scan); the RX_READY published by
+; the STEP that finished the frame costs 95 and was rare at a 500 us
+; budget (NEXT_EVENT published it first) -- found by the profile at
+; budgets of 1000 and 2000.
+COST_EVENT	EQU	110
 COST_TXSCAN	EQU	65	; walking the TX slots for outcomes (units; stand 48 us)
 
 ; EV_AFFORD: in a budgeted call (STEP) take the cost of one publication
@@ -108,6 +110,16 @@ EV_FLUSH
 	LD	A,(IY+CX_EV_FLAGS)
 	AND	~UEVF_RXR_QUEUED & 0xFF
 	RET	Z				; fast path: nothing pending
+	; A full queue publishes nothing: take no budget for it (neither
+	; the TX scan nor a publication) and do not ask for "events first".
+	; Otherwise a STEP pays COST_EVENT for an EV_PUT that fails, the
+	; second publication of the same STEP is refused for budget and the
+	; STEP answers YIELD for as long as the application reads nothing.
+	LD	A,(IY+CX_EV_HEAD)
+	INC	A
+	AND	(IY+CX_EVENT_MASK)
+	CP	(IY+CX_EV_TAIL)
+	RET	Z
 	BIT	0,(IY+CX_EV_FLAGS)		; UEVF_CONNECTED
 	JR	Z,.reason
 	LD	A,UNETG_EV_CONNECTED

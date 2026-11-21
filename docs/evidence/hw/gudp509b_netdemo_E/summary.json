@@ -1,0 +1,108 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudp509b",
+  "scenario": "E",
+  "file": "N509UE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3350
+  },
+  "info": {
+    "min_useful_budget_us": 410,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 950,
+      "card": 0,
+      "main": 2300,
+      "service": 100
+    },
+    "cost_poll_us": 95,
+    "cost_step_us": 460,
+    "periods": 23,
+    "largest_period_debit_us": 3255,
+    "now_ms": 461,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 115,
+      "early": 227,
+      "frames": 18,
+      "ticks": 231,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 18,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 143,
+    "polls_useful": 3,
+    "steps_total": 115,
+    "steps_useful": 115,
+    "budget_yields": 94,
+    "max_step_gap_ms": 8,
+    "drop_foreign": 1,
+    "arp_requests": 1,
+    "tx_frames": 2,
+    "rx_frames": 3,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "timing_us": {
+    "tick_isr_max": 353,
+    "admitted_ug_step_max": 997,
+    "largest_tick_gap": 2069,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "E",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 53225,
+    "bring": {
+      "ms": 191,
+      "scratch": 0
+    },
+    "cbl": {
+      "n": 19,
+      "max_us": 1901,
+      "mean_us": 1029
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

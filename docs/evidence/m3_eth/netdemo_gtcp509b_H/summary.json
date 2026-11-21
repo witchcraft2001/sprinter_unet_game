@@ -4,14 +4,14 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 3.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 31628",
+  "wall_s": 4.4,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 36977",
   "steps_per_period": 5,
   "load": {
     "status": 0,
     "libman_reason": 0,
     "handle": 0,
-    "page": 235,
+    "page": 233,
     "base": "0x4000"
   },
   "env": {
@@ -33,17 +33,17 @@
     },
     "cost_poll_us": 95,
     "cost_step_us": 470,
-    "periods": 7,
+    "periods": 9,
     "largest_period_debit_us": 3300,
-    "now_ms": 151,
+    "now_ms": 191,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 39,
-      "early": 80,
-      "frames": 5,
-      "ticks": 76,
+      "step": 49,
+      "early": 99,
+      "frames": 8,
+      "ticks": 96,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -59,15 +59,15 @@
     "timing_mode": 2,
     "ctx_state": 1,
     "polls_total": 5,
-    "steps_total": 39,
-    "steps_useful": 39,
-    "budget_yields": 35,
+    "steps_total": 49,
+    "steps_useful": 49,
+    "budget_yields": 36,
     "max_step_gap_ms": 4
   },
   "timing_us": {
     "tick_isr_max": 302,
-    "admitted_ug_step_max": 736,
-    "largest_tick_gap": 2038,
+    "admitted_ug_step_max": 738,
+    "largest_tick_gap": 2040,
     "late_ticks": 0
   }
 }

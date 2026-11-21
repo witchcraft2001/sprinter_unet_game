@@ -4,14 +4,14 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "L load, check and free the DLL",
-  "wall_s": 3.4,
+  "wall_s": 4.6,
   "network": "none",
   "steps_per_period": 5,
   "load": {
     "status": 0,
     "libman_reason": 0,
     "handle": 0,
-    "page": 235,
+    "page": 233,
     "base": "0x4000"
   }
 }

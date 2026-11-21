@@ -3,8 +3,21 @@
 ; (tools/mame/run_m.py --probe E|R|3), where its numbers are MAME's, not
 ; the board's.
 ;
-; Command line: UGPROBE <card>, card = E (SprinterESP), R (RTL8019AS) or
-; 3 (3C509B); anything else is E.  Slots and I/O bases come from
+; Command line: UGPROBE <card> [1], card = E (SprinterESP), R (RTL8019AS)
+; or 3 (3C509B); anything else is E.  With the second argument 1 only the
+; state snapshot below is taken and saved as STATA<card>.TXT -- run after
+; a test series, it shows what the series left to the system network
+; stack (the first FTP after the 3C509B series answered FAIL).
+; The snapshot (pr_state) comes before this program touches the card:
+;   CARD     raw register bytes, read only: 3C509B -- the status word (+E:
+;            low, high; bits 15..13 = the selected window), and in window
+;            0 also registers 0 (manufacturer ID 50 6D), 4 and 6 (address
+;            configuration); an empty or inactive card reads FF FF.
+;            RTL -- CR (+0).  ESP -- UART IER, LCR, MCR (+1, +3, +4).
+;   DSSENV   the NET* variables of the DSS environment (NETCFG / IFUP of
+;            the system stack), "DSSENV name=value" or "DSSENV name -" (absent);
+;            BOOTDSK first, which DSS always has: the control of the read.
+;            tools/measure/parse_hw.py keeps addresses out of the evidence.  Slots and I/O bases come from
 ; probecfg.inc (tools/hw/build_hw.sh from tools/hw/hw.env; run_m.py
 ; writes the M-stand defaults).  Every section prints one
 ; "PROBE <name> <hex ...>" line of raw counts; tools/measure/parse_hw.py
@@ -44,6 +57,10 @@
 ;            trigger: the FIFO never emptied in 40 reads), A (only after
 ;            empty) or S (the reply ended before the FIFO could fill).
 ;
+;   SLOT     before everything else (ughw.inc hw_slot): configured slot,
+;            mask of the slots that answer as the card (bit 0 = slot 0),
+;            slot used; no slot answers -> "RESULT: FAIL S", no UART part.
+;
 ; This is application code: it may call DSS and wait; it never loads a DLL.
 
 	DEVICE	NOSLOT64K
@@ -60,6 +77,7 @@ STACK_TOP	EQU	0xBFF0
 DSS		EQU	0x10
 DSS_EXIT	EQU	0x41
 DSS_PCHARS	EQU	0x5C
+DSS_ENVIRON	EQU	0x46		; B = 1: HL = name, DE = buffer; A = 0xFF found
 P_SYS		EQU	0x3C		; SYS port, user mode
 SH_1FFD		EQU	0x01		; DSS value: RAM in WIN0, ISA closed
 SH_9FBD		EQU	0x00
@@ -106,6 +124,38 @@ start
 	LD	A,(scen_char)
 	CALL	rp_char
 	CALL	rp_nl
+	CALL	pr_state		; before the first card access of our own
+	LD	A,(hw_argnum)
+	DEC	A
+	JR	NZ,.probe
+	; state snapshot only: STATA<card>.TXT, no card access at all
+	LD	A,'S'
+	LD	(hw_fname_pfx),A
+	LD	A,'T'
+	LD	(hw_fname_pfx + 1),A
+	LD	(hw_fname_pfx + 3),A
+	LD	A,'A'
+	LD	(hw_fname_pfx + 2),A
+	LD	(hw_fname_pfx + 4),A
+	CALL	tick_install
+	LD	HL,s_result
+	CALL	rp_str
+	LD	A,'P'
+	LD	HL,s_pass
+	JR	.saved
+.probe
+	; where the card answers (ughw.inc hw_slot): line "SLOT c mm u"; the
+	; sections below run on the slot used, and a card no slot answers
+	; for fails the probe (its ISA lines would measure an empty slot)
+	LD	A,(scen_char)
+	LD	HL,(pr_base)
+	LD	DE,0xC000 + PR_ID_PORT
+	LD	BC,(pr_cslot)		; C = the configured slot
+	CALL	hw_slot
+	ADD	A,A
+	OR	0xD4
+	LD	(pr_e2),A
+	CALL	hw_show			; the operator sees what is running
 	CALL	tick_install
 	CALL	ctc_init
 	CALL	calibrate
@@ -122,22 +172,36 @@ start
 	CALL	pr_isa
 	CALL	pr_bracket
 	CALL	pr_ctc
+	LD	A,(hwf_mask)
+	OR	A
+	JR	Z,.absent		; no module to talk to
+	CALL	hw_show			; the UART part takes ~10 s
 	LD	A,(scen_char)
 	CP	'E'
 	CALL	Z,pr_uart
-	LD	A,'P'
-	LD	(UG_REPORT + RP_STATUS),A
+.absent
 	LD	HL,s_result
 	CALL	rp_str
+	LD	A,(hwf_mask)
+	OR	A
+	LD	A,'P'
 	LD	HL,s_pass
-	CALL	rp_str
+	JR	NZ,.verdict
+	LD	A,'F'
+	LD	HL,s_fail_slot
+.verdict
+	PUSH	AF
+	PUSH	HL
 	CALL	ctc_stop
+	POP	HL
+	POP	AF
+.saved
+	LD	(UG_REPORT + RP_STATUS),A
+	CALL	rp_str
 	CALL	hw_build_fname
 	LD	HL,hw_fname
 	CALL	hw_save			; before the 0xA5 marker (see ugtest.asm)
-	LD	HL,UG_REPORT + RP_TEXT
-	LD	C,DSS_PCHARS
-	RST	DSS
+	CALL	hw_show
 	LD	A,0xA5
 	LD	(UG_REPORT + RP_STATUS + 2),A	; done: ugstand.lua collects the report
 	LD	B,30			; outlast ugstand.lua's 25-frame grace
@@ -149,8 +213,129 @@ start
 	CALL	tick_remove
 	JP	hw_exit
 
-; pr_select: scen_char = E / R / 3 (anything else -> E); pr_e2 = the ISA
-; slot's #E2 I/O page, pr_base = 0xC000 + the card's I/O base.
+; pr_state: the CARD and DSSENV lines (file header).  The card registers are
+; read in the configured slot, without a write and without a read that
+; has a side effect.  Clobbers everything but IY.
+pr_state
+	LD	HL,s_card
+	CALL	rp_str
+	CALL	isa_open
+	LD	IX,(pr_base)
+	LD	HL,pr_st
+	LD	A,(scen_char)
+	CP	'3'
+	JR	Z,.el3
+	CP	'R'
+	JR	Z,.rtl
+	LD	A,(IX+1)		; UART IER
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+3)		; LCR
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+4)		; MCR
+	JR	.last
+.rtl
+	LD	A,(IX+0)		; CR
+	JR	.last
+.el3
+	LD	A,(IX+0x0E)		; status: low, then high
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+0x0F)
+	LD	(HL),A
+	AND	0xE0
+	JR	NZ,.done		; not window 0: nothing else is safe to read
+	INC	HL
+	LD	A,(IX+0)		; window 0: manufacturer ID
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+1)
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+4)		; configuration control
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+5)
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+6)		; address configuration
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+7)
+.last
+	LD	(HL),A
+.done
+	CALL	isa_close
+	LD	DE,pr_st
+	OR	A
+	SBC	HL,DE
+	LD	B,L
+	INC	B			; bytes read
+	EX	DE,HL
+.byte
+	PUSH	BC
+	PUSH	HL
+	LD	A,' '
+	CALL	rp_char
+	POP	HL
+	PUSH	HL
+	LD	A,(HL)
+	CALL	rp_hex8
+	POP	HL
+	POP	BC
+	INC	HL
+	DJNZ	.byte
+	CALL	rp_nl
+	; the system stack's variables
+	LD	HL,pr_envnames
+.env
+	LD	A,(HL)
+	OR	A
+	RET	Z
+	PUSH	HL
+	LD	HL,s_env
+	CALL	rp_str
+	POP	HL
+	PUSH	HL
+	CALL	rp_str
+	POP	HL
+	PUSH	HL
+	XOR	A
+	LD	(pr_envbuf),A
+	LD	DE,pr_envbuf
+	LD	B,1			; ENV_GET: HL = name, DE = value buffer
+	LD	C,DSS_ENVIRON
+	PUSH	IY
+	RST	DSS
+	POP	IY
+	JR	C,.absent
+	INC	A			; 0xFF: found
+	JR	NZ,.absent
+	LD	(pr_envbuf + PR_ENV_SHOW),A	; the report takes that much
+	LD	A,'='
+	CALL	rp_char
+	LD	HL,pr_envbuf
+	CALL	rp_str
+	JR	.next
+.absent
+	LD	A,' '
+	CALL	rp_char
+	LD	A,'-'
+	CALL	rp_char
+.next
+	CALL	rp_nl
+	POP	HL
+.skip
+	LD	A,(HL)
+	INC	HL
+	OR	A
+	JR	NZ,.skip
+	JR	.env
+
+; pr_select: scen_char = E / R / 3 (anything else -> E); pr_cslot = the
+; configured ISA slot, pr_e2 = its #E2 I/O page (hw_slot may move it to
+; the other slot), pr_base = 0xC000 + the card's I/O base.
 ; Clobbers A, HL.
 pr_select
 	LD	A,(scen_char)
@@ -160,17 +345,20 @@ pr_select
 	JR	Z,.el3
 	LD	A,'E'
 	LD	(scen_char),A
-	LD	A,0xD4 | (PR_SLOT_ESP << 1)
+	LD	A,PR_SLOT_ESP
 	LD	HL,0xC000 + PR_IO_ESP
 	JR	.set
 .rtl
-	LD	A,0xD4 | (PR_SLOT_RTL << 1)
+	LD	A,PR_SLOT_RTL
 	LD	HL,0xC000 + PR_IO_RTL
 	JR	.set
 .el3
-	LD	A,0xD4 | (PR_SLOT_EL3 << 1)
+	LD	A,PR_SLOT_EL3
 	LD	HL,0xC000 + PR_IO_EL3
 .set
+	LD	(pr_cslot),A
+	ADD	A,A
+	OR	0xD4
 	LD	(pr_e2),A
 	LD	(pr_base),HL
 	RET
@@ -833,6 +1021,7 @@ rp_sp_hex16
 	JP	rp_hex16
 
 	INCLUDE	"ugbase.inc"
+UG_CARD		EQU	0		; ughw.inc hw_find: all three card tests
 	INCLUDE	"ughw.inc"
 	INCLUDE	"time/ugtime.asm"
 
@@ -840,7 +1029,14 @@ s_title		DB	"UGPROBE ", 0
 s_scen		DB	"SCEN ", 0
 s_cal		DB	"CAL ", 0
 s_result	DB	"RESULT: ", 0
+s_card		DB	"CARD", 0
+s_env		DB	"DSSENV ", 0
+pr_envnames	DB	"BOOTDSK", 0		; always there: proves the read itself
+		DB	"NET", 0, "NET_HW", 0, "NET_IDPORT", 0, "NET_MAC", 0
+		DB	"NET_IP_SRC", 0, "NET_IP", 0, "NET_MASK", 0, "NET_GW", 0
+		DB	"NET_LEASE_SEC", 0, 0
 s_pass		DB	"PASS", 13, 10, 0
+s_fail_slot	DB	"FAIL S", 13, 10, 0
 s_p_cpu		DB	"PROBE CPU ", 0
 s_p_isard	DB	"PROBE ISA_RD", 0
 s_p_isawr	DB	"PROBE ISA_WR", 0
@@ -853,6 +1049,10 @@ s_uartcur	DB	"AT+UART_CUR=115200,8,1,0,3", 13, 10, 0
 s_gmr		DB	"AT+GMR", 13, 10, 0
 
 pr_e2		DB	0
+pr_st		DS	8, 0
+PR_ENV_SHOW	EQU	40
+pr_envbuf	DS	256, 0
+pr_cslot	DW	0		; the configured slot (low byte)
 pr_base		DW	0
 pr_rd_addr	DW	0
 pr_wr_addr	DW	0

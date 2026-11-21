@@ -70,7 +70,7 @@ for (const dll of DLLS) {
     assert.ok(i.poll_gap_us <= i.auto_fallback_gap_us && i.auto_fallback_gap_us <= i.max_service_gap_us,
       'poll_gap <= auto_fallback_gap <= max_service_gap (ТЗ §4.2)');
     assert.ok(i.empty_poll_us <= i.isr_body_max_us && i.bus_busy_us <= i.isr_body_max_us);
-    assert.equal(i.step_body_max_us, 500);
+    assert.equal(i.step_body_max_us, 2000);
     assert.equal(i.isr_body_max_us, 150);
     assert.equal(i.caps & C.cap.IRQ_ROUTE_QUALIFIED, 0, 'v1: no qualified IRQ route');
     assert.equal(i.caps & C.cap.PROBE, 0, 'v1: no IRQ probe (AUTO is served through POLL)');
@@ -226,7 +226,7 @@ for (const dll of DLLS) {
     ['poll gap 0', (c) => { c.worst_poll_gap_us = 0; }],
     ['STEP gap 21 ms', (c) => { c.worst_step_gap_ms = 21; }],
     ['STEP budget below min_useful', (c, i) => { c.step_budget_us = i.min_useful_budget_us - 1; }],
-    ['STEP budget above 500', (c) => { c.step_budget_us = 501; }],
+    ['STEP budget above the limit', (c, i) => { c.step_budget_us = i.step_body_max_us + 1; }],
     ['STEP_ISR budget above 150', (c) => { c.isr_budget_us = 151; }],
     ['APP_COUNTER read cost 21 us', (c) => { c.timing_mode = C.timing.APP_COUNTER; c.time_read_cost_us = 21; }],
   ];

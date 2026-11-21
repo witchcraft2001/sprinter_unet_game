@@ -1,0 +1,97 @@
+{
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "scenario": "C T with 1 STEP of 1000 us per period",
+  "wall_s": 8.6,
+  "steps_per_period": 1,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 233,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 2100
+  },
+  "info": {
+    "min_useful_budget_us": 425,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 950,
+      "card": 0,
+      "main": 1050,
+      "service": 100
+    },
+    "cost_poll_us": 95,
+    "cost_step_us": 1050,
+    "periods": 1675,
+    "largest_period_debit_us": 2000,
+    "now_ms": 33505,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 1676,
+      "early": 16722,
+      "frames": 1372,
+      "ticks": 16759,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 18077,
+    "steps_total": 1676,
+    "steps_useful": 1676,
+    "budget_yields": 136,
+    "max_step_gap_ms": 22,
+    "tx_frames": 32,
+    "rx_frames": 32,
+    "tx_bytes": 5824,
+    "rx_bytes": 5824
+  },
+  "timing_us": {
+    "tick_isr_max": 317,
+    "admitted_ug_step_max": 2310,
+    "largest_tick_gap": 2040,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 32.8 s)",
+  "hw": {
+    "latms": [
+      {
+        "bytes": 64,
+        "n": 16,
+        "txdone_max_ms": 280,
+        "txdone_mean_ms": 278.1,
+        "echo_max_ms": 638,
+        "echo_mean_ms": 600.4
+      },
+      {
+        "bytes": 300,
+        "n": 16,
+        "txdone_max_ms": 596,
+        "txdone_mean_ms": 573.4,
+        "echo_max_ms": 1462,
+        "echo_mean_ms": 1425.0
+      }
+    ]
+  }
+}

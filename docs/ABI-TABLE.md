@@ -72,7 +72,7 @@
 
 **avail:** `MAX_STEP_GAP`=0x01, `MAX_CALL_TIME`=0x02, `MAX_DI`=0x04, `MAX_SERVICE_GAP`=0x08
 
-**limits:** `TCP_MSS`=0x0218, `UDP_MAX`=0x0200, `EVENT_SIZE`=0x08, `SLOTS_MIN`=0x04, `EVENT_EXTRA`=0x04, `UART_RING_MIN`=0x0200, `STEP_BODY_MAX_US`=0x01F4, `ISR_BODY_MAX_US`=0x96, `STACK_MAIN_MAX`=0x0100, `STACK_ISR_MAX`=0x60, `TAG_RESERVED`=0xFFFF, `SLOT_NONE`=0xFF, `CHANNEL_GLOBAL`=0xFF, `DEADLINE_NONE`=0xFFFF, `DEADLINE_MAX`=0xFFFE
+**limits:** `TCP_MSS`=0x0218, `UDP_MAX`=0x0200, `EVENT_SIZE`=0x08, `SLOTS_MIN`=0x04, `EVENT_EXTRA`=0x04, `UART_RING_MIN`=0x0200, `STEP_BODY_MAX_US`=0x07D0, `ISR_BODY_MAX_US`=0x96, `STACK_MAIN_MAX`=0x0100, `STACK_ISR_MAX`=0x60, `TAG_RESERVED`=0xFFFF, `SLOT_NONE`=0xFF, `CHANNEL_GLOBAL`=0xFF, `DEADLINE_NONE`=0xFFFF, `DEADLINE_MAX`=0xFFFE
 
 ## INIT_CONFIG v1.0 (134 байт)
 
@@ -163,7 +163,7 @@
 | 26 | `irq_delivery_us` | u16 | probe observation window |
 | 28 | `max_service_gap_us` | u16 | physical limit of the profile |
 | 30 | `max_step_gap_ms` | u16 | 20 for the game profile |
-| 32 | `step_body_max_us` | u16 | 500 |
+| 32 | `step_body_max_us` | u16 | 2000: the largest step_budget_us accepted |
 | 34 | `isr_body_max_us` | u16 | 150 |
 | 36 | `stack_main_max` | u16 | bytes, all branches |
 | 38 | `stack_isr_max` | u16 | bytes, all branches |

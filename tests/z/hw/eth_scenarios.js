@@ -22,11 +22,15 @@ const bytes = (n, seed = 1) => Array.from({ length: n }, (_, i) => (i * 31 + see
 // poll at least every worst_poll_gap_us = 2000 us, so the stand calls STEP
 // every 2 ms of virtual time.
 const DT = 2;
+const DT_DEFAULT = DT;
 
 // Boot a build to the running card.  over: INIT_CONFIG fields; opts.card /
-// opts.peer: model options; opts.budget: STEP budget (default 500).
+// opts.peer: model options; opts.budget: STEP budget (default 500);
+// opts.clockMs: now_ms moves in ticks of this length (ethnet.js);
+// opts.dt: real ms between STEPs (default DT).
 function boot(dll, over = {}, opts = {}) {
-  const s = ethStand({ dll, card: opts.card, peer: opts.peer });
+  const s = ethStand({ dll, card: opts.card, peer: opts.peer, clockMs: opts.clockMs });
+  const DT = opts.dt ?? DT_DEFAULT;
   const budget = opts.budget ?? 500;
   assert.equal(s.call('INIT').a, 0);
   const cfg = s.defaultConfig({ step_budget_us: budget, ...over });

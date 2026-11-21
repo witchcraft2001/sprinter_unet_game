@@ -52,17 +52,24 @@ function espStand(opts) {
   return s;
 }
 
+// opts.clockMs: the application's now_ms moves in ticks of this many ms
+// (UGTEST: the 20 ms video frame, NETDEMO: the 2 ms CTC tick) while s.t,
+// the real time of the card and the peer, moves by dt: STEP gets s.t
+// rounded down to a tick of the clock started at t0.  Default: now_ms = s.t.
 function ethStand(opts = {}) {
   const dll = opts.dll || 'gtcp509b';
   if (isEsp(dll)) return espStand(opts);
   const s = new Stand({ dll, mhz: opts.mhz });
   const card = isRtl(dll) ? new Rtl8019(opts.card || {}) : new EL3(opts.card || {});
   card.attach(s.m);
+  card.clock = () => s.t;
   const peer = new Peer(opts.peer || {});
   card.onTransmit = (f) => peer.input(f);
   s.card = card; s.peer = peer;
   s.cardMac = () => (isRtl(dll) ? card.par : card.station);
   s.t = opts.t0 ?? 1000;
+  const t0 = s.t;
+  s.nowMs = () => (opts.clockMs ? (s.t - (((s.t - t0) >>> 0) % opts.clockMs)) >>> 0 : s.t);
   s.pump = () => { peer.tick(s.t); for (const f of peer.out.splice(0)) card.deliver(f); };
   s.idle = (ms) => { s.t = (s.t + ms) >>> 0; };
   s.tick = (dt = 10, budget = opts.budget ?? 500, stepOpts = {}) => {
@@ -71,7 +78,7 @@ function ethStand(opts = {}) {
     let isrProblems = [];
     if (isr) isrProblems = injectIsr(s, null, dt, isr);
     else s.t = (s.t + dt) >>> 0;
-    const r = s.step(s.t, budget, 0, callOpts);
+    const r = s.step(s.nowMs(), budget, 0, callOpts);
     s.pump();
     r.problems.push(...isrProblems);
     return r;

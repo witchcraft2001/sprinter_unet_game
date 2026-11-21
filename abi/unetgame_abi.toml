@@ -250,7 +250,7 @@ EVENT_SIZE = 8
 SLOTS_MIN = 4
 EVENT_EXTRA = 4             # event queue useful entries >= tx_slots + 4
 UART_RING_MIN = 512
-STEP_BODY_MAX_US = 500
+STEP_BODY_MAX_US = 2000     # the largest step_budget_us INIT_CONFIG accepts (500 until 2026-11-21)
 ISR_BODY_MAX_US = 150
 STACK_MAIN_MAX = 256
 STACK_ISR_MAX = 96
@@ -355,7 +355,7 @@ fields = [
   ["irq_delivery_us", "u16", "probe observation window"],
   ["max_service_gap_us", "u16", "physical limit of the profile"],
   ["max_step_gap_ms", "u16", "20 for the game profile"],
-  ["step_body_max_us", "u16", "500"],
+  ["step_body_max_us", "u16", "2000: the largest step_budget_us accepted"],
   ["isr_body_max_us", "u16", "150"],
   ["stack_main_max", "u16", "bytes, all branches"],
   ["stack_isr_max", "u16", "bytes, all branches"],

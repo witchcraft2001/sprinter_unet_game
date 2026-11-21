@@ -1,0 +1,102 @@
+{
+  "stand": "Ж",
+  "prog": "ugtest",
+  "dll": "gtcp509b",
+  "scenario": "P",
+  "file": "U509TP.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "info": {
+    "min_useful_budget_us": 420,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 81,
+    "polls_useful": 6,
+    "steps_total": 310,
+    "steps_useful": 310,
+    "budget_yields": 104,
+    "bus_busy": 16,
+    "max_step_gap_ms": 20,
+    "arp_requests": 1,
+    "tx_frames": 5,
+    "rx_frames": 6,
+    "tx_bytes": 64,
+    "rx_bytes": 64
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": null,
+  "step": {
+    "max_us": 1151,
+    "mean_us": 671,
+    "steps": 294,
+    "over_budget": 294
+  },
+  "trivial_call_us": 177,
+  "hw": {
+    "scen": "P",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 61257,
+    "bring": {
+      "ms": 180,
+      "scratch": 0
+    },
+    "lat": {
+      "txdone": {
+        "n": 1,
+        "max_counts": 28177,
+        "max_us": 21468.2,
+        "mean_us": 21468.2
+      },
+      "echo": {
+        "n": 1,
+        "max_counts": 46954,
+        "max_us": 35774.5,
+        "mean_us": 35774.5
+      },
+      "saturated": 0,
+      "saturated_max_frames": 0
+    },
+    "costs16": {
+      "isr": {
+        "counts": 5562,
+        "per_call_us": 264.9
+      },
+      "busy": {
+        "counts": 4298,
+        "per_call_us": 204.7
+      },
+      "empty_step": {
+        "counts": 13587,
+        "per_call_us": 647.0
+      }
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "step": false,
+    "latency": true,
+    "isr": true,
+    "bus_busy": false,
+    "card_found": true
+  }
+}

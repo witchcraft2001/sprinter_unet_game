@@ -1,0 +1,43 @@
+{
+  "stand": "Ж",
+  "prog": "ugstate",
+  "card": "EL3",
+  "scenario": "3",
+  "file": "STATA3.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "hw": {
+    "scen": "3"
+  },
+  "state": {
+    "card_regs": [
+      "00",
+      "00",
+      "50",
+      "6D",
+      "00",
+      "CF",
+      "10",
+      "00"
+    ],
+    "env": {
+      "BOOTDSK": "C:",
+      "NET": "509B",
+      "NET_HW": "0/#300",
+      "NET_IDPORT": "#110",
+      "NET_MAC": "<set 2299>",
+      "NET_IP_SRC": "DHCP",
+      "NET_IP": "<set 9cb1>",
+      "NET_MASK": "<set f9e2>",
+      "NET_GW": "<set c5eb>",
+      "NET_LEASE_SEC": "25200"
+    }
+  },
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true
+  }
+}

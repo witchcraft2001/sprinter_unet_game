@@ -1,0 +1,108 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudp509b",
+  "scenario": "S",
+  "file": "N509US.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3350
+  },
+  "info": {
+    "min_useful_budget_us": 410,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 950,
+      "card": 0,
+      "main": 2300,
+      "service": 100
+    },
+    "cost_poll_us": 95,
+    "cost_step_us": 460,
+    "periods": 206,
+    "largest_period_debit_us": 3270,
+    "now_ms": 4120,
+    "stats": {
+      "refuse": 1,
+      "busy": 0,
+      "isr": 0,
+      "step": 995,
+      "early": 1835,
+      "frames": 161,
+      "ticks": 2061,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 161,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 2011,
+    "polls_useful": 39,
+    "steps_total": 995,
+    "steps_useful": 995,
+    "budget_yields": 962,
+    "max_step_gap_ms": 12,
+    "drop_foreign": 1,
+    "arp_requests": 1,
+    "tx_frames": 17,
+    "rx_frames": 39,
+    "tx_bytes": 8192,
+    "rx_bytes": 8192
+  },
+  "timing_us": {
+    "tick_isr_max": 391,
+    "admitted_ug_step_max": 1285,
+    "largest_tick_gap": 2076,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "S",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 53247,
+    "bring": {
+      "ms": 191,
+      "scratch": 0
+    },
+    "cbl": {
+      "n": 162,
+      "max_us": 1944,
+      "mean_us": 1103
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

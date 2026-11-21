@@ -1,0 +1,108 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gtcp509b",
+  "scenario": "W",
+  "file": "N509TW.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3400
+  },
+  "info": {
+    "min_useful_budget_us": 420,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 950,
+      "card": 0,
+      "main": 2350,
+      "service": 100
+    },
+    "cost_poll_us": 95,
+    "cost_step_us": 470,
+    "periods": 152,
+    "largest_period_debit_us": 3305,
+    "now_ms": 3054,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 754,
+      "early": 1568,
+      "frames": 122,
+      "ticks": 1528,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 122,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 1457,
+    "polls_useful": 20,
+    "steps_total": 754,
+    "steps_useful": 754,
+    "budget_yields": 264,
+    "max_step_gap_ms": 12,
+    "drop_foreign": 1,
+    "arp_requests": 1,
+    "tx_frames": 8,
+    "rx_frames": 20,
+    "tx_bytes": 900,
+    "rx_bytes": 900
+  },
+  "timing_us": {
+    "tick_isr_max": 391,
+    "admitted_ug_step_max": 995,
+    "largest_tick_gap": 2064,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "W",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 49880,
+    "bring": {
+      "ms": 191,
+      "scratch": 0
+    },
+    "cbl": {
+      "n": 123,
+      "max_us": 1943,
+      "mean_us": 1091
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

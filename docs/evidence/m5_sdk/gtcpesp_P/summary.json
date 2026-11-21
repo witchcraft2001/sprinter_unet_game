@@ -4,13 +4,13 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "P peer closes",
-  "wall_s": 3.3,
+  "wall_s": 4.9,
   "steps_per_period": 5,
   "load": {
     "status": 0,
     "libman_reason": 0,
     "handle": 0,
-    "page": 235,
+    "page": 233,
     "base": "0x4000"
   },
   "env": {
@@ -34,15 +34,15 @@
     "cost_step_us": 475,
     "periods": 54,
     "largest_period_debit_us": 3325,
-    "now_ms": 1089,
+    "now_ms": 1087,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 268,
-      "early": 561,
-      "frames": 43,
-      "ticks": 545,
+      "early": 558,
+      "frames": 42,
+      "ticks": 544,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -70,8 +70,8 @@
   "timing_us": {
     "tick_isr_max": 314,
     "admitted_ug_step_max": 1102,
-    "largest_tick_gap": 2053,
+    "largest_tick_gap": 2040,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.992, FRAME_MS 20.480, STEP_CALLS_PER_S 246 (over 0.5 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 246 (over 0.5 s)"
 }

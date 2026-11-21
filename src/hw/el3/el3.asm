@@ -11,6 +11,7 @@ EL3_LFSR_POLY	EQU	0xCF
 EL3_ID_EEPROM	EQU	0x80
 EL3_ID_TAG0	EQU	0xD0
 EL3_ID_ACTIVATE	EQU	0xE0
+EL3_ID_RESET	EQU	0xC0		; global reset: power-on state, AUTOINIT 310 us
 EL3_MFG_3COM	EQU	0x6D50
 EL3_REG_CMD	EQU	0x0E
 EL3_W1_RX_STATUS EQU	0x08
@@ -26,17 +27,54 @@ EL3_TX_NOTIFY	EQU	0x40
 EL3_TX_ERRORS	EQU	0x3C
 EL3_TX_RESET_ERRORS EQU	0x30		; jabber, underrun: TX reset needed
 EL3_CIP_MS	EQU	100		; one command may take this long
-EL3_EEPROM_MS	EQU	2		; >= 162 us after an ID EEPROM read command
+; Card waits (global reset AUTOINIT >= 310 us, ID EEPROM read >= 162 us;
+; Linux waits 4 ms, "some chips need much longer") are two-stage: arm
+; EL3_WAIT1_MS, and when that is due -- now_ms has moved at least once --
+; arm EL3_WAIT_MS more.  now_ms is the application's clock and may move in
+; ticks of any length G (a 20 ms video frame in UGTEST, 2 ms in NETDEMO):
+; a single "now + 2 ms" deadline is due at the first tick edge, which can
+; come microseconds after the command (the first Zh runs of the 3C509B
+; failed so: the card read garbage EEPROM bits and was never activated).
+; Two stages need one more edge after the first one was seen, so the real
+; wait is >= G and >= EL3_WAIT_MS + 1 - G, i.e. >= (EL3_WAIT_MS + 1) / 2
+; = 4 ms for any G.
+EL3_WAIT1_MS	EQU	1
+EL3_WAIT_MS	EQU	7
 
-; bring-up phases (HS_PHASE)
+; bring-up phases (HS_PHASE), as UNET509B DISCOVER: attach to the card as
+; it is -- ID sequence, tag, EEPROM word 7 (3Com's ID: did a card follow
+; the sequence?), station address words, activation, window 0,
+; manufacturer ID, init table.  The init table makes the datapath known
+; whatever an earlier driver or run left behind (window, RX/TX state).
+; The ID-port global reset is a recovery only: a card that does not answer
+; (word 7 or the manufacturer ID wrong) gets one reset per bring-up -- ID
+; sequence, reset, wait, and the discovery again.  A reset switches the
+; 10baseT transceiver off and on: the link drops and the switch port
+; forwards nothing for 2..6 s.  Resetting at every INIT_CONFIG lost the
+; first 3..5 ARP requests of every run on the real card and timed an OPEN
+; out (third Zh series: NETDEMO GUDP509B W).
 EP_IDSEQ	EQU	0
 EP_TAG		EQU	1
 EP_EE_WRITE	EQU	2
-EP_EE_READ	EQU	3
-EP_ACTIVATE	EQU	4
-EP_VERIFY	EQU	5
-EP_TABLE	EQU	6
-EP_CIP		EQU	7
+EP_EE_WAIT	EQU	3		; first stage of the EEPROM wait
+EP_EE_READ	EQU	4
+EP_ACTIVATE	EQU	5
+EP_VERIFY	EQU	6
+EP_TABLE	EQU	7
+EP_CIP		EQU	8
+EP_IDSEQR	EQU	9		; recovery: ID sequence before the reset
+EP_RESET	EQU	10
+EP_RWAIT	EQU	11		; first stage of the reset wait
+EP_RWAIT2	EQU	12
+EL3_STOP_MARK	EQU	16		; NIC_STOP: phase + this = the stop table started
+	ASSERT	EP_RWAIT2 < EP_TABLE + EL3_STOP_MARK
+
+; EEPROM steps (HS_STEP): 0 = word 7, 1..3 = station address words 0..2
+EL3_EE_MFG	EQU	7
+EL3_EE_STEPS	EQU	4
+; bring-up only (the run phase uses the byte as TX scratch): 1 = the
+; global reset of this bring-up has been used
+HS_PASS		EQU	HS_TMP
 
 ; init/stop table opcodes
 OP_END		EQU	0
@@ -88,6 +126,26 @@ EL3_WINDOW
 	LD	D,0x08			; SELECT_WINDOW = 0x0800 | n
 	JP	EL3_CMD
 
+; EL3_ARM: hwsm card deadline HS_DL = now_ms + DE ms.  Clobbers A, BC, HL.
+EL3_ARM
+	PUSH	IX
+	POP	HL
+	LD	BC,HS_DL
+	ADD	HL,BC
+	JP	DL_ARM
+
+; EL3_DUE: CF = 1 when HS_DL is due; otherwise CF = 0 and HS_RES =
+; NBR_WAIT.  Clobbers A, C, DE, HL.
+EL3_DUE
+	PUSH	IX
+	POP	HL
+	LD	DE,HS_DL
+	ADD	HL,DE
+	CALL	DL_LEFT
+	RET	C
+	LD	(IX+HS_RES),NBR_WAIT
+	RET
+
 ; EL3_IDPORT: HL = mapped address of the ID port.  Preserves A.
 EL3_IDPORT
 	PUSH	AF
@@ -107,11 +165,17 @@ NIC_PREPARE
 	LD	(IX+HS_IO),L
 	LD	(IX+HS_IO+1),H
 	LD	(IX+HS_WIN),0xFF
-	LD	(IX+HS_PHASE),EP_IDSEQ
-	LD	(IX+HS_CNT),0
-	LD	(IX+HS_STEP),0
+	XOR	A
+	LD	(IX+HS_PHASE),A		; EP_IDSEQ
+	LD	(IX+HS_PASS),A
+	LD	(IX+HS_CNT),A
+	LD	(IX+HS_STEP),A
 	LD	(IX+HS_LFSR),EL3_LFSR_SEED
-	; configured MAC overrides the EEPROM address
+	RET
+
+; EL3_CFG_MAC: a configured MAC (not all zero) overrides the EEPROM
+; address in HS_MAC.  Clobbers A, BC, DE, HL.
+EL3_CFG_MAC
 	LD	DE,CX_MAC
 	CALL	IY_PTR
 	LD	A,(HL)
@@ -133,7 +197,6 @@ NIC_PREPARE
 .dst
 	LD	BC,6
 	LDIR
-	LD	(IX+HS_STEP),3		; EEPROM words already known
 	RET
 
 ; ----------------------------------------------------------------------
@@ -142,21 +205,66 @@ NIC_PREPARE
 NIC_BRINGUP
 	LD	(IX+HS_RES),NBR_CONTINUE
 	LD	A,(IX+HS_PHASE)
-	OR	A
+	OR	A			; EP_IDSEQ
 	JR	Z,.idseq
-	DEC	A
-	JR	Z,.tag
-	DEC	A
-	JR	Z,.ee_write
-	DEC	A
-	JR	Z,.ee_read
-	DEC	A
+	DEC	A			; EP_TAG
+	JP	Z,.tag
+	DEC	A			; EP_EE_WRITE
+	JP	Z,.ee_write
+	DEC	A			; EP_EE_WAIT
+	JR	Z,.wait1
+	DEC	A			; EP_EE_READ
+	JP	Z,.ee_read
+	DEC	A			; EP_ACTIVATE
 	JP	Z,.activate
-	DEC	A
+	DEC	A			; EP_VERIFY
 	JP	Z,.verify
-	DEC	A
+	DEC	A			; EP_TABLE
 	JP	Z,EL3_TABLE
-	JP	EL3_CIP_WAIT
+	DEC	A			; EP_CIP
+	JP	Z,EL3_CIP_WAIT
+	DEC	A			; EP_IDSEQR
+	JR	Z,.idseq
+	DEC	A			; EP_RESET
+	JR	Z,.reset
+	DEC	A			; EP_RWAIT
+	JR	Z,.wait1
+	; EP_RWAIT2: the reset is over, the discovery starts again
+	CALL	EL3_DUE
+	RET	NC
+	LD	(IX+HS_PHASE),EP_IDSEQ
+	JR	.again
+.recover
+	; no 3C509B answered: one global reset per bring-up
+	LD	A,(IX+HS_PASS)
+	OR	A
+	JR	NZ,.fault
+	INC	(IX+HS_PASS)
+	LD	(IX+HS_PHASE),EP_IDSEQR
+.again
+	XOR	A
+	LD	(IX+HS_CNT),A		; the ID sequence from its start
+	LD	(IX+HS_STEP),A
+	LD	(IX+HS_LFSR),EL3_LFSR_SEED
+	RET
+.fault
+	LD	(IX+HS_RES),NBR_FAULT
+	RET
+.reset
+	CALL	EL3_IDPORT
+	LD	(HL),EL3_ID_RESET
+	LD	DE,EL3_WAIT1_MS
+	JR	.armed
+.wait1
+	; first stage of a card wait: due = now_ms has moved; arm the second
+	CALL	EL3_DUE
+	RET	NC
+	LD	DE,EL3_WAIT_MS
+.armed
+	CALL	EL3_ARM
+	INC	(IX+HS_PHASE)
+	LD	(IX+HS_RES),NBR_WAIT
+	RET
 .idseq
 	; two zero bytes, then 255 LFSR bytes, 16 per portion (DI budget)
 	CALL	EL3_IDPORT
@@ -187,7 +295,7 @@ NIC_BRINGUP
 	RET
 .lfsr_done
 	LD	(IX+HS_CNT),E
-	LD	(IX+HS_PHASE),EP_TAG
+	INC	(IX+HS_PHASE)		; EP_IDSEQ -> EP_TAG, EP_IDSEQR -> EP_RESET
 	RET
 .tag
 	CALL	EL3_IDPORT
@@ -196,33 +304,26 @@ NIC_BRINGUP
 	RET
 .ee_write
 	LD	A,(IX+HS_STEP)
-	CP	3
+	CP	EL3_EE_STEPS
 	JR	NC,.ee_done
-	OR	EL3_ID_EEPROM		; words 0..2: station address
+	DEC	A			; steps 1..3: station address words 0..2
+	JP	P,.ee_cmd
+	LD	A,EL3_EE_MFG		; step 0: 3Com's ID
+.ee_cmd
+	OR	EL3_ID_EEPROM
 	CALL	EL3_IDPORT
 	LD	(HL),A
-	LD	(IX+HS_PHASE),EP_EE_READ
-	PUSH	IX
-	POP	HL
-	LD	DE,HS_DL
-	ADD	HL,DE
-	LD	DE,EL3_EEPROM_MS
-	CALL	DL_ARM
+	LD	(IX+HS_PHASE),EP_EE_WAIT
+	LD	DE,EL3_WAIT1_MS
+	CALL	EL3_ARM
 	LD	(IX+HS_RES),NBR_WAIT
 	RET
 .ee_done
 	LD	(IX+HS_PHASE),EP_ACTIVATE
-	RET
+	JP	EL3_CFG_MAC
 .ee_read
-	PUSH	IX
-	POP	HL
-	LD	DE,HS_DL
-	ADD	HL,DE
-	CALL	DL_LEFT
-	JR	C,.ee_due
-	LD	(IX+HS_RES),NBR_WAIT
-	RET
-.ee_due
+	CALL	EL3_DUE
+	RET	NC
 	CALL	EL3_IDPORT
 	LD	DE,0
 	LD	B,16
@@ -234,8 +335,19 @@ NIC_BRINGUP
 	OR	E
 	LD	E,A
 	DJNZ	.bit
-	; word i -> MAC bytes 2i (high), 2i+1 (low)
+	LD	(IX+HS_PHASE),EP_EE_WRITE
 	LD	A,(IX+HS_STEP)
+	INC	(IX+HS_STEP)
+	OR	A
+	JR	NZ,.mac_word
+	; word 7 is 3Com's ID when a card followed the ID sequence
+	LD	HL,EL3_MFG_3COM
+	SBC	HL,DE			; CF = 0 after OR A
+	RET	Z
+	JP	.recover
+.mac_word
+	; word i -> MAC bytes 2i (high), 2i+1 (low)
+	DEC	A
 	ADD	A,A
 	ADD	A,HS_MAC
 	PUSH	IX
@@ -248,8 +360,6 @@ NIC_BRINGUP
 	LD	(HL),D
 	INC	HL
 	LD	(HL),E
-	INC	(IX+HS_STEP)
-	LD	(IX+HS_PHASE),EP_EE_WRITE
 	RET
 .activate
 	; index = (io_base - 0x200) / 16
@@ -271,9 +381,11 @@ NIC_BRINGUP
 	CALL	EL3_IDPORT
 	LD	(HL),A
 	LD	(IX+HS_PHASE),EP_VERIFY
-	LD	(IX+HS_WIN),0		; an activated card starts in window 0
+	LD	(IX+HS_WIN),0xFF	; unknown: activation keeps the old window
 	RET
 .verify
+	XOR	A			; window 0 selected explicitly (Linux does too)
+	CALL	EL3_WINDOW
 	XOR	A			; window 0 register 0: manufacturer ID
 	CALL	EL3_REG
 	LD	E,(HL)
@@ -282,10 +394,7 @@ NIC_BRINGUP
 	LD	HL,EL3_MFG_3COM
 	OR	A
 	SBC	HL,DE
-	JR	Z,.verified
-	LD	(IX+HS_RES),NBR_FAULT
-	RET
-.verified
+	JP	NZ,.recover
 	LD	(IX+HS_PHASE),EP_TABLE
 	LD	(IX+HS_STEP),0		; EL3_INIT_TABLE offset
 	RET
@@ -323,10 +432,13 @@ EL3_TABLE_OP
 	INC	(IX+HS_STEP)
 	OR	A			; OP_END
 	JR	NZ,.op
+	; each table selects its own last window (init: 1, the run phase;
+	; stop: 0, what the system driver expects to find).  Selecting
+	; window 1 here for both left the card in window 1 after SHUTDOWN:
+	; UNET509B then read the RX FIFO for the manufacturer ID and its
+	; first command after every Zh series failed.
 	LD	(IX+HS_RES),NBR_DONE
-	LD	(IX+HS_WIN),0xFF	; unknown after the table: recompute
-	LD	A,1
-	JP	EL3_WINDOW		; run phase lives in window 1
+	RET
 .op
 	DEC	A
 	JR	NZ,.not_cmd
@@ -464,6 +576,8 @@ EL3_TABLES
 	DW	0x4800			; TX_ENABLE
 	DB	OP_CMD
 	DW	0x6869			; ACK_INTR: polling causes
+	DB	OP_CMD
+	DW	0x0801			; window 1: the run phase lives there
 	DB	OP_END
 EL3_STOP_OFS	EQU	$ - EL3_TABLES
 	; --- stop ---
@@ -476,7 +590,7 @@ EL3_STOP_OFS	EQU	$ - EL3_TABLES
 	DB	OP_CMD
 	DW	0x68FF			; ACK every cause
 	DB	OP_CMD
-	DW	0x0800			; window 0
+	DW	0x0800			; window 0: left selected for the next driver
 	DB	OP_END
 
 ; ----------------------------------------------------------------------
@@ -692,25 +806,25 @@ NIC_TX_CHECK
 ; ----------------------------------------------------------------------
 NIC_STOP
 	LD	A,(IX+HS_PHASE)
-	CP	EP_TABLE + 8		; marker: stop table started
+	CP	EP_TABLE + EL3_STOP_MARK	; marker: stop table started
 	JR	NC,.running
-	LD	(IX+HS_PHASE),EP_TABLE + 8
+	LD	(IX+HS_PHASE),EP_TABLE + EL3_STOP_MARK
 	LD	(IX+HS_STEP),EL3_STOP_OFS
 .running
 	LD	(IX+HS_RES),NBR_CONTINUE
 	LD	A,(IX+HS_PHASE)
-	CP	EP_CIP + 8
+	CP	EP_CIP + EL3_STOP_MARK
 	JR	Z,.cip
 	LD	(IX+HS_PHASE),EP_TABLE
 	CALL	EL3_TABLE
 	LD	A,(IX+HS_PHASE)
-	ADD	A,8			; keep the stop marker
+	ADD	A,EL3_STOP_MARK		; keep the stop marker
 	LD	(IX+HS_PHASE),A
 	RET
 .cip
 	LD	(IX+HS_PHASE),EP_CIP
 	CALL	EL3_CIP_WAIT
 	LD	A,(IX+HS_PHASE)
-	ADD	A,8
+	ADD	A,EL3_STOP_MARK
 	LD	(IX+HS_PHASE),A
 	RET

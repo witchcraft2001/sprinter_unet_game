@@ -107,6 +107,26 @@ start
 	LD	A,(scen_char)
 	CALL	rp_char
 	CALL	rp_nl
+	; the card's slot (ughw.inc hw_slot, line "SLOT c mm u"): before
+	; NETUP's own UART accesses and before INIT_CONFIG; a card that only
+	; the other slot answers for is run there (the report shows hw.env
+	; is wrong)
+	IF	UG_CARD != 'L'
+	LD	A,UG_CARD
+	LD	HL,0xC000 + UG_IO_BASE
+	LD	DE,0xC000 + UG_ID_PORT
+	LD	C,UG_ISA_SLOT
+	CALL	hw_slot
+	LD	(cfg_block + UNETG_CFG_ISA_SLOT),A
+	ADD	A,A
+	OR	0xD4
+	LD	(isa_page),A
+	ENDIF
+	IF	UG_CARD == 'R' || UG_CARD == '3'
+	LD	HL,cfg_block + UNETG_CFG_LOCAL_PORT	; Ethernet: this run's own port
+	CALL	hw_lport
+	ENDIF
+	CALL	hw_show			; the operator sees what is running
 	ENDIF
 	CALL	tick_install
 	CALL	ctc_init
@@ -180,13 +200,32 @@ start
 	PUSH	AF
 	CALL	rp_hex8
 	CALL	rp_nl
+	IF	UG_HW
+	; the last screen output before the run (no STEP was called yet):
+	; the report so far, and for the soak what to expect -- it prints
+	; nothing but a dot a minute until it ends
+	CALL	hw_show
+	LD	A,(scen_char)
+	CP	'K'
+	JR	NZ,.no_note
+	LD	HL,s_soak_note
+	LD	C,DSS_PCHARS
+	RST	DSS
+.no_note
+	ENDIF
 	POP	AF
 	OR	A
 	LD	A,'C'
 	JP	NZ,fail
+	LD	A,1
+	LD	(shut_need),A
 	; bring-up (ESP: UART + AT set-up), at most 10 s
 	LD	HL,10000
 	CALL	dl_set
+	IF	UG_HW
+	LD	HL,(now_ms)		; dl_set has just updated it
+	LD	(bring_t0),HL
+	ENDIF
 .hw
 	CALL	pump
 	LD	A,(UG_CTX + UCTX_HW_STATE)
@@ -194,17 +233,48 @@ start
 	JR	Z,.hw_ok
 	CALL	dl_due
 	JR	NC,.hw
+	; where the bring-up stopped: hw_state (UHW_*), then the first 16
+	; bytes of the card state (phase, step, counter, LFSR, deadline, I/O
+	; base, station address -- unetg_hwsm.inc, src/hw/<card>)
+	LD	HL,s_hwsm
+	LD	DE,UG_CTX + UCTX_HW_STATE
+	LD	B,1
+	CALL	rp_dump
+	LD	HL,s_hwsm2
+	LD	DE,UG_CTX + UCTX_HWSM
+	LD	B,16
+	CALL	rp_dump
 	LD	A,'H'
 	JP	fail
 .hw_ok
 	LD	HL,s_hw
 	CALL	rp_str
 	IF	UG_HW
+	CALL	clk_update
+	LD	HL,(now_ms)
+	LD	DE,(bring_t0)
+	OR	A
+	SBC	HL,DE
+	CALL	hw_bring
 	CALL	hw_costs16		; channel idle: core-cost measurements first
 	ENDIF
 	CALL	scenario
 	CALL	stats			; while the context is configured
-	; SHUTDOWN until OK (3 s)
+	CALL	shutdown
+	LD	A,'X'
+	JP	NZ,fail
+	LD	A,(fail_code)
+	OR	A
+	LD	A,'F'			; a soft failure (t, q): stats are already in
+	JR	NZ,finish		; the report, `fail` would print them again
+	LD	A,'P'
+	JR	finish
+
+; shutdown: SHUTDOWN until OK, at most 3 s, once per run; "SHUTDOWN" and
+; a bad status go to the report.  Out: A = status, ZF = 1 when OK.
+shutdown
+	XOR	A
+	LD	(shut_need),A
 	LD	HL,s_shut
 	CALL	rp_str
 	LD	HL,3000
@@ -213,34 +283,37 @@ start
 	LD	B,UNETG_SHUTDOWN
 	CALL	dll
 	OR	A
-	JR	Z,.shut_ok
+	JR	Z,.ok
 	CP	UNETG_STATUS_WORK
-	JR	NZ,.shut_bad
+	JR	NZ,.bad
 	CALL	pump
 	CALL	dl_due
+	LD	A,UNETG_STATUS_WORK
 	JR	NC,.shut
-.shut_bad
+.bad
+	PUSH	AF
 	CALL	rp_hex8
-	LD	A,'X'
-	JP	fail
-.shut_ok
-	CALL	rp_nl
-	LD	A,(fail_code)
+	POP	AF
 	OR	A
-	LD	A,'F'			; a soft failure (t, q): stats are already in
-	JR	NZ,finish		; the report, `fail` would print them again
-	LD	A,'P'
-	JR	finish
+.ok
+	PUSH	AF
+	CALL	rp_nl
+	POP	AF
+	RET
 
-; fail: A = reason code (letter)
+; fail: A = reason code (letter).  A failed run stops the card as well:
+; without SHUTDOWN it stays as the scenario left it (RX/TX on, window 1),
+; and the system driver's next attach reads a wrong window (the first FTP
+; after a failed Zh series answered FAIL).
 fail
 	LD	(fail_code),A
 	LD	A,(dll_loaded)		; DLL loaded: statistics first
 	OR	A
 	JR	Z,.no_dll
-	PUSH	AF
 	CALL	stats
-	POP	AF
+	LD	A,(shut_need)
+	OR	A
+	CALL	NZ,shutdown
 .no_dll
 	LD	A,'F'
 finish
@@ -267,9 +340,13 @@ finish
 	LD	HL,hw_fname
 	CALL	hw_save
 	ENDIF
+	IF	UG_HW
+	CALL	hw_show			; what the earlier hw_show calls have not printed
+	ELSE
 	LD	HL,UG_REPORT + RP_TEXT
 	LD	C,DSS_PCHARS
 	RST	DSS
+	ENDIF
 	LD	A,0xA5
 	LD	(UG_REPORT + RP_STATUS + 2),A	; done: ugstand.lua collects the report
 	IF	UG_HW
@@ -1193,7 +1270,7 @@ soak
 	LD	(soak_netcur),HL
 	LD	A,(ev_closed)
 	OR	A
-	JR	NZ,.done		; the channel is gone (TIMEOUT, peer): report what ran
+	JP	NZ,.done		; the channel is gone (TIMEOUT, peer): report what ran
 	LD	A,(ticks)
 	LD	B,A
 	LD	A,(soak_tick0)
@@ -1230,6 +1307,32 @@ soak
 	INC	HL
 	LD	(soak_frames + 2),HL
 .frames_nc
+	; the operator's side, between frames and outside the STEP timing:
+	; a dot a minute, and Esc ends the soak with what ran so far
+	; (KEYSTOP in the report; the frame count fails the criterion)
+	LD	HL,(soak_min)
+	INC	HL
+	LD	(soak_min),HL
+	LD	DE,-3000
+	ADD	HL,DE
+	JR	NC,.no_dot
+	LD	(soak_min),HL		; 0
+	LD	A,'.'
+	LD	C,DSS_PUTCHAR
+	RST	DSS
+.no_dot
+	LD	A,(soak_min)
+	AND	0x3F
+	JR	NZ,.no_key		; the keyboard about once a second
+	LD	C,DSS_SCANKEY
+	RST	DSS
+	JR	Z,.no_key
+	CP	0x1B
+	JR	NZ,.no_key
+	LD	A,1
+	LD	(soak_key),A
+	JP	.done
+.no_key
 	LD	HL,(soak_framesleft)
 	LD	DE,1
 	OR	A
@@ -1275,8 +1378,17 @@ soak
 	CALL	rp_char
 	LD	A,(rx_bad)
 	CALL	rp_hex8
-	JP	rp_nl
+	CALL	rp_nl
+	LD	A,(soak_key)
+	OR	A
+	RET	Z
+	LD	HL,s_keystop
+	JP	rp_str
 
+s_keystop	DB	"KEYSTOP", 13, 10, 0
+s_soak_note	DB	"soak: a dot a minute, Esc stops it", 13, 10, 0
+soak_min	DW	0
+soak_key	DB	0
 s_scen		DB	"SCEN ", 0
 s_lat		DB	"LAT ", 0
 s_isrtime	DB	"ISRTIME16 ", 0
@@ -1401,7 +1513,7 @@ isa_open
 	LD	BC,0x1FFD
 	LD	A,SH_1FFD | 0x10
 	OUT	(C),A
-	LD	A,0xD4 | (UG_ISA_SLOT << 1)	; the card's ISA slot, I/O space (slot 1: #D6)
+	LD	A,(isa_page)		; the card's ISA slot, I/O space (slot 1: #D6)
 	LD	BC,0x00E2
 	OUT	(C),A
 	XOR	A
@@ -1426,8 +1538,13 @@ isa_close
 
 ; ----------------------------------------------------------------------
 s_title		DB	"UGTEST ", 0
+s_hwsm		DB	"HW_STATE ", 0
+s_hwsm2		DB	"HWSM ", 0
 s_info		DB	"INFO ", 0
 s_cfg		DB	"INIT_CONFIG ", 0
+	IF	UG_HW
+bring_t0	DW	0
+	ENDIF
 s_hw		DB	"HW RUN", 13, 10, 0
 s_open		DB	"OPEN", 13, 10, 0
 s_echo		DB	"ECHO ", 0
@@ -1452,6 +1569,7 @@ cfg_block	UG_CFG_BLOCK
 dll_handle	DW	0
 dll_loaded	DB	0
 fail_code	DB	0
+shut_need	DB	0		; 1: INIT_CONFIG accepted, SHUTDOWN not called yet
 st_t0		DW	0
 st_max		DW	0
 st_n		DW	0
@@ -1471,6 +1589,7 @@ ev_closed	DB	0
 ev_peer		DB	0
 at_ok		DB	0
 isa_e2		DB	0
+isa_page	DB	0xD4 | (UG_ISA_SLOT << 1)	; #E2 of the card's slot (UG_HW: hw_slot)
 evbuf		DS	8, 0
 ginfo		DS	64, 0
 gstats		DS	80, 0

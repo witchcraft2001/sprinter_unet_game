@@ -217,7 +217,8 @@ class Stand {
     if (res.maxDiUs > 200) P.push(`DI section ${res.maxDiUs.toFixed(1)} us > 200`);
     if (exportName === 'STEP' || exportName === 'STEP_ISR') {
       const budget = regs.de ?? 0;
-      const cap = exportName === 'STEP' ? 500 : 150;
+      // never longer than the passed budget, nor than the largest one INIT_CONFIG accepts
+      const cap = exportName === 'STEP' ? ABI.consts.limits.STEP_BODY_MAX_US : ABI.consts.limits.ISR_BODY_MAX_US;
       if (res.a !== C.status.STATE && res.a !== C.status.BAD_ARGUMENT && res.us > Math.min(budget, cap) + (opts.slackUs ?? 0)) {
         P.push(`${exportName} took ${res.us.toFixed(0)} us, budget ${budget}`);
       }

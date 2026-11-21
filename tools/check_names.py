@@ -69,7 +69,8 @@ HW_CODE = {"ESP": "ESP", "RTL": "RTL", "EL3": "509"}
 def hw_names(dlls):
     """The Ж set of tools/hw/build_hw.sh: (files in build/hw, report names
     the programs write -- sdk/example/ughw.inc hw_build_fname)."""
-    files, reports = {"UGPROBE.EXE", "README.TXT"}, {"PROBEE.TXT", "PROBER.TXT", "PROBE3.TXT"}
+    files, reports = {"UGPROBE.EXE", "README.TXT"}, {"PROBEE.TXT", "PROBER.TXT", "PROBE3.TXT",
+                                                      "STATAE.TXT", "STATAR.TXT", "STATA3.TXT"}
     for d in dlls:
         files.add(d["file"])
         if d["hw"] == "LOOP":
@@ -78,7 +79,7 @@ def hw_names(dlls):
         files.add(f"UGRUN{code}.BAT")
         files.add(f"UGT{code}{tp}.EXE")
         ug = ["E", "S", "D", "K"]
-        nd = ["L", "E", "S", "D", "W"] + ([] if d["hw"] == "ESP" else ["H"])
+        nd = ["L", "E", "S", "D", "W", "T", "Q", "A", "B", "C"] + ([] if d["hw"] == "ESP" else ["H"])
         if tp == "T":
             files.add(f"UGT{code}TP.EXE")
             ug.append("P")
@@ -100,7 +101,7 @@ def check_hw(dlls):
         errors.append(f"hw: a report would overwrite a delivered file: {sorted(files & reports)}")
     out = ROOT / "build" / "hw"
     if out.is_dir():
-        have = {p.name for p in out.iterdir()} - {"unetgame_hw.img"}
+        have = {p.name for p in out.iterdir()} - {"unetgame_hw.img", "UGHW.ZIP"}
         if have != files:
             errors.append(f"hw: build/hw differs: missing {sorted(files - have)}, extra {sorted(have - files)}")
     return errors

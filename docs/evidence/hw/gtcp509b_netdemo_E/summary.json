@@ -1,0 +1,107 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gtcp509b",
+  "scenario": "E",
+  "file": "N509TE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3400
+  },
+  "info": {
+    "min_useful_budget_us": 420,
+    "empty_poll_us": 55,
+    "bus_busy_us": 25
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 950,
+      "card": 0,
+      "main": 2350,
+      "service": 100
+    },
+    "cost_poll_us": 95,
+    "cost_step_us": 470,
+    "periods": 35,
+    "largest_period_debit_us": 3305,
+    "now_ms": 713,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 176,
+      "early": 362,
+      "frames": 29,
+      "ticks": 357,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 29,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 272,
+    "polls_useful": 6,
+    "steps_total": 176,
+    "steps_useful": 176,
+    "budget_yields": 137,
+    "max_step_gap_ms": 8,
+    "arp_requests": 1,
+    "tx_frames": 5,
+    "rx_frames": 6,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "timing_us": {
+    "tick_isr_max": 386,
+    "admitted_ug_step_max": 970,
+    "largest_tick_gap": 2040,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "E",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 49789,
+    "bring": {
+      "ms": 191,
+      "scratch": 0
+    },
+    "cbl": {
+      "n": 29,
+      "max_us": 1912,
+      "mean_us": 1055
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

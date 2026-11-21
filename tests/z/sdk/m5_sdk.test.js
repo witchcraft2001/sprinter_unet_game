@@ -68,11 +68,27 @@ for (const dll of DLLS) {
   });
 }
 
+// A game that can spare a longer call picks a larger STEP budget (up to
+// GET_INFO.step_body_max_us): one fat STEP per period instead of two thin
+// ones pays the fixed part of a STEP once.
+for (const dll of ['gtcp509b', 'gudprtl', 'gudpesp']) {
+  test(`${dll}: a profile with one STEP of 1000 us per period is accepted and runs`, () => {
+    const a = boot(dll, { step_budget: 1000, steps: 1 });
+    assert.equal(a.env.a, S.OK);
+    const b = a.block();
+    assert.equal(a.env.cfg.step_budget_us, 1000);
+    assert.equal(b.costStep, 1000 + UG.UG_OVH_STEP_US);
+    assert.ok(b.flags & (1 << UG.UGF_CONFIGURED));
+    a.runMs(300);
+    clean(a);
+  });
+}
+
 test('UG_INIT_ENV refusals: target, poll gap, budgets, profile, INIT_CONFIG', () => {
   const cases = [
     [{ flags: 0, target: 1500 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_REFUSED],   // quotas over a strict target
     [{ tick_us: 2400 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_GAP],
-    [{ step_budget: 501 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
+    [{ step_budget: 2001 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
     [{ step_budget: 300 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
     [{ isr_budget: 151 }, {}, S.UNSUPPORTED_TIMING, UG.UG_ENV_BUDGET],
     [{ steps: 0 }, {}, S.BAD_CONFIG, UG.UG_ENV_PROFILE],

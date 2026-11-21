@@ -1,0 +1,123 @@
+{
+  "stand": "Ж",
+  "prog": "ugprobe",
+  "card": "EL3",
+  "scenario": "3",
+  "file": "PROBE3.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "hw": {
+    "scen": "3",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    }
+  },
+  "state": {
+    "card_regs": [
+      "00",
+      "00",
+      "50",
+      "6D",
+      "00",
+      "CF",
+      "10",
+      "00"
+    ],
+    "env": {
+      "BOOTDSK": "C:",
+      "NET": "509B",
+      "NET_HW": "0/#300",
+      "NET_IDPORT": "#110",
+      "NET_MAC": "<set 2299>",
+      "NET_IP_SRC": "DHCP",
+      "NET_IP": "<set 9cb1>",
+      "NET_MASK": "<set f9e2>",
+      "NET_GW": "<set c5eb>",
+      "NET_LEASE_SEC": "25200"
+    }
+  },
+  "probe": {
+    "raw": {
+      "CPU": [
+        26880,
+        5481,
+        5481,
+        5481
+      ],
+      "ISA_RD": [
+        166,
+        166,
+        166,
+        167,
+        178,
+        178,
+        179,
+        178
+      ],
+      "ISA_WR": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "BRACKET": [
+        13029,
+        2805
+      ],
+      "CTC": [
+        458,
+        1517,
+        19221,
+        0
+      ]
+    },
+    "frame_ms": 20.48,
+    "CPU": {
+      "ctc_clock_mhz": 21.0,
+      "effective_mhz": [
+        9.367,
+        9.367,
+        9.367
+      ],
+      "wait_share": 0.554
+    },
+    "ISA_RD": {
+      "extra_us_per_access_max": -0.131,
+      "extra_us_per_access_mean": -0.143,
+      "portion_64_us_max": 127.2
+    },
+    "ISA_WR": {
+      "extra_us_per_access_max": 0.0,
+      "extra_us_per_access_mean": 0.0,
+      "portion_64_us_max": 0.0
+    },
+    "BRACKET": {
+      "us_per_bracket": 30.429
+    },
+    "CTC": {
+      "sample_us": 31.22,
+      "chain_counts_per_frame": 19221,
+      "chain_counts_expected": 17920,
+      "chain_counting": true,
+      "samples_without_stamp": 0
+    }
+  },
+  "uart_trigger": null,
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "card_found": true,
+    "probe_ctc": false
+  }
+}

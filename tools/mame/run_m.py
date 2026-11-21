@@ -39,7 +39,9 @@ docs/evidence/m3_eth/<prog>_<dll>_<scen>/.
 
 Environment: MAME_HOLUB (binary, default ../../../mame-holub/sprinter),
 MAME_3C509B, MAME_NET_IF, MAME_NET_HOST, MAME_ASSETS (roms + IMG, default
-.../mame_images/mame_release_v306_25.05.2025), LIBMAN_DIR (default
+.../mame_images/mame_release_v306_25.05.2025), MAME_HDD (the DSS system
+disk, default $MAME_ASSETS/IMG/sp_hdd_sys.chd; opened read-only through
+our own -diff_directory), LIBMAN_DIR (default
 third_party/libman/libman, the git submodule).
 """
 import argparse
@@ -61,11 +63,18 @@ MAME_3C509B = pathlib.Path(os.environ.get('MAME_3C509B', SPRINTER / 'mame' / 'ma
 NET_IF = os.environ.get('MAME_NET_IF', 'feth0')
 NET_HOST = os.environ.get('MAME_NET_HOST', '192.168.7.1')
 ASSETS = pathlib.Path(os.environ.get('MAME_ASSETS', SPRINTER / 'mame_images' / 'mame_release_v306_25.05.2025'))
+HDD = pathlib.Path(os.environ.get('MAME_HDD', ASSETS / 'IMG' / 'sp_hdd_sys.chd'))
 LIBMAN = pathlib.Path(os.environ.get('LIBMAN_DIR', ROOT / 'third_party' / 'libman' / 'libman'))
 SCENARIOS = {'E': 'echo 300 bytes', 'S': '8 KiB stream', 'P': 'peer closes', 'D': 'SHUTDOWN while open',
              'W': 'pause 2 s between two echoes', 'L': 'load, check and free the DLL',
-             'H': 'card bring-up and SHUTDOWN, no channel', 'K': 'soak (UG_HW, minutes)'}
-NETDEMO_ONLY = ('W', 'L', 'H')
+             'H': 'card bring-up and SHUTDOWN, no channel', 'K': 'soak (UG_HW, minutes)',
+             'T': 'latency under the quota profile: 16 x 64 and 16 x 300 bytes, one at a time',
+             'Q': 'T at the SDK default quota (2 STEPs per period, quota sum <= 2000 us)',
+             'A': 'T with 2 STEPs of 1000 us per period', 'B': 'T with 2 STEPs of 1500 us per period',
+             'C': 'T with 1 STEP of 1000 us per period'}
+NETDEMO_ONLY = ('W', 'L', 'H', 'T', 'Q', 'A', 'B', 'C')
+# latency scenarios with their own quota: scen -> (STEPs per period, STEP budget in us; 0 = the minimum)
+LAT_PROFILE = {'Q': (2, 0), 'A': (2, 1000), 'B': (2, 1500), 'C': (1, 1000)}
 HW_ONLY = ('K',)
 # UG_HW report file name (sdk/example/ughw.inc hw_build_fname / mkcfg.js
 # UG_HWPFX): prog letter + card code + transport letter + scenario + .TXT.
@@ -133,8 +142,12 @@ def main():
                           'instead of -DSCEN, and the saved report is pulled off the floppy and '
                           'compared to the in-memory one')
     ap.add_argument('--arg', type=int, help='UG_HW: extra numeric argument after scen (K minutes)')
+    ap.add_argument('--budget', type=int, default=0,
+                    help='NETDEMO: STEP budget of the profile in us (0 = GET_INFO.min_useful)')
     ap.add_argument('--probe', choices=list(PROBE_CARD),
                     help='run UGPROBE.EXE for card E / R / 3 instead (no DLL, no network)')
+    ap.add_argument('--state', action='store_true',
+                    help='with --probe: the state snapshot only (UGPROBE <card> 1, STATA<card>.TXT)')
     a = ap.parse_args()
     if a.probe:
         return probe(a)
@@ -148,6 +161,8 @@ def main():
         sys.exit(f'{a.scen} is a UG_HW scenario (--hw)')
     if a.prog == 'netdemo' and a.scen in HW_ONLY:
         sys.exit(f'{a.scen} is a UGTEST scenario')
+    if a.scen in LAT_PROFILE:
+        a.steps, a.budget = LAT_PROFILE[a.scen]
     prog = a.prog
     card = card_of(a.dll)
     mame = MAME_3C509B if card == 'EL3' else MAME
@@ -182,7 +197,7 @@ def main():
     if a.hw:
         scen_define += ['-DUG_HW=1', '-DUG_HW_MTEST=1']
     run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', ROOT / 'sdk', '-I', work, '-I', LIBMAN,
-        *scen_define, f'-DUG_STEPS={a.steps}', f'--sym={work / (prog + ".sym")}',
+        *scen_define, f'-DUG_STEPS={a.steps}', f'-DUG_STEP_BUDGET={a.budget}', f'--sym={work / (prog + ".sym")}',
         ROOT / 'sdk/example' / f'{prog}.asm', cwd=work, stdout=subprocess.DEVNULL)
     img = work / f'{prog}.img'
     run('mformat', '-C', '-i', img, '-f', '1440', '::')
@@ -278,7 +293,7 @@ def card_args_of(card, work, index, nothrottle):
 
 def mame_cmd(mame, work, img, card_args, timeout, window):
     cmd = [mame, 'sprinter', '-bios', 'v3.06', '-rompath', ASSETS / 'roms',
-           '-hard1', ASSETS / 'IMG' / 'sp_hdd_sys.chd',
+           '-hard1', HDD,
            '-cfg_directory', work / 'cfg', '-nvram_directory', work / 'nvram',
            '-diff_directory', work / 'diff', '-snapshot_directory', work / 'snap',
            '-beta:wd179x:1', '35hd', '-flop2', img,
@@ -313,7 +328,7 @@ def probe(a):
     report = work / 'report.txt'
     cmd = mame_cmd(mame, work, img, card_args_of(card, work, None, True), a.timeout, a.window)
     env = dict(os.environ, UG_SYM=str(work / 'ugprobe.sym'), UG_REPORT_FILE=str(report),
-               UG_CMD=f'b:\\ugprobe.exe {a.probe}')
+               UG_CMD=f'b:\\ugprobe.exe {a.probe}' + (' 1' if a.state else ''))
     (work / 'command.txt').write_text(' '.join(str(c) for c in cmd) + '\n')
     t0 = time.time()
     with (work / 'mame.log').open('w') as log:
@@ -326,10 +341,16 @@ def probe(a):
     summary['probe'] = ugreport.parse_probe(lines, summary.get('frame_ms') or ugreport.FRAME_MS_NOMINAL)
     need = ['CPU', 'ISA_RD', 'ISA_WR', 'BRACKET', 'CTC'] + (['UART08', 'UART04', 'UART0E', 'RTS08', 'RTS04', 'RTS0E']
                                                             if card == 'ESP' else [])
+    if a.state:                                  # the snapshot only: no PROBE section at all
+        need = []
+        if summary['probe']['raw']:
+            sys.exit('--state: PROBE sections in a state snapshot')
     missing = [n for n in need if n not in summary['probe']['raw']]
     summary['missing_sections'] = missing
-    ok = 'RESULT: PASS' in text and not missing
-    hw_name = f'PROBE{a.probe}.TXT'
+    state = [l for l in lines if l.startswith(('CARD', 'DSSENV '))]
+    summary['state_lines'] = len(state)
+    ok = 'RESULT: PASS' in text and not missing and len(state) >= 10 and state[0].startswith('CARD ')
+    hw_name = f'STATA{a.probe}.TXT' if a.state else f'PROBE{a.probe}.TXT'
     try:
         run('mcopy', '-n', '-i', img, f'::{hw_name}', work / hw_name, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         saved = (work / hw_name).read_text(errors='replace')

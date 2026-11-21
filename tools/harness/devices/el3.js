@@ -7,6 +7,22 @@
 // window 1, high-before-low 16-bit access and RX_DISCARD on an empty queue
 // throw.  Extras for the core's resumable states: commands can keep CIP
 // set for a number of status reads, TX completion can be delayed.
+//
+// Timing of the ID port (3Com 09-0398-002B, after the first Zh runs): an
+// EEPROM word is readable only eepromBusyMs after its read command (162 us
+// on paper, Linux waits 4 ms: the model default), a global reset (C0..CF)
+// makes the card invisible for resetBusyMs (AUTOINIT 310 us) and returns
+// it to its power-on state; an ID port access inside either window throws.
+// Activation keeps the selected register window (only a reset or power-on
+// selects window 0).  `clock` (ms, set by tools/harness/ethnet.js) is the
+// real time of the stand, which may run ahead of the now_ms the DLL sees.
+// A global reset also drops the link for linkDownMs (the transceiver goes
+// off and on; a real switch port forwards nothing for 2..6 s): frames
+// delivered or transmitted in that time are lost (lostRx / lostTx).  The
+// driver must not reset a card that answers.  Knobs for the recovery path:
+// `deaf` (true: the card ignores every ID command but the reset until it
+// is reset; 'always': also after it), `activateFails` (that many
+// activation commands are ignored).
 'use strict';
 
 function lfsr(index) {
@@ -35,6 +51,26 @@ class EL3 {
     this.cipLeft = 0; this.lowW = new Map(); this.highR = new Map();
     this.transmitted = []; this.commands = []; this.rejected = 0; this.onTransmit = null;
     this.rxFifoLimit = opts.rxFifoBytes ?? 2048;
+    this.clock = opts.clock ?? null;
+    this.eepromBusyMs = opts.eepromBusyMs ?? 4;
+    this.resetBusyMs = opts.resetBusyMs ?? 1;
+    this.eepromReadyAt = -Infinity; this.resetUntil = -Infinity; this.resets = 0;
+    this.linkDownMs = opts.linkDownMs ?? 3000;
+    this.linkUpAt = -Infinity; this.lostRx = 0; this.lostTx = 0;
+    this.deaf = opts.deaf ?? false;
+    this.activateFails = opts.activateFails ?? 0;
+  }
+  linkUp() { return this.now() >= this.linkUpAt; }
+  now() { return this.clock ? this.clock() : 0; }
+  // the state a power-on or an ID-port global reset leaves
+  globalReset() {
+    this.active = false; this.window = 0; this.idSelected = false; this.idIndex = -1; this.idZeros = 0;
+    this.serial = []; this.rxEnabled = false; this.txEnabled = false; this.rxFilter = 0; this.intrMask = 0;
+    this.netDiag = 0; this.media = 0; this.station = [0, 0, 0, 0, 0, 0];
+    this.rxQueue = []; this.txFifo = []; this.txExpected = 0; this.txStatus = []; this.cipLeft = 0;
+    this.resetUntil = this.now() + this.resetBusyMs; this.resets++;
+    this.linkUpAt = this.now() + this.linkDownMs;
+    if (this.deaf !== 'always') this.deaf = false;
   }
 
   // ---- ISA attachment: two apertures (ID port, I/O block) ----------------
@@ -53,6 +89,7 @@ class EL3 {
     return (this.rxFilter & 1) !== 0 && d.every((v, i) => v === this.station[i]);
   }
   deliver(frame) {
+    if (!this.linkUp()) { this.lostRx++; return false; }
     if (!this.rxEnabled || !this.accepts(frame)) { this.rejected++; return false; }
     const used = this.rxQueue.reduce((n, q) => n + q.frame.length, 0);
     if (used + frame.length > this.rxFifoLimit) { this.rejected++; return false; }
@@ -64,6 +101,7 @@ class EL3 {
   idWrite(value) {
     if (!this.present) return;
     value &= 0xff;
+    if (this.now() < this.resetUntil) throw new Error(`EL3: ID port write ${value.toString(16)} during the global reset AUTOINIT`);
     if (this.idIndex >= 0) {
       const want = lfsr(this.idIndex);
       if (value !== want) throw new Error(`EL3: bad ID byte ${this.idIndex}: ${value.toString(16)} != ${want.toString(16)}`);
@@ -73,16 +111,25 @@ class EL3 {
     if (value === 0) { if (++this.idZeros === 2) { this.idZeros = 0; this.idIndex = 0; this.idSelected = false; } return; }
     this.idZeros = 0;
     if (!this.idSelected) throw new Error(`EL3: ID command ${value.toString(16)} without the ID sequence`);
+    if (this.deaf) { if ((value & 0xf0) === 0xc0) this.globalReset(); return; }
     if (value === 0xd0) return;
     if ((value & 0xc0) === 0x80) {
       const w = this.eeprom[value & 0x3f];
       this.serial = Array.from({ length: 16 }, (_, i) => (w >> (15 - i)) & 1);
+      this.eepromReadyAt = this.now() + this.eepromBusyMs;
       return;
     }
-    if ((value & 0xe0) === 0xe0) { this.base = 0x200 + ((value & 0x1f) << 4); this.active = true; this.window = 0; return; }
+    if ((value & 0xf0) === 0xc0) { this.globalReset(); return; }
+    if ((value & 0xe0) === 0xe0) {
+      if (this.activateFails > 0) { this.activateFails--; return; }
+      this.base = 0x200 + ((value & 0x1f) << 4); this.active = true; return;
+    }
     throw new Error(`EL3: unknown ID command ${value.toString(16)}`);
   }
-  idRead() { return this.serial.length ? this.serial.shift() : 1; }
+  idRead() {
+    if (this.serial.length && this.now() < this.eepromReadyAt) throw new Error('EL3: ID port read while the EEPROM read is busy');
+    return this.serial.length ? this.serial.shift() : 1;
+  }
 
   // ---- commands -------------------------------------------------------------
   command(word) {
@@ -119,7 +166,8 @@ class EL3 {
       this.transmitted.push(frame);
       this.txStatus.push({ value: 0xc0, remaining: this.txDelayReads });
       this.txFifo = []; this.txExpected = 0;
-      if (this.onTransmit) this.onTransmit(frame);
+      if (!this.linkUp()) this.lostTx++;        // the transceiver is still coming up
+      else if (this.onTransmit) this.onTransmit(frame);
     }
   }
   rxByte() {

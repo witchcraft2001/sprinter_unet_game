@@ -73,7 +73,7 @@ make check        # everything above; run before every hand-off
 make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
 make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME
                   # (not in check; Ethernet needs the feth pair, else M SKIP)
-make hw-image     # Ж stand file set build/hw/ (+ .img) from tools/hw/hw.env
+make hw-image     # Ж stand file set build/hw/ (+ UGHW.ZIP, .img) from tools/hw/hw.env
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -97,6 +97,11 @@ touch the user's own MAME tree `../../../mame` -- its prebuilt binary
 cards in MAME use pcap on the feth pair the user creates
 (`sudo tools/mame/net_feth.sh`); never bind pcap to a real host adapter.
 Ask the user only for real-Sprinter runs.
+The DSS system disk is `$MAME_ASSETS/IMG/sp_hdd_sys.chd` unless
+`MAME_HDD` names another (read-only, our own diff directory); since
+2026-11-13 that shared image no longer boots DSS (the machine stays on
+the BIOS screen, every run ends `(no report block)`): run the M stand
+with `MAME_HDD=.../IMG/sp_hdd_sys_0726.chd` and never modify the images.
 
 ## Size limit (hard, checked on every build)
 
@@ -168,7 +173,9 @@ Rules:
 - No busy waits. Every hardware/connection/close wait is a resumable state
   advanced by STEP/STEP_ISR with a byte/visit cap and a `now_ms` deadline.
   "Drain until empty" loops are forbidden; every loop has a fixed maximum.
-- Budget: STEP body ≤ 500 µs and ≤ the passed budget; STEP_ISR body ≤ 150 µs;
+- Budget: STEP body ≤ the passed budget, which the application chooses
+  between `min_useful_budget_us` and `STEP_BODY_MAX_US` (2000 since
+  2026-11-21, 500 before: the user's decision, ТЗ §5 table); STEP_ISR body ≤ 150 µs;
   empty poll ≤ 100 µs; BUS_BUSY path ≤ 25 µs; any DI section ≤ 200 µs.
   Stack: ≤ 256 bytes for main exports, ≤ 96 bytes for STEP_ISR. Do not start
   an indivisible operation that does not fit together with its return cost.
@@ -443,7 +450,114 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - `tools/hw/hw.env` holds the user's LAN addresses: never commit it (it is
   git-ignored; `hw.env.example` is the template).
 - A stand program's own ISA accesses (NETUP's UART) use `UG_ISA_SLOT` /
-  `UG_IO_BASE` from mkcfg.js, never a literal slot 1 / 0x3E8.
+  `UG_IO_BASE` from mkcfg.js (through the `isa_page` byte), never a
+  literal slot 1 / 0x3E8.
+- ISA slots are 0 and 1 (`#E2 = #D4 | slot << 1`), never 1 and 2: the
+  first Ж runs (3C509B) all died with INIT_CONFIG BAD_CONFIG on
+  `HW_SLOT_EL3=2` from our own template, and the probe "passed" on page
+  `#D8`. `build_hw.sh` and `mkcfg.js` reject other values; every Ж
+  program runs `hw_slot` (ughw.inc) before its first ISA access and
+  INIT_CONFIG, prints `SLOT c mm u` and uses the slot that answers;
+  UGPROBE fails (`FAIL S`) when none does. A probe section that cannot
+  tell "measured the card" from "measured nothing" is not a pass.
+- A card wait must guarantee real time, not "now_ms + n": the
+  application's now_ms moves in ticks of any length (UGTEST: 20 ms frames,
+  NETDEMO: 2 ms CTC), so a single DL_ARM(2) is due at the next tick edge,
+  microseconds later. The second Ж series of the 3C509B failed so (early
+  ID EEPROM reads, the card never activated; Z and M answer EEPROM reads
+  at once). Card waits are two-stage (el3.asm EL3_WAIT1_MS, then
+  EL3_WAIT_MS after the first observed tick: >= one tick and >= 4 ms);
+  the 3C509B bring-up selects window 0 itself. The EL3 model is strict
+  about both (eepromBusyMs, resetBusyMs) and `ethStand` `clockMs` gives
+  STEP a coarse now_ms: keep such hazards modelled.
+- Never reset a card that answers. The 3C509B ID-port global reset (C0)
+  switches the transceiver off and on: the link drops and the switch
+  forwards nothing for 2..6 s. With a reset in every INIT_CONFIG each Ж
+  run lost its first 3..5 ARP requests and one OPEN timed out (fourth
+  series, NETDEMO GUDP509B W). Bring-up attaches as UNET509B DISCOVER
+  does (ID sequence, tag, EEPROM word 7 = 0x6D50, MAC words, activation,
+  window 0, manufacturer ID, init table); the reset is a recovery, once
+  per bring-up, when word 7 or the manufacturer ID is wrong. The EL3
+  model loses frames for `linkDownMs` after a reset (`lostRx`/`lostTx`);
+  tests assert `resets === 0` on a card that answers. MAME's 3C509B
+  answers the 4th ARP request with or without the reset (it did before
+  the reset existed; RTL answers the 1st): `arp_requests` on M is no
+  evidence either way.
+- SHUTDOWN leaves the 3C509B as the system driver leaves it: RX/TX off,
+  mask 0, window 0. UNET509B's attach reads the manufacturer ID without
+  selecting window 0; the table runner's `OP_END` selected window 1 for
+  the stop table too, so the first system-stack command after every Ж
+  series failed (found only by the fifth series' STATA3.TXT: `CARD 00 20`
+  after, `00 00 50 6D ...` before). Each table now ends in its own
+  window; the Z session test asserts the card state after SHUTDOWN. Model
+  what the NEXT user of the hardware expects, not only our own restart.
+- A stand program stops the card on every exit path: `fail` runs SHUTDOWN
+  too (UGTEST did not: a failed run left RX/TX on in window 1, and the
+  system driver's attach reads the manufacturer ID without selecting
+  window 0). The status goes into the report (`SHUTDOWN xx`).
+- What a series leaves to the system network stack is evidence, not a
+  guess: UGPROBE prints `CARD` (read-only card registers) and `DSSENV`
+  (the DSS NET* variables) before its first card access, and
+  `UGPROBE <c> 1` at the end of every UGRUN*.BAT saves the same as
+  `STATA<c>.TXT`; parse_hw.py prints the difference and keeps addresses
+  out of `docs/evidence/hw` (`<set xxxx>` tags). A report line name is
+  unique across programs (`ENV` is NETDEMO's gateway line; ugreport.py
+  parses by name).
+- A report must let a later reader tell the causes apart: the seventh
+  3C509B series had 4 runs of 28 with 4..5 ARP requests (OPEN took 3..4 s
+  of the 5 s timeout) and nothing to tell a bring-up that fell into the
+  reset recovery from an ARP answer lost on the LAN. Ж programs print
+  `BRING <ms> <byte>` at RUN (hw_bring: bring-up time and hwsm[43], the
+  3C509B HS_PASS until the first frame; 01 = reset used); parse_hw.py
+  lists every run with more than one ARP request. The eighth series
+  answered it: byte 00 and the usual bring-up time in the slow runs too,
+  so the card was fine and the answers were lost on the way from the
+  stand host, which is on Wi-Fi (broadcast ARP requests reach a
+  power-saving Wi-Fi client only at DTIM). Several ARP requests with
+  `BRING .. 00` are the stand's network, not the core.
+- The core's ephemeral port is `now_ms` at OPEN (tcp.asm / udp.asm) and v1
+  sends no RST: a program whose now_ms starts at 0 reuses its port every
+  run, and after a connection left open (scenario D) the host answers
+  the next SYN from that port with no SYN-ACK (NETDEMO W after D failed
+  so on Ж; on M run_m.py passes a port per run). Ж programs call
+  `hw_lport` (DSS clock; line `LPORT`) when local_port is 0, and
+  echo_hw.sh runs the echo server with `--idle-close 10`. The Ж echo
+  ports are 7710/7712: 7000 belongs to macOS AirPlay.
+- A Ж program shows the operator what is running: `hw_show` prints the
+  report head at start (never between the first STEP and SHUTDOWN, never
+  after IM 2); the soak prints a dot a minute and polls Esc once a second
+  between frames (`KEYSTOP`). A silent 10-minute run was reported as a hang.
+- Check an assembly by its exit code, not by grepping "error": sjasmplus
+  prints "Pass 1 complete (0 errors)" (a JR out of range slipped through).
+- NETDEMO's UG_HW build is tight against `UG_CODE_END` (0x9D00; the line
+  `netdemo free:` of every assembly says how tight): ughw.inc assembles
+  `hw_args` only when called (`IFUSED`) and only the build's own card
+  test (`UG_CARD` from mkcfg.js; UGPROBE sets 0 = all three); `send_all`
+  is `IFUSED`. sdk/time/ugtime.asm holds two `ALIGN 256` tables in the
+  middle of the image: code added in front of them can cross a page and
+  cost 256 bytes at once, so scenario-only routines (the latency
+  scenario) live behind the SDK includes, right before `code_end`.
+- Every budget check and stand limit comes from the ABI constants
+  (`ABI.consts.limits`), never a literal 500 / 150: both stands had the
+  old STEP limit hard-coded. `make profile-check` runs at 500, the
+  minimum, 1000 and 2000: a larger budget reaches paths the small ones
+  never do (the RX_READY published by the STEP that finished the frame
+  cost 95 us against a reserve of 70; COST_EVENT is 110 on every card).
+- Work that cannot succeed takes no budget: EV_FLUSH returns at once on a
+  full event queue. With COST_EVENT at 110 a STEP paid for a publication
+  whose EV_PUT failed, the second one was refused for budget and the STEP
+  answered YIELD for as long as the application read nothing
+  (tests/z/abi/m1_queues "full event queue"). Run the whole `make check`
+  after a cost change, not only the tests of the card being worked on.
+- A packet's latency under a quota is (STEPs per packet) x (time between
+  STEPs), and its cost is mostly the per-STEP base, not the work:
+  `tools/dev/pkt_steps.js` (STEPs and model time per packet at the
+  minimum budget and 500), NETDEMO scenarios T / Q (`LATMS`, T at the
+  program's UG_STEPS, Q at 2 STEPs per period = the SDK default quota;
+  A / B / C with a STEP budget of 1000 / 1500 us: 2 x 1000, 2 x 1500,
+  1 x 1000 per period -- tools/mame/run_m.py LAT_PROFILE and
+  tools/hw/build_hw.sh hold the same table).  Judge a scheduling change
+  by both.
 - DSS: the command line is IX at entry (load - #80: length, text), not
   APPINFO #47; `#0A` creates or truncates a file. A UG_HW program saves
   its report before the 0xA5 marker and waits out ugstand.lua's grace

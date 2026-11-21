@@ -4,13 +4,13 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 3.9,
+  "wall_s": 4.7,
   "steps_per_period": 5,
   "load": {
     "status": 0,
     "libman_reason": 0,
     "handle": 0,
-    "page": 235,
+    "page": 233,
     "base": "0x4000"
   },
   "env": {
@@ -34,15 +34,15 @@
     "cost_step_us": 475,
     "periods": 44,
     "largest_period_debit_us": 3325,
-    "now_ms": 885,
+    "now_ms": 883,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 218,
-      "early": 455,
-      "frames": 34,
-      "ticks": 443,
+      "early": 454,
+      "frames": 37,
+      "ticks": 442,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,7 +57,7 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 331,
+    "polls_total": 328,
     "steps_total": 218,
     "steps_useful": 218,
     "budget_yields": 204,
@@ -68,8 +68,8 @@
   "timing_us": {
     "tick_isr_max": 314,
     "admitted_ug_step_max": 987,
-    "largest_tick_gap": 2053,
+    "largest_tick_gap": 2040,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.758 now_ms per emulated ms, TICK_MS 2.639, FRAME_MS 20.480, STEP_CALLS_PER_S 180 (over 0.5 s)"
+  "clock": "CLOCK_RATE 0.730 now_ms per emulated ms, TICK_MS 2.738, FRAME_MS 20.480, STEP_CALLS_PER_S 174 (over 0.5 s)"
 }

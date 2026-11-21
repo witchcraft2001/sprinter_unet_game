@@ -92,6 +92,49 @@ class ParseHwTests(unittest.TestCase):
         self.assertEqual(pr["UART08"]["hist_1_16plus"][8], 19)
         self.assertEqual(s["criteria"], {"result": True, "probe_ctc": False, "probe_uart": True})
 
+    def test_slot(self) -> None:
+        # hw.env said slot 0, the card answered only in slot 1 and ran there
+        s = self.parse("URTLTK.TXT", ugtest_report().replace("SCEN K", "SCEN K\r\nSLOT 0 02 1"))
+        self.assertEqual(s["hw"]["slot"], {"configured": 0, "found": [1], "used": 1})
+        self.assertIs(s["criteria"]["card_found"], True)
+        # the first 3C509B runs on Zh: isa_slot 2 -> INIT_CONFIG BAD_CONFIG
+        s = self.parse("U509TE.TXT", "\r\n".join([
+            "UGTEST GTCP509B.DLL", "SCEN E", "CAL 6900 1569", "INIT_CONFIG 08", "RESULT: FAIL C", ""]))
+        self.assertIs(s["criteria"]["result"], False)
+        # no slot answers: the probe fails
+        s = self.parse("PROBE3.TXT", "\r\n".join([
+            "UGPROBE 3", "SCEN 3", "SLOT 1 00 1", "CAL 6400 1000", "RESULT: FAIL S", ""]))
+        self.assertEqual(s["hw"]["slot"]["found"], [])
+        self.assertIs(s["criteria"]["card_found"], False)
+        self.assertIs(s["criteria"]["result"], False)
+
+    def test_bring(self) -> None:
+        # hw_bring: ms of the bring-up and the card scratch byte at RUN
+        s = self.parse("URTLTK.TXT", ugtest_report().replace("HW RUN", "HW RUN\r\nBRING 00A0 01"))
+        self.assertEqual(s["hw"]["bring"], {"ms": 160, "scratch": 1})
+        self.assertNotIn("bring", self.parse("URTLTK.TXT", ugtest_report())["hw"])
+
+    def test_state(self) -> None:
+        # UGPROBE 3 1 after a series: what is left to the system stack;
+        # addresses stay out of the evidence but a change is still seen
+        head = ["UGPROBE 3", "SCEN 3", "CARD 00 00 50 6D 00 00 10 00", "DSSENV BOOTDSK=C:",
+                "DSSENV NET=509B", "DSSENV NET_IP=192.168.1.148", "DSSENV NET_GW -"]
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "STATA3.TXT"
+            p.write_text("\r\n".join(head + ["RESULT: PASS", ""]))
+            text, s = parse_hw.parse_file(p, FRAME_MS, 8)
+        self.assertEqual((s["prog"], s["card"]), ("ugstate", "EL3"))
+        self.assertEqual(s["state"]["card_regs"], ["00", "00", "50", "6D", "00", "00", "10", "00"])
+        self.assertEqual(s["state"]["env"]["NET"], "509B")
+        self.assertIsNone(s["state"]["env"]["NET_GW"])
+        self.assertNotIn("192.168", text + json.dumps(s))
+        other = parse_hw.state_of("DSSENV NET_IP=192.168.1.149\r\n")[1]["env"]["NET_IP"]
+        self.assertNotEqual(s["state"]["env"]["NET_IP"], other)
+        # the probe carries the same head: the "before" side
+        s = self.parse("PROBE3.TXT", "\r\n".join(head + ["SLOT 0 01 0", "CAL 6400 1000", "RESULT: PASS", ""]))
+        self.assertEqual(s["prog"], "ugprobe")
+        self.assertEqual(s["state"]["env"]["BOOTDSK"], "C:")
+
     def test_name_mismatch(self) -> None:
         with self.assertRaises(ValueError):
             self.parse("UESPTS.TXT", ugtest_report())          # the report says GTCPRTL

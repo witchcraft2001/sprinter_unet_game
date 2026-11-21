@@ -23,11 +23,22 @@
 ;     collects it from memory).
 ; Scenarios (-DSCEN): E echo 300 bytes, S 8 KiB stream, P the peer
 ; closes, D SHUTDOWN with the channel open, W pause, L load / check / free,
-; H card bring-up and SHUTDOWN without a channel.
+; H card bring-up and SHUTDOWN without a channel, T latency under this
+; program's quota profile: LAT_N packets of LAT_SMALL bytes and LAT_N of
+; LAT_BIG, one at a time -- the next goes out when the whole echo of the
+; previous one is in and its TX_DONE has come.  Line
+;   LATMS <bytes> <n> <max TX_DONE> <sum> <max echo> <sum>  (twice on it)
+; in ms of now_ms from TX_COMMIT (UG_NOW: one timer tick of resolution).
+; Q is T at the quota of the SDK default profile: the builder passes
+; -DUG_STEPS=2 (the quota sum fits 2000 us; T runs at the program's own
+; UG_STEPS, 5 by default).  A, B and C are T with a larger STEP budget
+; (-DUG_STEP_BUDGET: a game that can spare a longer call): A = 2 STEPs of
+; 1000 us per period, B = 2 of 1500, C = 1 of 1000 (about Q's quota).
 ; ESP builds play NETUP first (AT, AT+UART_CUR=115200,8,1,0,3).
 ; Memory: tools/mame/mkcfg.js --prog netdemo (WIN2, nothing at >= 0xC000).
 
 	DEVICE	NOSLOT64K
+LAT_SCEN	EQU	SCEN == 'T' || SCEN == 'Q' || SCEN == 'A' || SCEN == 'B' || SCEN == 'C'	; the latency scenarios
 
 	INCLUDE	"UNETGAME.INC"
 	INCLUDE	"unetg_ctx.inc"		; ctx.hw_state during the bring-up (this repository's example)
@@ -119,6 +130,26 @@ start
 	LD	A,SCEN
 	CALL	rp_char
 	CALL	rp_nl
+	; the card's slot (ughw.inc hw_slot, line "SLOT c mm u"): before
+	; NETUP's own UART accesses and before INIT_CONFIG; a card that only
+	; the other slot answers for is run there (the report shows hw.env
+	; is wrong)
+	IF	UG_CARD != 'L'
+	LD	A,UG_CARD
+	LD	HL,0xC000 + UG_IO_BASE
+	LD	DE,0xC000 + UG_ID_PORT
+	LD	C,UG_ISA_SLOT
+	CALL	hw_slot
+	LD	(cfg_block + UNETG_CFG_ISA_SLOT),A
+	ADD	A,A
+	OR	0xD4
+	LD	(isa_page),A
+	ENDIF
+	IF	UG_CARD == 'R' || UG_CARD == '3'
+	LD	HL,cfg_block + UNETG_CFG_LOCAL_PORT	; Ethernet: this run's own port
+	CALL	hw_lport
+	ENDIF
+	CALL	hw_show			; the operator sees what is running (IM 1 still)
 	ENDIF
 	; 1. before the game -----------------------------------------------
 	LD	A,SH_1FFD
@@ -208,23 +239,30 @@ start
 	JR	Z,.hw_ok
 	CALL	dl_due
 	JR	NC,.hw
+	; where the bring-up stopped: hw_state (UHW_*), then the first 16
+	; bytes of the card state (phase, step, counter, LFSR, deadline, I/O
+	; base, station address -- unetg_hwsm.inc, src/hw/<card>)
+	LD	HL,s_hwsm
+	LD	DE,UG_CTX + UCTX_HW_STATE
+	LD	B,1
+	CALL	rp_dump
+	LD	HL,s_hwsm2
+	LD	DE,UG_CTX + UCTX_HWSM
+	LD	B,16
+	CALL	rp_dump
 	LD	A,'H'
 	JP	fail
 .hw_ok
 	LD	HL,s_hw
 	CALL	rp_str
+	IF	UG_HW
+	CALL	UG_NOW			; now_ms started at 0 in irq_start
+	CALL	hw_bring
+	ENDIF
 	CALL	scenario
 	; 5. exit ------------------------------------------------------------
 	CALL	report_gw
-	LD	HL,s_shut
-	CALL	rp_str
-	LD	DE,3000
-	CALL	UG_SHUTDOWN
-	PUSH	AF
-	CALL	rp_hex8
-	CALL	rp_nl
-	POP	AF
-	OR	A
+	CALL	shut
 	LD	A,'X'
 	JP	NZ,fail
 	CALL	irq_stop
@@ -234,14 +272,32 @@ start
 	LD	A,'P'
 	JR	finish
 
+; shut: UG_SHUTDOWN (3 s), its status into the report.  Out: ZF = 1 OK.
+shut
+	LD	A,1
+	LD	(shut_done),A
+	LD	HL,s_shut
+	CALL	rp_str
+	LD	DE,3000
+	CALL	UG_SHUTDOWN
+	PUSH	AF
+	CALL	rp_hex8
+	CALL	rp_nl
+	POP	AF
+	OR	A
+	RET
+
 fail
 	LD	(fail_code),A
 	LD	A,(irq_on)
 	OR	A
 	JR	Z,.quiet
+	LD	A,(shut_done)
+	OR	A
+	JR	NZ,.stopped
 	CALL	report_gw
-	LD	DE,3000
-	CALL	UG_SHUTDOWN
+	CALL	shut			; a failed run stops the card as well
+.stopped
 	CALL	irq_stop
 .quiet
 	LD	A,'F'
@@ -262,9 +318,13 @@ finish
 	LD	HL,hw_fname
 	CALL	hw_save
 	ENDIF
+	IF	UG_HW
+	CALL	hw_show			; the rest (IM 1 is back here)
+	ELSE
 	LD	HL,UG_REPORT + RP_TEXT
 	LD	C,DSS_PCHARS
 	RST	DSS
+	ENDIF
 	LD	A,0xA5
 	LD	(UG_REPORT + RP_STATUS + 2),A	; done: ugstand.lua collects the report
 	IF	UG_HW
@@ -514,6 +574,16 @@ scenario
 	LD	A,'q'
 	LD	(fail_code),A
 	ENDIF
+	IF	LAT_SCEN
+	LD	HL,s_latms
+	CALL	rp_str
+	LD	HL,LAT_SMALL
+	CALL	lat_series
+	LD	HL,LAT_BIG
+	CALL	lat_series
+	CALL	rp_nl
+	CALL	close_wait
+	ENDIF
 	IF	SCEN == 'D'
 	LD	HL,100
 	LD	(tx_total),HL
@@ -552,7 +622,16 @@ open_wait
 	LD	A,'T'
 	JP	fail
 
+	IF	LAT_SCEN
+LAT_N		EQU	16
+LAT_SMALL	EQU	64
+LAT_BIG		EQU	300
+	ASSERT	LAT_BIG <= UG_SLOT	; one packet = one slot = one TX_DONE
+
+	ENDIF
+
 ; send_all: tx_total more bytes (on top of what was sent), the echo checked
+	IFUSED	send_all
 send_all
 	LD	HL,(tx_total)
 	LD	DE,(tx_sent)
@@ -582,6 +661,7 @@ send_all
 	LD	HL,(rx_count)
 	CALL	rp_hex16
 	JP	rp_nl
+	ENDIF
 
 send_one
 	LD	HL,(tx_total)
@@ -622,6 +702,12 @@ send_one
 	OR	A
 	LD	A,'K'
 	JP	NZ,fail
+	IF	LAT_SCEN
+	PUSH	DE
+	CALL	UG_NOW
+	LD	(lat_t0),HL		; the packet is committed
+	POP	DE
+	ENDIF
 	LD	HL,(tx_sent)
 	ADD	HL,DE
 	LD	(tx_sent),HL
@@ -751,7 +837,19 @@ event
 	JR	NZ,.log
 	LD	A,(evbuf + UNETG_EVT_STATUS)
 	OR	A
+	IF	LAT_SCEN
+	JR	NZ,.txbad
+	LD	A,(lat_txdone)
+	OR	A
+	RET	NZ
+	INC	A
+	LD	(lat_txdone),A
+	LD	HL,lat_acc
+	JP	lat_take		; keeps BC (pump's event counter)
+.txbad
+	ELSE
 	RET	Z
+	ENDIF
 	CP	UNETG_TXDONE_CANCEL	; ABI §5: CANCEL is the documented outcome
 	JR	Z,.txcancel		; of ABORT/SHUTDOWN on an unfinished TX, not a failure
 	LD	A,'t'
@@ -944,7 +1042,7 @@ isa_open
 	OR	0x10
 	LD	BC,0x1FFD
 	OUT	(C),A
-	LD	A,0xD4 | (UG_ISA_SLOT << 1)	; the card's ISA slot, I/O space (slot 1: #D6)
+	LD	A,(isa_page)		; the card's ISA slot, I/O space (slot 1: #D6)
 	LD	BC,0x00E2
 	OUT	(C),A
 	XOR	A
@@ -1138,6 +1236,9 @@ cbl_n		DW	0
 	IFNDEF	UG_STEPS
 	DEFINE	UG_STEPS 5		; -DUG_STEPS=n overrides
 	ENDIF
+	IFNDEF	UG_STEP_BUDGET
+	DEFINE	UG_STEP_BUDGET 0	; -DUG_STEP_BUDGET=us: up to GET_INFO.step_body_max_us
+	ENDIF
 profile
 	DW	1999			; tick, whole us
 	DB	61			; tick, 1/256 us
@@ -1146,7 +1247,7 @@ profile
 	DB	UG_STEPS		; STEPs per period
 	DB	20			; worst STEP gap, ms
 	DB	0			; card IRQ entries (no route in v1)
-	DW	0			; STEP budget: GET_INFO.min_useful
+	DW	UG_STEP_BUDGET		; STEP budget: 0 = GET_INFO.min_useful
 	DW	0			; STEP_ISR budget: empty poll + return
 	DW	100			; service quota
 	DW	2000			; target per period
@@ -1158,6 +1259,8 @@ profile
 
 s_magic		DB	"UGTREP1", 0
 s_title		DB	"NETDEMO ", 0
+s_hwsm		DB	"HW_STATE ", 0
+s_hwsm2		DB	"HWSM ", 0
 s_load		DB	"LOAD ", 0		; UG_LD_*, l_reason, handle, page, base high
 s_env		DB	"ENV ", 0		; INIT_CONFIG status, UG_ENV_*, quota sum
 s_info		DB	"INFO ", 0
@@ -1187,6 +1290,7 @@ irq_on		DB	0
 saved_i		DB	0
 exit_lock	DB	0
 fail_code	DB	0
+shut_done	DB	0
 last_step	DB	0
 deadline	DW	0
 n_unknown	DW	0
@@ -1209,6 +1313,7 @@ ev_connected	DB	0
 ev_closed	DB	0
 ev_peer		DB	0
 isa_e2		DB	0
+isa_page	DB	0xD4 | (UG_ISA_SLOT << 1)	; #E2 of the card's slot (UG_HW: hw_slot)
 rp_ptr		DW	0
 evbuf		DS	8, 0
 gstats		DS	80, 0
@@ -1219,6 +1324,128 @@ gwsnap		DS	UGW_SCRATCH, 0
 	INCLUDE	"libman.asm"
 	INCLUDE	"loader/ugload.asm"
 
+	IF	LAT_SCEN
+; the latency scenario's helper and data live here, behind the SDK's
+; page-aligned tables: the gap in front of those tables is too small for
+; the whole scenario in the UG_HW build
+; lat_series: LAT_N packets of HL bytes, one at a time; " bytes n max sum
+; max sum" appended to the LATMS line.  Fails E on a lost echo / TX_DONE.
+lat_series
+	LD	(lat_bytes),HL
+	LD	HL,lat_acc
+	LD	B,8
+.zero
+	LD	(HL),0
+	INC	HL
+	DJNZ	.zero
+	LD	B,LAT_N
+.pkt
+	PUSH	BC
+	LD	HL,(lat_bytes)
+	LD	DE,(tx_sent)
+	ADD	HL,DE
+	LD	(tx_total),HL
+	XOR	A
+	LD	(lat_txdone),A
+	LD	HL,5000
+	CALL	dl_set
+.loop
+	CALL	send_one		; its TX_COMMIT stamps lat_t0
+	CALL	pump			; a TX_DONE is taken in `event`
+	LD	HL,(rx_count)
+	LD	DE,(tx_total)
+	OR	A
+	SBC	HL,DE
+	JR	NC,.echo
+	CALL	dl_due
+	JR	NC,.loop
+.lost
+	LD	A,'E'
+	JP	fail
+.echo
+	LD	HL,lat_acc + 4		; the whole echo is in
+	CALL	lat_take
+.txwait
+	LD	A,(lat_txdone)
+	OR	A
+	JR	NZ,.next
+	CALL	pump
+	CALL	dl_due
+	JR	NC,.txwait
+	JR	.lost
+.next
+	POP	BC
+	DJNZ	.pkt
+	LD	A,(rx_bad)
+	OR	A
+	LD	A,'B'
+	JP	NZ,fail
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(lat_bytes)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	A,LAT_N
+	CALL	rp_hex8
+	LD	HL,lat_acc
+	LD	B,4
+.word
+	LD	A,' '
+	CALL	rp_char
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	EX	DE,HL
+	CALL	rp_hex16
+	EX	DE,HL
+	DJNZ	.word
+	RET
+
+; lat_take: the ms since lat_t0 into the pair at HL (max, sum).
+; Preserves BC.  Clobbers AF, DE, HL.
+lat_take
+	PUSH	BC
+	PUSH	HL
+	CALL	UG_NOW			; HL = now_ms[15:0]
+	LD	DE,(lat_t0)
+	OR	A
+	SBC	HL,DE
+	EX	DE,HL			; DE = elapsed
+	POP	HL
+	LD	C,(HL)
+	INC	HL
+	LD	B,(HL)			; BC = max so far
+	PUSH	HL
+	LD	H,B
+	LD	L,C
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	JR	NC,.kept
+	LD	(HL),D
+	DEC	HL
+	LD	(HL),E
+	INC	HL
+.kept
+	INC	HL
+	LD	A,(HL)
+	ADD	A,E
+	LD	(HL),A
+	INC	HL
+	LD	A,(HL)
+	ADC	A,D
+	LD	(HL),A
+	POP	BC
+	RET
+s_latms		DB	"LATMS", 0
+lat_bytes	DW	0
+lat_t0		DW	0
+lat_txdone	DB	0
+lat_acc		DS	8, 0		; TX_DONE max, sum; echo max, sum
+	ENDIF
 code_end
+	DISPLAY	"netdemo free: ", /D, UG_CODE_END - code_end
 	ASSERT	code_end <= UG_CODE_END, "NETDEMO code runs into the library regions"
 	SAVEBIN	"netdemo.exe", exe_header, code_end - exe_header
