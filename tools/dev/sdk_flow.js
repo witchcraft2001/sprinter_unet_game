@@ -46,8 +46,8 @@ function flow(dll, inAt, stAt, o = {}) {
     const u = new Array(8).fill(0);
     u[0] = peer.port >> 8; u[1] = peer.port & 255;
     const dp = be16(last, 34); u[2] = dp >> 8; u[3] = dp & 255;
-    u[4] = 0; u[5] = 8 + data.length;
-    peer.out.push(peer.ipFrame(last.slice(6, 12), last.slice(26, 30), 17, [...u, ...data]));
+    const body = peer.udpWrap(data); u[4] = (8 + body.length) >> 8; u[5] = (8 + body.length) & 255;
+    peer.out.push(peer.ipFrame(last.slice(6, 12), last.slice(26, 30), 17, [...u, ...body]));
   };
   // --trace: every TAKE / BUDGET_BYTES with its caller and the units left
   const takes = [];

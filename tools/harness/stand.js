@@ -175,6 +175,7 @@ class Stand {
       isr_stack_ptr: L.istack, isr_stack_len: L.istackLen,
     };
     if (hw === 'ESP') cfg.flags |= C.cfgf.FLOW_VERIFIED;
+    if (this.records) cfg.flags |= C.cfgf.UDP_RECORDS;
     if (this.profile.transport === 'UDP') { cfg.tx_slot_size = 512; cfg.rx_slot_size = 512; }
     return Object.assign(cfg, over);
   }

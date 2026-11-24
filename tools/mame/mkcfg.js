@@ -30,6 +30,9 @@ const optIoBase = takeOpt('--io-base');
 const optIdPort = takeOpt('--id-port');
 const optTrigger = takeOpt('--trigger');
 const optEspFw = takeOpt('--esp-fw');           // 2: GUDPESP's transparent UDP (records)
+// --records 0|1: UNETG_CFGF_UDP_RECORDS (docs/unet-game-abi.md); default on for
+// the Ethernet UDP builds and the transparent mode, off elsewhere
+const optRecords = takeOpt('--records');
 const optLocalPort = takeOpt('--local-port');
 const optPeer = takeOpt('--peer');
 const optPort = takeOpt('--port');
@@ -38,6 +41,7 @@ if (!dll || !out || !PROFILE[dll] || !['ugtest', 'netdemo'].includes(prog)) {
   console.error('usage: mkcfg.js [--prog ugtest|netdemo] <dll> <out.inc> [peer_ip] [peer_port] [local_port]');
   console.error('  or:  mkcfg.js [--prog p] [--local-ip ip] [--netmask m] [--gateway ip] [--slot n]');
   console.error('                [--io-base n] [--id-port n] [--trigger n] [--local-port n]');
+  console.error('                [--esp-fw 1|2] [--records 0|1]');
   console.error('                [--peer ip] [--port n] <dll> <out.inc>');
   process.exit(2);
 }
@@ -46,6 +50,9 @@ const peerPort = optPort ?? peerPortPos;
 const localPort = optLocalPort ?? localPortPos;
 const prof = PROFILE[dll];
 const udp = prof.transport === 'UDP';
+const espFw = prof.hw === 'ESP' ? (optEspFw !== undefined ? +optEspFw : 1) : 0;
+const records = optRecords !== undefined ? optRecords === '1' : udp && (prof.hw !== 'ESP' || espFw === 2);
+if (records && (!udp || espFw === 1)) throw new Error('--records 1: UDP builds only, not the ESP command mode');
 
 // WIN2 (0x8000..0xBFFF): the EXE code from 0x8100, then the regions of
 // the library.  WIN1 holds the DLL page during l_call; WIN3 is the ISA
@@ -89,7 +96,7 @@ if (M.CTX + M.CTX_LEN > M.TXS || M.TXS + M.TX_N * 536 > M.RXS || M.RXS + M.RX_N 
 const cfg = {
   abi_version: ABI.abi_version, size: ABI.blocks.CFG.size,
   hw_profile: C.hw[prof.hw], transport: C.transport[prof.transport],
-  mode: C.mode.POLL, flags: prof.hw === 'ESP' ? C.cfgf.FLOW_VERIFIED : 0,
+  mode: C.mode.POLL, flags: (prof.hw === 'ESP' ? C.cfgf.FLOW_VERIFIED : 0) | (records ? C.cfgf.UDP_RECORDS : 0),
   cpu_khz: 21000, timing_mode: C.timing.FIXED_SCHEDULE,
   isa_slot: optSlot !== undefined ? parseInt(optSlot, 0) : 1,   // -isa1 in MAME: latch #D6
   io_base: optIoBase !== undefined ? parseInt(optIoBase, 0) : ({ ESP: 0x3e8, RTL: 0x300, EL3: 0x300 }[prof.hw] ?? 0),
@@ -101,7 +108,7 @@ const cfg = {
   gateway_ip: optGateway ?? (prof.hw === 'ESP' ? '192.168.0.1' : peerIp),
   peer_ip: peerIp, peer_port: +peerPort, local_port: +localPort,
   uart_divisor: prof.hw === 'ESP' ? 8 : 0, uart_flow: prof.hw === 'ESP' ? 1 : 0,
-  esp_flow: prof.hw === 'ESP' ? 3 : 0, esp_fw: prof.hw === 'ESP' ? (optEspFw !== undefined ? +optEspFw : 1) : 0,
+  esp_flow: prof.hw === 'ESP' ? 3 : 0, esp_fw: espFw,
   uart_rx_trigger: optTrigger !== undefined ? parseInt(optTrigger, 0) : (prof.hw === 'ESP' ? 8 : 0),
   connect_timeout_ms: 10000, retry_count: 4, retry_wait_ms: [500, 1000, 2000, 2000, 2000],
   send_stall_timeout_ms: 7500, close_timeout_ms: 3000, arp_ttl_ms: 60000,

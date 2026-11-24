@@ -7,6 +7,7 @@
 // `errors` (the tests assert there are none).
 'use strict';
 
+const xrec = require('./xrec.js');
 const be16 = (b, o) => (b[o] << 8) | b[o + 1];
 const be32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
 const put16 = (b, o, v) => { b[o] = (v >> 8) & 255; b[o + 1] = v & 255; };
@@ -38,7 +39,14 @@ class Peer {
     this.tcp = null; this.udpIn = []; this.arpRequests = 0; this.segments = 0;
     this.rto = opts.rto ?? 1000; this.retransmits = 0;      // RFC 6298 minimum RTO
     this.out = [];                            // frames to deliver to the card
+    // UDP records (UNETG_CFGF_UDP_RECORDS): every datagram is one record
+    // both ways; udpIn holds the payloads without their header
+    this.records = !!opts.records;
+    this.badRecords = 0;
   }
+
+  // the bytes of a UDP datagram carrying `data` (a record with records on)
+  udpWrap(data) { return this.records ? xrec.encode(Array.from(data)) : Array.from(data); }
 
   frame(dstMac, type, payload) { return [...dstMac, ...this.mac, type >> 8, type & 255, ...payload]; }
 
@@ -165,12 +173,18 @@ class Peer {
     const sport = be16(f, 34), dport = be16(f, 36), ulen = be16(f, 38);
     if (dport !== this.port) return this.errors.push(`UDP port ${dport}`);
     if (ulen !== len) this.errors.push(`UDP length ${ulen} != ${len}`);
-    const data = f.slice(42, 34 + ulen);
+    let data = f.slice(42, 34 + ulen);
+    if (this.records) {
+      const n = data.length >= 2 ? xrec.header(data[0], data[1]) : -1;
+      if (n < 0 || n + 2 !== data.length) { this.badRecords++; return this.errors.push(`UDP record: header ${data.slice(0, 2)} in ${data.length} bytes`); }
+      data = data.slice(2);
+    }
     this.udpIn.push(data);
     if (!this.echo) return;
     const u = new Array(8).fill(0);
-    put16(u, 0, this.port); put16(u, 2, sport); put16(u, 4, 8 + data.length);
-    this.out.push(this.ipFrame(f.slice(6, 12), f.slice(26, 30), 17, [...u, ...data]));
+    const body = this.udpWrap(data);
+    put16(u, 0, this.port); put16(u, 2, sport); put16(u, 4, 8 + body.length);
+    this.out.push(this.ipFrame(f.slice(6, 12), f.slice(26, 30), 17, [...u, ...body]));
   }
 }
 

@@ -69,7 +69,11 @@ function ethStand(opts = {}) {
   const card = isRtl(dll) ? new Rtl8019(opts.card || {}) : new EL3(opts.card || {});
   card.attach(s.m);
   card.clock = () => s.t;
-  const peer = new Peer(opts.peer || {});
+  // UDP records (UNETG_CFGF_UDP_RECORDS): opts.records or UG_RECORDS=1 (the
+  // calibration tools run unchanged with it); defaultConfig sets the flag
+  const records = opts.records ?? (process.env.UG_RECORDS === '1' && /^gudp/.test(dll));
+  const peer = new Peer({ records, ...(opts.peer || {}) });
+  s.records = records;
   card.onTransmit = (f) => peer.input(f);
   s.card = card; s.peer = peer;
   s.cardMac = () => (isRtl(dll) ? card.par : card.station);

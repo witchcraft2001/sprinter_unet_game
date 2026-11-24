@@ -13,6 +13,8 @@
 #                         runs echo_server.py --framed there)
 #   N<card>UF.EXE, NESPXF.EXE  NETDEMO F (game flow, UDP builds), peer
 #                         HW_PORT_G / HW_PORT_GX (echo_server.py --game)
+#   The Ethernet UDP programs (UGTRTLU, UGT509U, NRTLU<s>, N509U<s>) use
+#   UDP records (mkcfg.js) and so the record servers HW_PORT_X / HW_PORT_GX.
 #   UGPROBE.EXE           platform probe (argument E, R or 3)
 #   G*.DLL                the seven libraries
 #   UGRUN<card>.BAT       the run sequence of one card
@@ -95,7 +97,8 @@ for dll in gtcpesp gudpesp gtcprtl gudprtl gtcp509b gudp509b; do
 	code=$(code_of $dll); tp=$(tp_of $dll)
 	# UGTEST: one EXE, the scenario on the command line
 	w="$WORK/ugtest_$dll"; mkdir -p "$w"
-	cfg ugtest $dll "$w/ugcfg.inc" "$HW_PORT"
+	port=$HW_PORT; if [ "$tp" = U ] && [ "$code" != ESP ]; then port=$HW_PORT_X; fi
+	cfg ugtest $dll "$w/ugcfg.inc" "$port"
 	asm "$w" "$ROOT/sdk/example/ugtest.asm" -DUG_HW=1 -DSCEN=69
 	cp "$w/ugtest.exe" "$OUT/UGT$code$tp.EXE"
 	if [ "$tp" = T ]; then
@@ -112,6 +115,8 @@ for dll in gtcpesp gudpesp gtcprtl gudprtl gtcp509b gudp509b; do
 	[ "$code" != ESP ] && scens="H $scens"
 	for s in $scens; do
 		port=$HW_PORT; [ "$s" = P ] && port=$HW_PORT_P; [ "$s" = F ] && port=$HW_PORT_G
+		# Ethernet UDP: UDP records (mkcfg.js) against the record servers
+		if [ "$tp" = U ] && [ "$code" != ESP ]; then port=$HW_PORT_X; [ "$s" = F ] && port=$HW_PORT_GX; fi
 		w="$WORK/netdemo_${dll}_$s"; mkdir -p "$w"
 		cfg netdemo $dll "$w/ugcfg.inc" "$port"
 		ord=$(printf '%d' "'$s")
@@ -186,6 +191,8 @@ UNET-GAME hardware stand (Zh) -- operator checklist
 Built $(date +%Y-%m-%d) from $(basename "$ENV"); echo server $HW_HOST_IP:$HW_PORT,
 P server $HW_HOST_IP:$HW_PORT_P, record echo $HW_HOST_IP:$HW_PORT_X,
 game server $HW_HOST_IP:$HW_PORT_G (records: $HW_PORT_GX).  Sprinter (Ethernet): $HW_SPR_IP/$HW_MASK gw $HW_GW.
+UDP on RTL / 3C509B and NESPX* / UGTESPX use UDP records: the record echo
+and the record game server (echo_hw.sh starts all of them).
 Slots: ESP $HW_SLOT_ESP (I/O $HW_IO_ESP), RTL $HW_SLOT_RTL (I/O $HW_IO_RTL),
 3C509B $HW_SLOT_EL3 (I/O $HW_IO_EL3, ID $HW_ID_PORT).  UART trigger $HW_UART_TRIGGER.
 ISA slots are numbered 0 and 1 (as -s of the old drivers).

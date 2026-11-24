@@ -33,6 +33,8 @@ test-host: dlls
 
 test-z: dlls sdk
 	node --test 'tests/z/**/*.test.js'
+	# the Ethernet card scenarios again with UDP records on the UDP builds
+	UG_RECORDS=1 node --test tests/z/hw/rtl/m2_rtl.test.js tests/z/hw/el3/m3_el3.test.js
 
 check: dlls sdk verify size names test-host test-z profile-check
 	@echo "check: all gates passed"
@@ -57,6 +59,7 @@ check: dlls sdk verify size names test-host test-z profile-check
 # send and a lone send (tools/dev/scenario_budget.js)
 SCEN_ETH = gtcprtl gudprtl gtcp509b gudp509b
 SCEN_CARD = $(SCEN_ETH) gtcpesp gudpesp
+REC_ETH = gudprtl gudp509b
 profile-check: dlls
 	node tools/dev/profile_step.js --check
 	node tools/dev/profile_step.js --check --budget min
@@ -71,6 +74,11 @@ profile-check: dlls
 	@$(PF) for b in 500 min 812 1218; do node tools/dev/profile_step.js gudpesp --esp-fw 2 --check --budget $$b | tail -1 || exit 1; done
 	@$(PF) for b in min 2000 3000; do node tools/dev/profile_step.js gudpesp --esp-fw 2 --check --real --budget $$b | tail -1 || exit 1; done
 	@$(PF) for d in $(SCEN_ETH); do node tools/dev/scenario_budget.js $$d broadcast --check | tail -1 || exit 1; done
+	@# UDP records (UNETG_CFGF_UDP_RECORDS) on the Ethernet UDP builds
+	@$(PF) for b in 500 min 812 1218; do UG_RECORDS=1 node tools/dev/profile_step.js $(REC_ETH) --check --budget $$b | tail -1 || exit 1; done
+	@$(PF) for b in min 2000 3000; do UG_RECORDS=1 node tools/dev/profile_step.js $(REC_ETH) --check --real --budget $$b | tail -1 || exit 1; done
+	UG_RECORDS=1 tools/dev/profile_small.sh $(REC_ETH)
+	@$(PF) for d in $(REC_ETH); do for sc in broadcast shutdown lone; do UG_RECORDS=1 node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
 	@$(PF) for d in $(SCEN_CARD); do for sc in shutdown lone; do node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
 
 # M stand (MAME): not part of check -- it needs the MAME builds

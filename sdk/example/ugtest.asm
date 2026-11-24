@@ -1472,10 +1472,16 @@ at_cmd
 	JR	Z,.sent
 	PUSH	HL
 	CALL	isa_open
+	LD	DE,0			; at most 64 K polls: a transmitter held by CTS
 .thre
 	LD	A,(UART + 5)
 	AND	0x20
-	JR	Z,.thre
+	JR	NZ,.put
+	DEC	DE
+	LD	A,D
+	OR	E
+	JR	NZ,.thre
+.put
 	POP	HL
 	LD	A,(HL)
 	LD	(UART),A
@@ -1495,13 +1501,21 @@ at_cmd
 	LD	A,(UART)
 	CALL	isa_close
 	CP	10
-	JR	Z,.rx
+	JR	Z,.due
 	CALL	rp_char
 	CP	'K'			; "OK" (an ERROR waits for the 1 s end)
 	JR	Z,.done
-	JR	.rx
+	JR	.due			; a stream without "OK" ends at 1 s too
 .none
 	CALL	isa_close
+	; idle: ~0.5 ms with interrupts on before the next poll -- a poll loop
+	; that spends most of its time under DI in the ISA window lost the
+	; frame pulses on the board: the ticks stood still and the deadline
+	; never came (UGPROBE E, 2026-11-24)
+	LD	B,0
+.igap
+	DJNZ	.igap
+.due
 	CALL	dl_due
 	JR	NC,.rx
 .done

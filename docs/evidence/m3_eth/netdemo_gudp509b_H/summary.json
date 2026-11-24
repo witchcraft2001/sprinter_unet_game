@@ -3,9 +3,10 @@
   "dll": "gudp509b",
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "udp_records": true,
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 4.5,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 24984",
+  "wall_s": 2.9,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 26985",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -41,8 +42,8 @@
       "busy": 0,
       "isr": 0,
       "step": 49,
-      "early": 101,
-      "frames": 9,
+      "early": 99,
+      "frames": 8,
       "ticks": 96,
       "unknown": 0,
       "mask": 0,
@@ -66,8 +67,8 @@
   },
   "timing_us": {
     "tick_isr_max": 302,
-    "admitted_ug_step_max": 952,
-    "largest_tick_gap": 2032,
+    "admitted_ug_step_max": 1015,
+    "largest_tick_gap": 2033,
     "late_ticks": 0
   }
 }

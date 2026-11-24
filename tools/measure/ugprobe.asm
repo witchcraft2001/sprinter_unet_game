@@ -46,6 +46,10 @@
 ;            advanced in that frame (875 kHz x frame when it counts,
 ;            0 when it does not -- the MAME model), samples without a stamp.
 ;            Our own timer chain (ctc_init) is restored afterwards.
+;   MSR      ESP only, before our first UART write: MSR (bit 4 = CTS, the
+;            module's RTS: with AFE nothing is sent without it) and LSR.
+;            The UART part shows each step on the screen (hw_show): the
+;            first board run sat silent after CTC with no report saved.
 ;   UARTt    ESP only, after the NETUP role (AT, AT+UART_CUR), for the RX
 ;            FIFO trigger t = 8, 4, 14: MCR = 0, FCR = FIFO on + resets +
 ;            trigger, MCR = AFE + RTS (one FIFO reset before AFE), AT+GMR,
@@ -674,6 +678,23 @@ UGH_INC
 ; UART (ESP): NETUP role, then the drain and RTS probes per trigger.
 ; ----------------------------------------------------------------------
 pr_uart
+	; MSR (CTS = bit 4: the module's RTS) and LSR before our first write
+	CALL	isa_open
+	LD	A,(UART + 6)
+	LD	(pr_msr),A
+	LD	A,(UART_LSR)
+	LD	(pr_msr + 1),A
+	CALL	isa_close
+	LD	HL,s_p_msr
+	CALL	rp_str
+	LD	A,(pr_msr)
+	CALL	rp_hex8
+	LD	A,' '
+	CALL	rp_char
+	LD	A,(pr_msr + 1)
+	CALL	rp_hex8
+	CALL	rp_nl
+	CALL	hw_show			; the operator sees each step of the UART part
 	CALL	isa_open
 	LD	HL,UART + 1
 	LD	(HL),0			; IER
@@ -692,8 +713,10 @@ pr_uart
 	CALL	isa_close
 	LD	HL,s_at
 	CALL	at_cmd
+	CALL	hw_show
 	LD	HL,s_uartcur
 	CALL	at_cmd
+	CALL	hw_show
 	LD	HL,pr_triggers
 .t
 	LD	A,(HL)
@@ -707,7 +730,9 @@ pr_uart
 	LD	A,C
 	LD	(pr_fcr),A
 	CALL	pr_drain_test
+	CALL	hw_show
 	CALL	pr_rts_test
+	CALL	hw_show
 	POP	HL
 	JR	.t
 
@@ -752,6 +777,13 @@ pr_quiet
 	JR	.q
 .none
 	CALL	isa_close
+	; idle: ~0.5 ms with interrupts on before the next poll -- a poll loop
+	; that spends most of its time under DI in the ISA window lost the
+	; frame pulses on the board: the ticks stood still and the deadline
+	; never came (UGPROBE E, 2026-11-24)
+	LD	B,0
+.gap
+	DJNZ	.gap
 	CALL	dl_due
 	RET	C
 	LD	HL,(pr_qdl)
@@ -1000,15 +1032,23 @@ at_cmd
 	LD	A,(UART)
 	CALL	isa_close
 	CP	10
-	JR	Z,.rx
+	JR	Z,.due
 	OR	A			; a NUL would end the report text
-	JR	Z,.rx
+	JR	Z,.due
 	CALL	rp_char
 	CP	'K'			; "OK" (an ERROR waits for the 1 s end)
 	JR	Z,.done
-	JR	.rx
+	JR	.due			; a stream without "OK" ends at 1 s too
 .none
 	CALL	isa_close
+	; idle: ~0.5 ms with interrupts on before the next poll -- a poll loop
+	; that spends most of its time under DI in the ISA window lost the
+	; frame pulses on the board: the ticks stood still and the deadline
+	; never came (UGPROBE E, 2026-11-24)
+	LD	B,0
+.igap
+	DJNZ	.igap
+.due
 	CALL	dl_due
 	JR	NC,.rx
 .done
@@ -1034,7 +1074,8 @@ s_env		DB	"DSSENV ", 0
 pr_envnames	DB	"BOOTDSK", 0		; always there: proves the read itself
 		DB	"NET", 0, "NET_HW", 0, "NET_IDPORT", 0, "NET_MAC", 0
 		DB	"NET_IP_SRC", 0, "NET_IP", 0, "NET_MASK", 0, "NET_GW", 0
-		DB	"NET_LEASE_SEC", 0, 0
+		DB	"NET_LEASE_SEC", 0
+		DB	"NET_BAUD", 0, "NET_ESP_FLOW", 0, "NET_ESP_FW", 0, 0
 s_pass		DB	"PASS", 13, 10, 0
 s_fail_slot	DB	"FAIL S", 13, 10, 0
 s_p_cpu		DB	"PROBE CPU ", 0
@@ -1044,6 +1085,7 @@ s_p_bracket	DB	"PROBE BRACKET ", 0
 s_p_ctc		DB	"PROBE CTC ", 0
 s_p_uart	DB	"PROBE UART", 0
 s_p_rts		DB	"PROBE RTS", 0
+s_p_msr		DB	"PROBE MSR ", 0
 s_at		DB	"AT", 13, 10, 0
 s_uartcur	DB	"AT+UART_CUR=115200,8,1,0,3", 13, 10, 0
 s_gmr		DB	"AT+GMR", 13, 10, 0
@@ -1060,6 +1102,7 @@ pr_t0		DW	0
 pr_t1		DW	0
 pr_ram		DB	0
 pr_trig		DB	0
+pr_msr		DB	0, 0
 pr_fcr		DB	0
 pr_qdl		DW	0
 pr_cnt		DD	0

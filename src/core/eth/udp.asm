@@ -12,7 +12,8 @@ UD_SRC		EQU	12	; u16
 UD_RXLEN	EQU	14	; u16 payload of the datagram being received
 UD_RXSTORE	EQU	16	; u8
 UD_PORTSEQ	EQU	17	; u8
-UD_SIZE		EQU	18
+UD_REC		EQU	18	; u8[2] records: the received header, checked by TP_RX_COMMIT
+UD_SIZE		EQU	20
 
 UDS_CLOSED	EQU	0
 UDS_ARP		EQU	1
@@ -177,10 +178,12 @@ TP_STEP
 	LD	A,(IY+EX_TXS)
 	OR	A
 	JR	NZ,.idle
-	CALL	UDP_FAST_FITS		; DE = length
+	CALL	UDP_FAST_FITS		; DE = length, HL = its cost
 	JR	C,.idle
 	LD	(IX+UD_LEN),E
 	LD	(IX+UD_LEN+1),D
+	LD	(IX+UD_SUM),L		; (the pull sums the payload itself)
+	LD	(IX+UD_SUM+1),H
 	LD	(IX+UD_PREP),UDP_PREP_FAST
 	RET
 .not_queued
@@ -343,16 +346,22 @@ TP_TX_PULL
 	SCF
 	RET	NZ
 	LD	HL,COST_TP_PULL
+	IFDEF	UGB_RECORDS
+	REC_ON
+	JR	Z,.pull
+	LD	HL,COST_TP_PULL + COST_REC_TX
+.pull
+	ENDIF
 	CALL	TAKE
 	RET	C
 	TP_IX
 	IFDEF	UGB_SHORT
 	JR	.build
 .fast
-	; short path, chosen by TP_STEP in this STEP: commit -> frame
-	LD	E,(IX+UD_LEN)
-	LD	D,(IX+UD_LEN+1)
-	CALL	UDP_FAST_COST
+	; short path, chosen by TP_STEP in this STEP: commit -> frame (its
+	; cost kept in UD_SUM by the choice)
+	LD	L,(IX+UD_SUM)
+	LD	H,(IX+UD_SUM+1)
 	CALL	SHORT_TAKE		; (keeps IX)
 	JR	NC,.fast_go
 	LD	(IX+UD_PREP),UDP_PREP_NONE	; chosen anew next STEP
@@ -374,6 +383,10 @@ TP_TX_PULL
 	SET	2,(IY+CX_WORK)
 	ENDIF
 .build
+	IFDEF	UGB_RECORDS
+	REC_ON
+	JP	NZ,UDP_BUILD_REC	; (a copy: no record test on the plain path)
+	ENDIF
 	LD	(IX+UD_PREP),UDP_PREP_NONE
 	LD	L,(IX+UD_LEN)
 	LD	H,(IX+UD_LEN+1)
@@ -429,11 +442,112 @@ TP_TX_PULL
 	OR	A
 	RET
 
+	IFDEF	UGB_RECORDS
+; UDP_BUILD_REC (TP_TX_PULL .build with records): the same frame with the
+; record header behind the UDP header -- UDP length + 2, the header summed,
+; header bytes + 2.  IX = tp.  Out: CF=0.
+UDP_BUILD_REC
+	LD	(IX+UD_PREP),UDP_PREP_NONE
+	LD	L,(IX+UD_LEN)
+	LD	H,(IX+UD_LEN+1)
+	LD	DE,UDP_HDR + REC_HDR
+	ADD	HL,DE
+	PUSH	HL			; UDP length
+	EX	DE,HL
+	CALL	IP_FINISH
+	POP	DE
+	PUSH	DE
+	TXH_IX
+	LD	(IX+UDP_LEN),D
+	LD	(IX+UDP_LEN+1),E
+	XOR	A
+	LD	(IX+UDP_CSUM),A
+	LD	(IX+UDP_CSUM+1),A
+	CALL	L4_SUM0
+	POP	DE
+	PUSH	DE
+	CALL	CSUM_ADD_BE		; pseudo-header length
+	POP	DE
+	PUSH	DE
+	CALL	CSUM_ADD_BE		; UDP length field (keeps DE, IX = txh)
+	; the record header of len = UDP length - 10 behind the UDP header,
+	; summed (REC_B0 inline: this is the short path's send item)
+	PUSH	HL
+	EX	DE,HL
+	LD	DE,-(UDP_HDR + REC_HDR)
+	ADD	HL,DE
+	EX	DE,HL			; DE = len (0..512)
+	LD	A,E
+	ADD	A,D
+	ADD	A,0x2B
+	AND	0x3F
+	RLCA
+	RLCA
+	OR	D
+	LD	D,A			; D = byte 0, E = byte 1
+	LD	(IX+ETH_L4+UDP_HDR),D
+	LD	(IX+ETH_L4+UDP_HDR+1),E
+	POP	HL
+	CALL	CSUM_ADD_BE
+	PUSH	HL
+	TP_IX
+	LD	E,(IX+UD_SUM)
+	LD	D,(IX+UD_SUM+1)
+	POP	HL
+	ADD	HL,DE
+	CALL	CSUM_FOLD
+	LD	A,H
+	AND	L
+	INC	A
+	JR	NZ,.csum
+	LD	HL,0			; sum FFFF -> checksum 0 is sent as FFFF
+.csum
+	PUSH	HL
+	LD	DE,UCTX_TXH + UDP_CSUM - CTX_BIAS
+	PUSH	IY
+	POP	HL
+	ADD	HL,DE
+	EX	DE,HL
+	POP	HL
+	CALL	CSUM_STORE
+	POP	DE			; UDP length
+	TP_IX
+	LD	A,ETH_L4 + UDP_HDR + REC_HDR	; the record header is part of the frame header
+	LD	L,(IX+UD_SRC)
+	LD	H,(IX+UD_SRC+1)
+	LD	C,(IX+UD_LEN)
+	LD	B,(IX+UD_LEN+1)
+	CALL	TX_FRAME_SET
+	OR	A
+	RET
+
+; Record costs (UDP_BUILD_REC writes and sums the header inline; stand,
+; pieces of 1..64 bytes): the header part of the pull is +11 us (+18
+; through a helper with its own TP_IX: the short path's need base 278 of
+; 275 at 732 units), the plain pull COST_REC_TX on top of COST_TP_PULL,
+; the short path's COST_REC_FAST on top of its formula.  COST_REC_FAST 20
+; put Headball's input behind the state on GUDP509B (game_load.js: 20 %
+; skipped).  The mid receive takes no surcharge: the record adds 8..16
+; us, and its formula still reserves 1.03..1.13 of the real time (586
+; units of 661 for Headball's 88-byte state, 1441 us; 1.06..1.15 without
+; records).  Any surcharge put that state on the generic path at 3000 us
+; (two STEPs, the next input skipped): it fits with a few units to spare
+; -- check game_load.js after a cost change on GUDP509B.
+	IFDEF	UGB_SHORT
+COST_REC_TX	EQU	30
+	ELSE
+COST_REC_TX	EQU	25
+	ENDIF
+COST_REC_FAST	EQU	15
+	ASSERT	COST_TP_PULL + COST_REC_TX <= PROF_MAX_ITEM_US
+	ENDIF
+
 	IFDEF	UGB_SHORT
 ; UDP_FAST_FITS: the datagram to send next is committed, at most
 ; UDP_FAST_MAX bytes, and its short-path cost fits the units together
 ; with the entry check of the TX phase (ETH_MIN_ITEM: the pull must follow
-; in this STEP).  Out: CF=0: DE = length; CF=1: no.  Clobbers A, BC, HL.
+; in this STEP).  Out: CF=0: DE = length, HL = the item's
+; cost; CF=1: no.  Clobbers A, BC.
 UDP_FAST_FITS
 	LD	C,(IY+CX_TX_SEND)
 	CALL	TX_STATE_PTR
@@ -450,13 +564,22 @@ UDP_FAST_FITS
 	SBC	HL,DE
 	RET	C			; longer
 	CALL	UDP_FAST_COST
+	PUSH	HL
 	LD	BC,ETH_MIN_ITEM
 	ADD	HL,BC
-	JP	UNITS_FIT
+	CALL	UNITS_FIT
+	POP	HL			; HL = the item's cost (TP_TX_PULL takes it)
+	RET
 ; UDP_FAST_COST: HL = COST_UDP_FAST + 3/2 of the length DE (<= UDP_FAST_MAX).
 ; Clobbers A.
 UDP_FAST_COST
 	LD	HL,COST_UDP_FAST
+	IFDEF	UGB_RECORDS
+	REC_ON
+	JR	Z,.raw
+	LD	HL,COST_UDP_FAST + COST_REC_FAST
+.raw
+	ENDIF
 	ADD	HL,DE
 	LD	A,E
 	SRL	A			; length / 2 (<= 32)
@@ -502,6 +625,25 @@ UDP_RX_FAST
 	OR	A
 	SCF
 	RET	NZ
+	; a packet past scratch is UDP_RX_MID's: its cost is checked before
+	; any work (the fast item's take, the checks and the refund were base
+	; time of every STEP that could not afford it: need 277 against 270
+	; at 812 units with 23-byte datagrams, or 22 with records).  Read
+	; only: anything odd goes on to the fast item, which refunds it.
+	LD	A,(IX+ETH_IP_LEN)
+	OR	A
+	JR	NZ,.take
+	LD	A,(IX+ETH_IP_LEN+1)
+	CP	IP_HDR + UDP_HDR + UDP_MID_MAX + 1
+	JR	NC,.take
+	ADD	A,ETH_HDR
+	CP	RX_HDR_BYTES + 1
+	JR	C,.take			; whole in scratch: the fast item
+	LD	B,A
+	CALL	UDP_MID_COST
+	CALL	UNITS_FIT
+	RET	C			; the generic states (tried again next STEP)
+.take
 	LD	HL,COST_UDP_RX_FAST
 	CALL	SHORT_TAKE		; (keeps IX)
 	RET	C
@@ -576,6 +718,10 @@ UDP_RX_FAST
 	SCF
 	RET	NZ
 .valid
+	IFDEF	UGB_RECORDS
+	CALL	UDP_REC_SCR		; records: a header that fills the datagram, else CF=1
+	RET	C
+	ENDIF
 	PUSH	BC
 	CALL	RXD_TAKE		; HL = slot buffer; a full ring: the generic states count it
 	POP	BC
@@ -584,7 +730,13 @@ UDP_RX_FAST
 	EX	DE,HL			; DE = destination
 	PUSH	IX
 	POP	HL
+	IFDEF	UGB_RECORDS
+	REC_OFS
+	LD	B,A			; the record header is skipped
+	ADD	A,ETH_L4 + UDP_HDR
+	ELSE
 	LD	A,ETH_L4 + UDP_HDR
+	ENDIF
 	ADD	A,L
 	LD	L,A
 	JR	NC,.src
@@ -592,6 +744,9 @@ UDP_RX_FAST
 .src
 	LD	A,C
 	SUB	UDP_HDR
+	IFDEF	UGB_RECORDS
+	SUB	B
+	ENDIF
 	LD	C,A
 	LD	B,0
 	PUSH	BC
@@ -606,6 +761,61 @@ UDP_RX_FAST
 	SET	1,(IY+CX_WORK)
 	LD	(IY+EX_RXS),ERX_DISCARD
 	OR	A
+	RET
+
+	IFDEF	UGB_RECORDS
+; UDP_REC_SCR (short path, records): the record header in scratch must be
+; the one of a record that fills the datagram; read only, a doubt answers
+; CF=1 (the generic states decide and count the drop).  Without records
+; CF=0 at once.  In: IX -> frame, C = UDP length (< 256).  Clobbers A
+; (keeps DE: UDP_RX_MID's pointer to the UDP header for its sum).
+UDP_REC_SCR
+	REC_ON
+	JR	NZ,.rec
+	OR	A			; no records: CF=0
+	RET
+.rec
+	LD	A,C
+	SUB	UDP_HDR + REC_HDR
+	RET	C			; shorter than a record header
+	PUSH	DE
+	LD	E,A
+	LD	D,0
+	CALL	REC_B0
+	CP	(IX+ETH_L4 + UDP_HDR)
+	JR	NZ,.bad
+	LD	A,E
+	CP	(IX+ETH_L4 + UDP_HDR + 1)
+	JR	NZ,.bad
+	POP	DE
+	OR	A
+	RET
+.bad
+	POP	DE
+	SCF
+	RET
+	ENDIF
+
+; UDP_MID_COST: HL = the cost of UDP_RX_MID for a packet of B frame
+; bytes (65..138): COST_UDP_RX_MID + 2 per
+; card byte + COST_UDP_RX_MIDP per card portion after the first.
+; Clobbers A, DE.
+UDP_MID_COST
+	LD	A,B
+	SUB	RX_HDR_BYTES		; card bytes (1..74)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; 2 per card byte
+	LD	DE,COST_UDP_RX_MIDP
+.portions
+	SUB	NIC_CHUNK_RX		; a further portion per NIC_CHUNK_RX bytes
+	JR	C,.one
+	JR	Z,.one
+	ADD	HL,DE
+	JR	.portions
+.one
+	LD	DE,COST_UDP_RX_MID
+	ADD	HL,DE
 	RET
 
 ; UDP_RX_CHK: the read-only checks of a datagram in scratch, paid for by
@@ -694,21 +904,7 @@ UDP_RX_CHK
 ; COST_UDP_RX_FAST reserve of the checks in front is given back first;
 ; when it does not fit the generic states take the frame).
 UDP_RX_MID
-	LD	A,B
-	SUB	RX_HDR_BYTES		; card bytes (1..74)
-	LD	L,A
-	LD	H,0
-	ADD	HL,HL			; 2 per card byte
-	LD	DE,COST_UDP_RX_MIDP
-.portions
-	SUB	NIC_CHUNK_RX		; a further portion per NIC_CHUNK_RX bytes
-	JR	C,.one
-	JR	Z,.one
-	ADD	HL,DE
-	JR	.portions
-.one
-	LD	DE,COST_UDP_RX_MID
-	ADD	HL,DE
+	CALL	UDP_MID_COST
 	; one item of its own: the fast path's reserve goes back first
 	PUSH	HL
 	LD	HL,COST_UDP_RX_FAST
@@ -719,6 +915,10 @@ UDP_RX_MID
 .taken
 	CALL	UDP_RX_CHK		; C = UDP length, DE -> UDP header
 	RET	C
+	IFDEF	UGB_RECORDS
+	CALL	UDP_REC_SCR		; records: a header that fills the datagram, else CF=1
+	RET	C
+	ENDIF
 	PUSH	BC
 	PUSH	DE
 	CALL	RXD_TAKE		; HL = slot buffer; a full ring: the generic states count it
@@ -761,7 +961,16 @@ UDP_RX_MID
 	POP	HL
 	LD	BC,ETH_L4 + UDP_HDR
 	ADD	HL,BC
+	IFDEF	UGB_RECORDS
+	REC_OFS				; the record header is skipped
+	LD	C,A
+	ADD	HL,BC			; (B = 0)
+	NEG
+	ADD	A,L4_IN_SCRATCH - UDP_HDR
+	LD	C,A
+	ELSE
 	LD	BC,L4_IN_SCRATCH - UDP_HDR
+	ENDIF
 	LDIR				; DE -> the rest's place
 	POP	BC			; BC = UDP length
 	LD	A,(IX+UDP_CSUM)
@@ -792,8 +1001,16 @@ UDP_RX_MID
 	LD	(IX+HS_RXREM),A
 	LD	(IX+HS_RXS),ERX_COPY
 	; the transport's record of the stored datagram (TP_RX_COMMIT)
+	IFDEF	UGB_RECORDS
+	REC_OFS
+	ADD	A,UDP_HDR
+	LD	E,A
+	LD	A,C
+	SUB	E
+	ELSE
 	LD	A,C
 	SUB	UDP_HDR
+	ENDIF
 	LD	E,A			; payload
 	TP_IX_HL
 	LD	BC,UD_RXLEN
@@ -803,6 +1020,19 @@ UDP_RX_MID
 	LD	(HL),0
 	INC	HL
 	LD	(HL),1			; UD_RXSTORE
+	IFDEF	UGB_RECORDS
+	; the header UDP_REC_SCR checked, for TP_RX_COMMIT's verdict
+	INC	HL
+	INC	HL			; UD_REC
+	ASSERT	UD_REC == UD_RXSTORE + 2 && UD_RXSTORE == UD_RXLEN + 2
+	EX	DE,HL			; (IX is the hwsm here: the header from scratch)
+	LD	HL,UCTX_SCRATCH + ETH_L4 + UDP_HDR - CTX_BIAS
+	PUSH	IY
+	POP	BC
+	ADD	HL,BC
+	LDI
+	LDI
+	ENDIF
 	; the card portions of the rest, then the verdict and publication
 .portion
 	LD	HL,RXP_COPY
@@ -901,6 +1131,26 @@ TP_RX_ACCEPT
 	OR	A
 	SBC	HL,DE
 	JP	C,.size
+	IFDEF	UGB_RECORDS
+	; records: the datagram is a header and the application's payload;
+	; the header is kept for TP_RX_COMMIT's verdict
+	REC_ON
+	JR	Z,.raw
+	LD	DE,REC_HDR
+	SBC	HL,DE			; (CF=0 from the SBC above)
+	JP	C,.size			; shorter than a record header
+	PUSH	HL
+	TP_IX_HL
+	LD	DE,UD_REC
+	ADD	HL,DE
+	LD	A,(IX+ETH_L4 + UDP_HDR)
+	LD	(HL),A
+	INC	HL
+	LD	A,(IX+ETH_L4 + UDP_HDR + 1)
+	LD	(HL),A
+	POP	HL
+.raw
+	ENDIF
 	LD	DE,UNETG_UDP_MAX + 1
 	PUSH	HL
 	OR	A
@@ -928,10 +1178,17 @@ TP_RX_ACCEPT
 	POP	BC			; payload
 	POP	HL			; destination
 	PUSH	BC
-	; payload bytes already in scratch: in scratch - 8
+	; payload bytes already in scratch: in scratch - 8 (records: - 10)
 	EX	DE,HL
 	PUSH	DE
+	IFDEF	UGB_RECORDS
+	REC_OFS
+	ADD	A,UDP_HDR
+	LD	E,A
+	LD	D,0
+	ELSE
 	LD	DE,UDP_HDR
+	ENDIF
 	OR	A
 	SBC	HL,DE
 	POP	DE			; DE = destination
@@ -940,7 +1197,12 @@ TP_RX_ACCEPT
 	PUSH	BC
 	PUSH	IX
 	POP	HL
+	IFDEF	UGB_RECORDS
+	REC_OFS
+	ADD	A,ETH_L4 + UDP_HDR
+	ELSE
 	LD	A,ETH_L4 + UDP_HDR
+	ENDIF
 	ADD	A,L
 	LD	L,A
 	JR	NC,.src
@@ -1023,6 +1285,21 @@ TP_RX_COMMIT
 	JR	Z,.drop
 	LD	C,(IX+UD_RXLEN)
 	LD	B,(IX+UD_RXLEN+1)
+	IFDEF	UGB_RECORDS
+	; records: the header must be the one of a record that fills the
+	; datagram (a valid header of another length is no better)
+	REC_ON
+	JR	Z,.rec_ok
+	LD	A,C
+	CP	(IX+UD_REC+1)
+	JR	NZ,.rec_bad
+	LD	E,C
+	LD	D,B
+	CALL	REC_B0
+	CP	(IX+UD_REC)
+	JR	NZ,.rec_bad
+.rec_ok
+	ENDIF
 	PUSH	BC
 	CALL	RXD_PUBLISH
 	POP	DE
@@ -1031,3 +1308,8 @@ TP_RX_COMMIT
 	RET
 .drop
 	JP	RXD_DROP
+	IFDEF	UGB_RECORDS
+.rec_bad
+	STAT_INC UNETG_STATS_DROP_CHECKSUM
+	JP	RXD_DROP
+	ENDIF

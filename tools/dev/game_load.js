@@ -47,7 +47,7 @@ function udpSender(s) {
   s.peer.udpInput = (f, len) => { last = f; orig(f, len); };
   return (data) => {
     const u = new Array(8).fill(0);
-    put16(u, 0, s.peer.port); put16(u, 2, be16(last, 34)); put16(u, 4, 8 + data.length);
+    put16(u, 0, s.peer.port); put16(u, 2, be16(last, 34)); put16(u, 4, 8 + (data = s.peer.udpWrap(data)).length);
     s.peer.out.push(s.peer.ipFrame(last.slice(6, 12), last.slice(26, 30), 17, [...u, ...data]));
   };
 }

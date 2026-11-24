@@ -110,6 +110,10 @@ function instrument(s, b, acc) {
       // variable-size items: compare the real time with this call's reserve
       it.real.push(vari ? x.real / x.reserved : x.real);
     }
+    // NEED_DUMP=1: the budget calls of each STEP that raises the need
+    if (process.env.NEED_DUMP && calls.length && r.us - reserved > acc.need)
+      console.log(`need ${(r.us - reserved).toFixed(1)} STEP ${r.us.toFixed(0)}: ` +
+        calls.map((c) => `${c.who}${c.kind}@${c.t.toFixed(0)}:${c.taken - c.refund}`).join(' '));
     if (calls.length) acc.need = Math.max(acc.need, r.us - reserved);
     acc.steps++;
     acc.maxUs = Math.max(acc.maxUs, r.us);

@@ -195,6 +195,7 @@ HAS_EXPIRY = 0x01
 ALLOW_PROBE = 0x02
 CBL_QUALIFIED = 0x04
 FLOW_VERIFIED = 0x08        # ESP: RTS/CTS wiring and both UART settings verified
+UDP_RECORDS = 0x10          # UDP builds: every datagram on the wire is one record (2-byte header + data, docs/unet-game-abi.md); CAP_UDP_RECORDS
 
 [cap]                       # GET_INFO.caps
 POLL = 0x0001
@@ -208,6 +209,7 @@ FLOW_CONTROL_REQUIRED = 0x0080
 NATIVE_RTO = 0x0100
 PROBE = 0x0200
 ESP_TRANSPARENT = 0x0400   # GUDPESP: esp_fw = 2, transparent UDP (records, docs/unet-game-abi.md)
+UDP_RECORDS = 0x0800       # UDP builds: CFGF_UDP_RECORDS, the same records on every card and mode
 
 [route]                     # GET_STATS.route_state
 NO_ROUTE = 0

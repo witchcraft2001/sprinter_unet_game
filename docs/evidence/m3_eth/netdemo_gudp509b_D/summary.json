@@ -3,9 +3,10 @@
   "dll": "gudp509b",
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "udp_records": true,
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 23.3,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 34565",
+  "wall_s": 22.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 47156",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -41,8 +42,8 @@
       "busy": 0,
       "isr": 0,
       "step": 1107,
-      "early": 2328,
-      "frames": 176,
+      "early": 2320,
+      "frames": 170,
       "ticks": 2234,
       "unknown": 0,
       "mask": 0,
@@ -72,9 +73,9 @@
   },
   "timing_us": {
     "tick_isr_max": 309,
-    "admitted_ug_step_max": 985,
-    "largest_tick_gap": 2023,
+    "admitted_ug_step_max": 1015,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.974 now_ms per emulated ms, TICK_MS 2.053, FRAME_MS 20.480, STEP_CALLS_PER_S 240 (over 4.1 s)"
+  "clock": "CLOCK_RATE 0.973 now_ms per emulated ms, TICK_MS 2.054, FRAME_MS 20.480, STEP_CALLS_PER_S 240 (over 4.1 s)"
 }

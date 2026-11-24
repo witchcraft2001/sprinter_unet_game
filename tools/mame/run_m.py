@@ -160,6 +160,8 @@ def main():
                     help='run UGPROBE.EXE for card E / R / 3 instead (no DLL, no network)')
     ap.add_argument('--esp-fw', type=int, choices=[1, 2], default=1,
                     help='GUDPESP: 2 = the transparent mode (records; echo_server.py --framed)')
+    ap.add_argument('--raw', action='store_true',
+                    help='Ethernet UDP: plain datagrams instead of UDP records (the default since 2026-11-24)')
     ap.add_argument('--trigger', type=int, choices=[1, 4, 8, 14],
                     help='ESP: the UART RX FIFO trigger (default 8)')
     ap.add_argument('--state', action='store_true',
@@ -171,6 +173,8 @@ def main():
         ap.error('dll and scen are required (or --probe)')
     if a.esp_fw == 2 and a.dll != 'gudpesp':
         sys.exit('--esp-fw 2 is GUDPESP only')
+    if a.raw and (not a.dll.startswith('gudp') or a.dll == 'gudpesp'):
+        sys.exit('--raw is for the Ethernet UDP builds (they use records by default)')
     if a.dll.startswith('gudp') and a.scen == 'P':
         sys.exit('P (peer closes) is a TCP scenario')
     if not a.dll.startswith('gudp') and a.scen == 'F':
@@ -199,7 +203,9 @@ def main():
     if net and index is None:
         print(f'SKIP: pcap interface {NET_IF} not found (create the pair: tools/mame/net_feth.sh)')
         sys.exit(SKIP)
-    xs = 'x' if a.esp_fw == 2 else ''        # transparent mode: gudpespx_E, netdemo_gudpespx_G
+    xs = 'x' if a.esp_fw == 2 else 'r' if a.raw else ''   # gudpespx_E (transparent), gudprtlr_E (no records)
+    # UDP records (mkcfg.js sets the flag): the transparent mode, Ethernet UDP unless --raw
+    records = a.esp_fw == 2 or (card != 'ESP' and a.dll.startswith('gudp') and not a.raw)
     work = ROOT / 'build' / 'mame' / (f'{a.dll}{xs}_{a.scen}' if prog == 'ugtest' else f'{prog}_{a.dll}{xs}_{a.scen}')
     if work.exists():
         shutil.rmtree(work)
@@ -215,7 +221,8 @@ def main():
     # v1 sends no RST) and drops the new SYN, so every Ethernet run gets
     # its own local port.
     lport = '7001' if card == 'ESP' else str(random.randint(20000, 48999))
-    mk_opts = (['--esp-fw', str(a.esp_fw)] if a.esp_fw != 1 else []) + (['--trigger', str(a.trigger)] if a.trigger else [])
+    mk_opts = (['--esp-fw', str(a.esp_fw)] if a.esp_fw != 1 else []) + (['--trigger', str(a.trigger)] if a.trigger else []) + \
+        (['--records', '0'] if a.raw else [])
     run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, *mk_opts, a.dll, work / 'ugcfg.inc', peer, '7000', lport)
     # UGTEST picks the scenario at runtime under --hw (hw_args, the DSS
     # command line); NETDEMO's scattered per-scenario IF SCEN==... blocks
@@ -236,7 +243,7 @@ def main():
     srv_args = [sys.executable, ROOT / 'tools/mame/echo_server.py', '--log', srv_log, '--host', peer]
     if a.scen == 'P':
         srv_args += ['--close-after', '64']
-    if a.esp_fw == 2:
+    if records:
         srv_args += ['--framed']
     if a.scen == 'F':
         srv_args += ['--game']
@@ -270,7 +277,8 @@ def main():
     text = report.read_text(errors='replace') if report.exists() else 'RESULT: FAIL (no report)\n'
     lines = text.splitlines()
     summary = {'prog': prog, 'dll': a.dll, 'card': card, 'mame': str(mame),
-               **({'esp_fw': 2} if a.esp_fw == 2 else {}), **({'uart_rx_trigger': a.trigger} if a.trigger else {}),
+               **({'esp_fw': 2} if a.esp_fw == 2 else {}), **({'udp_records': True} if records else {}),
+               **({'uart_rx_trigger': a.trigger} if a.trigger else {}),
                'scenario': f'{a.scen} {SCENARIOS[a.scen]}', 'wall_s': round(wall, 1)}
     if card != 'ESP':
         summary['network'] = 'none' if index is None else f'pcap {NET_IF} (index {index}), peer {NET_HOST}, local port {lport}'

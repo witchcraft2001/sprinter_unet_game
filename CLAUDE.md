@@ -533,6 +533,23 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   refusal before the TAKE was base time on every visit (need 334).
   The held STEP has an idle pump and no TX slack: GUDPESP's fat STEP
   sets 85 units aside (`PROF_FAT_DEC_US`, 65 elsewhere).
+- UDP records (`UNETG_CFGF_UDP_RECORDS`, 2026-11-24, src/core/rec.asm,
+  docs/unet-game-abi.md «UDP-записи»): the wire format of a UDP channel
+  does not depend on the card -- with the flag every datagram is one
+  2-byte-header record on GUDPRTL / GUDP509B as in GUDPESP's transparent
+  mode (where it is always on); GUDPESP's command mode refuses the flag
+  (BAD_CONFIG: +IPD datagrams are raw, records there would need a second
+  stream parser for a 5-input/s profile).  The record test is a copy, not
+  a mode: `UDP_BUILD_REC` beside the raw `.build`, the header written and
+  summed inline (a helper with its own TP_IX cost 18 us instead of 11 and
+  the short path's need base 278 of 275); the fast send's cost is cached
+  in `UD_SUM` by TP_STEP's choice.  GUDP509B's pairing of Headball's input
+  and state in one 3000 us STEP is decided by 5 units (COST_REC_FAST 20:
+  20 % of the inputs skipped): run `game_load.js` with and without
+  `UG_RECORDS=1` on both builds after a cost change.  The M and Ж stands
+  run Ethernet UDP with records (mkcfg.js sets the flag, `echo_server.py
+  --framed`, Ж ports HW_PORT_X / HW_PORT_GX); `run_m.py --raw` keeps the
+  old datagrams.
 - UART FIFO trigger 14 overruns in MAME (auto-RTS only at the 16th
   character, the module sends one more): ESP game profiles use trigger
   8 with two byte-moving polls per period.  A slack in one item's
@@ -632,6 +649,15 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   report head at start (never between the first STEP and SHUTDOWN, never
   after IM 2); the soak prints a dot a minute and polls Esc once a second
   between frames (`KEYSTOP`). A silent 10-minute run was reported as a hang.
+- A stand program's waits are bounded on every path, not only the idle
+  one: the AT helpers (UGPROBE, UGTEST and NETDEMO `at_cmd`) checked their
+  1 s deadline only when no byte had come, and UGTEST / NETDEMO waited
+  for THRE without any limit, under DI.  The first SprinterESP run on the
+  board (UGPROBE E, 2026-11-24) sat silent after `PROBE CTC` with no report
+  saved.  UGPROBE's UART part now prints each step (hw_show) and `PROBE
+  MSR` (CTS before our first write); `DSSENV` lists NET_BAUD,
+  NET_ESP_FLOW, NET_ESP_FW (NETUP's negotiated UART, which the system
+  stack's clients must follow).
 - Check an assembly by its exit code, not by grepping "error": sjasmplus
   prints "Pass 1 complete (0 errors)" (a JR out of range slipped through).
 - NETDEMO's UG_HW build is tight against `UG_CODE_END` (0x9D00; the line

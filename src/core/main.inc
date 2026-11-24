@@ -85,6 +85,9 @@ IMG_CTX_PTR
 	INCLUDE	"core/slots.asm"
 	INCLUDE	"core/lifecycle.asm"
 	INCLUDE	"core/sched.asm"
+	IFDEF	UGB_RECORDS
+	INCLUDE	"core/rec.asm"
+	ENDIF
 ; --- transport and hardware layer --------------------------------------
 	IFDEF	UGB_HW_LOOP
 	INCLUDE	"core/loop/loop.asm"

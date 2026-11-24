@@ -88,6 +88,25 @@ for (const dll of DLLS) {
     assert.equal(w.a, S.BAD_ARGUMENT);
   });
 
+  // UDP records (UNETG_CFGF_UDP_RECORDS, docs/unet-game-abi.md): the same
+  // datagram bytes on every card -- accepted exactly where GET_INFO
+  // publishes CAP_UDP_RECORDS; on GUDPESP it is the transparent mode's
+  // format (esp_fw = 2), refused with the AT command profile
+  test(`${dll}: UDP records are accepted where CAP_UDP_RECORDS is published`, () => {
+    const udp = s0 => s0.profile.transport === 'UDP';
+    const s = new Stand({ dll });
+    s.call('INIT');
+    const caps = s.getInfo().info.caps;
+    assert.equal(!!(caps & C.cap.UDP_RECORDS), udp(s), 'CAP_UDP_RECORDS on the UDP builds only');
+    const flags = s.defaultConfig().flags | C.cfgf.UDP_RECORDS;
+    if (s.profile.hw === 'ESP' && udp(s)) {
+      assert.equal(s.initConfig(s.defaultConfig({ flags })).a, S.BAD_CONFIG, 'records with esp_fw 1');
+      assert.equal(s.initConfig(s.defaultConfig({ flags, esp_fw: 2 })).a, S.OK, 'records with esp_fw 2');
+    } else {
+      assert.equal(s.initConfig(s.defaultConfig({ flags })).a, udp(s) ? S.OK : S.BAD_CONFIG);
+    }
+  });
+
   test(`${dll}: INIT_CONFIG accepts the default profile, refuses a second one`, () => {
     const s = new Stand({ dll });
     s.call('INIT');

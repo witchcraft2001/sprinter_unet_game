@@ -8,6 +8,7 @@
 // ESP model every AT command and payload byte.  POLL mode only (v1
 // hardware profiles carry no qualified IRQ route).
 'use strict';
+const xrec = require('../../../tools/harness/net/xrec.js');
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -87,8 +88,11 @@ function stream(s, data, piece, dt = DT) {
 function inject(s, dll, data) {
   if (s.isEsp) s.peer.sendData(data);
   else if (!isUdp(dll)) s.peer.sendData(data);
-  else s.peer.out.push(s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17,
-    [0x1b, 0x58, 0x1b, 0x59, 0, 8 + data.length, 0, 0, ...data]));
+  else {
+    const body = s.peer.udpWrap(data);     // a record with UDP records on
+    s.peer.out.push(s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17,
+      [0x1b, 0x58, 0x1b, 0x59, (8 + body.length) >> 8, (8 + body.length) & 255, 0, 0, ...body]));
+  }
   s.pump();
 }
 
@@ -560,9 +564,12 @@ function ethScenarios(dll) {
     // states: the outcome and the statistics are the same with it (largest
     // budget) and without it (smallest budget: its items never fit).
     test(`${dll}: doubtful datagrams (12, 60, 88 bytes) are dropped and counted the same at any budget`, () => {
+     // UDP records (UG_RECORDS=1): the payload is a record (header at 42)
+     const R = process.env.UG_RECORDS === '1';
      for (const size of [12, 60, 88]) {
       const dg = (s, over = {}, data = bytes(size, 9)) => {
-        const f = s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17, [0x1b, 0x58, 0x1b, 0x59, 0, 8 + data.length, 0, 0, ...data]);
+        const body = s.peer.udpWrap(data);
+        const f = s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17, [0x1b, 0x58, 0x1b, 0x59, 0, 8 + body.length, 0, 0, ...body]);
         for (const [o, v] of Object.entries(over)) f[+o] = v;
         return f;
       };
@@ -576,8 +583,14 @@ function ethScenarios(dll) {
         ['a bad IPv4 header checksum', (s) => dg(s, { 24: 0x12, 25: 0x34 }), 'drop_checksum', 0],
         ['a fragment', (s) => fixIp(dg(s, { 20: 0x20 })), 'drop_fragment', 0],
         ['no checksum (0)', (s) => dg(s, { 40: 0, 41: 0 }), null, size],
-        ['a UDP length below the IPv4 payload, no checksum', (s) => dg(s, { 39: 8 + size - 2, 40: 0, 41: 0 }), null, size - 2],
+        // records: the shorter datagram no longer holds its whole record
+        ['a UDP length below the IPv4 payload, no checksum', (s) => dg(s, { 39: 8 + (R ? 2 : 0) + size - 2, 40: 0, 41: 0 }), R ? 'drop_checksum' : null, R ? 0 : size - 2],
       ];
+      if (R) {
+        const other = xrec.encode(bytes(size - 1, 9));          // a valid header of another length
+        cases.push(['a bad record header, no checksum', (s) => dg(s, { 40: 0, 41: 0, 42: 0xff }), 'drop_checksum', 0]);
+        cases.push(['a record shorter than its datagram, no checksum', (s) => dg(s, { 40: 0, 41: 0, 42: other[0], 43: other[1] }), 'drop_checksum', 0]);
+      }
       for (const budget of [BIG, minBudget()]) {
         for (const [name, make, stat, len] of cases) {
           const s = boot(dll, {}, { budget });

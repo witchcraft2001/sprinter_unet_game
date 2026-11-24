@@ -3,9 +3,10 @@
   "dll": "gudp509b",
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "udp_records": true,
   "scenario": "C T with 1 STEP of 2000 us per period",
-  "wall_s": 29.3,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 36136",
+  "wall_s": 27.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 42907",
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -33,17 +34,17 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 2120,
-    "periods": 487,
+    "periods": 473,
     "largest_period_debit_us": 4430,
-    "now_ms": 9738,
+    "now_ms": 9458,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 488,
-      "early": 4763,
-      "frames": 396,
-      "ticks": 4871,
+      "step": 474,
+      "early": 4615,
+      "frames": 384,
+      "ticks": 4731,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,11 +59,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 4686,
+    "polls_total": 4540,
     "polls_useful": 33,
-    "steps_total": 488,
-    "steps_useful": 488,
-    "budget_yields": 250,
+    "steps_total": 474,
+    "steps_useful": 474,
+    "budget_yields": 264,
     "max_step_gap_ms": 20,
     "arp_requests": 4,
     "tx_frames": 36,
@@ -71,29 +72,29 @@
     "rx_bytes": 5824
   },
   "timing_us": {
-    "tick_isr_max": 313,
-    "admitted_ug_step_max": 2164,
-    "largest_tick_gap": 2018,
+    "tick_isr_max": 312,
+    "admitted_ug_step_max": 2126,
+    "largest_tick_gap": 2023,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 9.2 s)",
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 8.7 s)",
   "hw": {
     "latms": [
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 60,
-        "txdone_mean_ms": 56.2,
+        "txdone_max_ms": 98,
+        "txdone_mean_ms": 76.6,
         "echo_max_ms": 120,
-        "echo_mean_ms": 118.1
+        "echo_mean_ms": 102.7
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 136,
-        "txdone_mean_ms": 125.8,
-        "echo_max_ms": 218,
-        "echo_mean_ms": 200.7
+        "txdone_max_ms": 156,
+        "txdone_mean_ms": 152.2,
+        "echo_max_ms": 202,
+        "echo_mean_ms": 198.2
       }
     ]
   }

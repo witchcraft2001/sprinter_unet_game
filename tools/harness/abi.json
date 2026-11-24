@@ -115,7 +115,8 @@
    "HAS_EXPIRY": 1,
    "ALLOW_PROBE": 2,
    "CBL_QUALIFIED": 4,
-   "FLOW_VERIFIED": 8
+   "FLOW_VERIFIED": 8,
+   "UDP_RECORDS": 16
   },
   "cap": {
    "POLL": 1,
@@ -128,7 +129,8 @@
    "FLOW_CONTROL_REQUIRED": 128,
    "NATIVE_RTO": 256,
    "PROBE": 512,
-   "ESP_TRANSPARENT": 1024
+   "ESP_TRANSPARENT": 1024,
+   "UDP_RECORDS": 2048
   },
   "route": {
    "NO_ROUTE": 0,

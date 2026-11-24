@@ -96,12 +96,20 @@ RX_DISC_BYTES	EQU	8
 	ASSERT	COST_TX_BEGIN_DATA + NIC_CHUNK * 3 / 2 < 256 && COST_TX_DATA_END + COST_TX_PAD + TX_FUSE_END * 3 / 2 < 256
 COST_CLASSIFY	EQU	125	; Ethernet/ARP/IPv4 checks and the IP header checksum (109 us)
 COST_SUM0	EQU	140	; pseudo header + up to 30 segment bytes in scratch (123 us)
+	IFDEF	UGB_RECORDS
+COST_ACCEPT	EQU	210	; + the UDP record header kept, the copy behind it (187 us with records)
+	ELSE
 COST_ACCEPT	EQU	200	; transport accept: ports, state, header fields (179 us)
+	ENDIF
 COST_STORE	EQU	150	; payload placement in the RX ring (TCP, 131 us)
+	IFDEF	UGB_RECORDS
+COST_FINISH	EQU	105	; + the UDP record verdict (88 us with records; 75 without)
+	ELSE
 	IFDEF	UGB_TP_UDP
 COST_FINISH	EQU	90	; checksum verdict + the datagram's publication (73 us)
 	ELSE
 COST_FINISH	EQU	175	; checksum verdict + transport input: payload over RX slots, FIN (156 us; TCP ACK: ERX_TCPACK)
+	ENDIF
 	ENDIF
 COST_PREPARE	EQU	75	; NIC_PREPARE + bring-up deadline (58 us)
 COST_POLL	EQU	COST_PORTION + PROF_POLL_EXTRA_US	; status poll that may find a frame (RTL 131 us)

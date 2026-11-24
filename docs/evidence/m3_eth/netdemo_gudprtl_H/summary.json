@@ -3,9 +3,10 @@
   "dll": "gudprtl",
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "udp_records": true,
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 3.3,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 21583",
+  "wall_s": 2.8,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 35264",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -41,7 +42,7 @@
       "busy": 0,
       "isr": 0,
       "step": 7,
-      "early": 13,
+      "early": 12,
       "frames": 1,
       "ticks": 12,
       "unknown": 0,
@@ -67,7 +68,7 @@
   "timing_us": {
     "tick_isr_max": 299,
     "admitted_ug_step_max": 826,
-    "largest_tick_gap": 2082,
+    "largest_tick_gap": 2033,
     "late_ticks": 0
   }
 }
