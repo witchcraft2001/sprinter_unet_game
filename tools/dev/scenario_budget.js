@@ -12,7 +12,9 @@
 // Usage: node tools/dev/scenario_budget.js <dll> <scenario> [budget|min] [--check]
 //   --check: exit 1 on an overrun, a needed base reserve above
 //   PROF_STEP_BASE_US or an item over its reserve (make profile-check).
+// Budgets and times are units (tools/dev/units.js).
 'use strict';
+const { US, UNITS } = require('./units.js');
 const { ethStand } = require('../harness/ethnet.js');
 const { budgetTracker } = require('./budget_calls.js');
 
@@ -28,16 +30,16 @@ const items = {};                       // caller:reserved -> worst real us
 function stand(b) {
   const s = ethStand({ dll });
   s.call('INIT');
-  const min = s.getInfo().info.min_useful_budget_us;
+  const min = UNITS(s.getInfo().info.min_useful_budget_us);
   const budget = b === 'min' || b === undefined && scen !== 'broadcast' ? min : +(b || 500);
-  s.initConfig(s.defaultConfig({ step_budget_us: budget }));
+  s.initConfig(s.defaultConfig({ step_budget_us: US(budget) }));
   const tr = budgetTracker(s);
   base = s.syms.PROF_STEP_BASE_US;
   let n = 0;
   s.stepT = (dt = 2, tag = '') => {
     tr.reset();
     const prof = s.profileHook();
-    const r = s.tick(dt, budget, { onStep: (m, st) => { tr.onStep(m, st); prof.hook(m, st); } });
+    const r = s.tick(dt, US(budget), { onStep: (m, st) => { tr.onStep(m, st); prof.hook(m, st); } });
     n++;
     const { calls, reserved, items: its } = tr.finish(r.us);
     for (const x of its) if (x.kind === '') { const k = `${x.who}:${x.reserved}`; items[k] = Math.max(items[k] || 0, x.real); }

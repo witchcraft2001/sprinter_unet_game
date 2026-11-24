@@ -137,7 +137,7 @@ for (const dll of ['gtcprtl', 'gudprtl']) {
     assert.equal(s.card.pending(), 2, 'both frames in the ring');
     const rx = [];
     for (let i = 0; i < 400 && rx.length < a.length + b.length; i++) {
-      const r = s.stepIsr(C.src.TIMER, 150);
+      const r = s.stepIsr(C.src.TIMER);
       assert.deepEqual(r.problems, []);
       s.run(1);
       s.events();

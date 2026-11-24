@@ -5,6 +5,7 @@
 // Calibrates the COST_* constants of src/hw/esp and src/core/esp.
 // Usage: node tools/dev/esp_costs.js [gtcpesp|gudpesp] [budget]
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { ethStand } = require('../harness/ethnet.js');
 const dll = process.argv[2] || 'gtcpesp';
 const budget = +(process.argv[3] || 500);
@@ -13,7 +14,7 @@ const LABELS = ['ESP_PEND', 'ESP_PARSE.one', 'PARSE_BUDGET', 'TP_STEP', 'HW_RUN'
   'ESP_BUILD', 'ESP_SUBST', 'DEC16', 'ESP_DONE', 'ESP_TIMEOUT', 'ESP_OVERRUN', 'CH_FAIL', 'RXR_COMMIT', 'EV_FLUSH'];
 const s = ethStand({ dll });
 s.call('INIT');
-s.initConfig(s.defaultConfig({ step_budget_us: budget }));
+s.initConfig(s.defaultConfig({ step_budget_us: US(budget) }));
 const labels = LABELS.filter((l) => l in s.syms);
 const acc = {};
 const perByte = { ESP_BYTES: [], UART_PUMP: [] };
@@ -42,9 +43,9 @@ s.step = (t, b) => {
   return r;
 };
 let n = 0;
-for (; n < 2000 && s.ctx('hw_state') !== 2; n++) s.tick(2, budget);
+for (; n < 2000 && s.ctx('hw_state') !== 2; n++) s.tick(2, US(budget));
 s.open();
-for (let i = 0; i < 2000 && !s.events().some((e) => e.name === 'CONNECTED'); i++) s.tick(2, budget);
+for (let i = 0; i < 2000 && !s.events().some((e) => e.name === 'CONNECTED'); i++) s.tick(2, US(budget));
 const piece = dll.startsWith('gudp') ? 512 : 536;
 const d = Array.from({ length: 8192 }, (_, i) => (i * 31 + 3) & 255);
 let off = 0, tag = 1, got = 0, steps = 0;
@@ -56,7 +57,7 @@ for (; steps < 40000 && got < d.length; steps++) {
       off += Math.min(piece, d.length - off); tag++;
     }
   }
-  s.tick(2, budget); s.events(); got += s.drain().bytes.length;
+  s.tick(2, US(budget)); s.events(); got += s.drain().bytes.length;
 }
 console.log(dll, 'budget', budget, 'stream', got, 'of', d.length, 'in', steps, 'steps', `(${(got / (steps * 2)).toFixed(2)} KB/s)`, 'max STEP', maxStep.toFixed(0));
 for (const [l, v] of Object.entries(acc)) {

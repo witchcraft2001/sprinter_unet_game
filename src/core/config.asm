@@ -169,8 +169,15 @@ EXP_INIT_CONFIG
 	IFDEF	UGB_HW_ESP
 	REQUIRE_NZ16 UNETG_CFG_UART_DIVISOR
 	LD	A,(IX+UNETG_CFG_ESP_FW-CFGB)
-	CP	1			; only the ESP-AT 2.2.2 passive-TCP profile
+	CP	1			; the ESP-AT 2.2.2 command profile
+	IFDEF	UGB_XMODE
+	JR	Z,.fw_ok
+	CP	2			; transparent UDP (GUDPESP, esp/esp_x.asm)
 	JP	NZ,CFG_BAD
+.fw_ok
+	ELSE
+	JP	NZ,CFG_BAD
+	ENDIF
 	LD	A,(IX+UNETG_CFG_UART_RX_TRIGGER-CFGB)
 	CP	1
 	JR	Z,.trig_ok
@@ -382,7 +389,7 @@ EXP_INIT_CONFIG
 	CP	UNETG_TIMING_APP_COUNTER
 	JR	NZ,.time_ok
 	LDCFG_HL UNETG_CFG_TIME_READ_COST_US
-	LD	DE,PROF_TIME_READ_MAX_US + 1
+	LD	DE,PROF_TIME_READ_MAX_RT + 1
 	OR	A
 	SBC	HL,DE
 	JP	NC,CFG_TIMING
@@ -502,7 +509,8 @@ BUDGET_OK
 	PUSH	HL
 	CALL	CFG_F16
 	POP	DE
-	CALL	MUL_F16			; HL = units bought by the budget
+	CALL	MUL_F16			; HL = microseconds at 21 MHz
+	CALL	US_UNITS		; HL = units bought by the budget
 	POP	DE
 	OR	A
 	SBC	HL,DE

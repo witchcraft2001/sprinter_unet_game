@@ -26,6 +26,14 @@ if [[ ! -f src/devices/bus/isa/sprinter_esp.cpp ]]; then
   git apply "$patch"
 fi
 grep -q 'sprinter_esp' src/devices/bus/isa/isa_cards.cpp || { echo "card not registered" >&2; exit 1; }
+# NS16550 transmit FIFO: 16 characters, as the chip has (MAME's ring of 16
+# with head == tail for "empty" held 15: the 16th written while the shift
+# register was busy wrapped it to "empty", the characters were lost and
+# THRE never came back -- the "lost CIPSEND" of GUDPESP UGTEST S, flaky for
+# months, and every command of 17 bytes of the fat STEP).
+if ! grep -q 'the FIFO holds 16 characters' src/devices/machine/ins8250.cpp; then
+  git apply "$script_dir/patches/ns16550_txfifo.patch"
+fi
 
 make -j"$jobs" SUBTARGET=sprinter SOURCES=src/mame/sinclair/sprinter.cpp \
   NOWERROR=1 TOOLS=0 SYMBOLS=0 OPTIMIZE=2

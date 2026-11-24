@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // watch.js -- e2e flow with a write watch on chosen context fields.
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { ethStand } = require('../harness/ethnet.js');
 const A = require('../harness/abi.json');
 const fields = (process.argv[2] || 'ev_tmp,chan').split(',');
 const s = ethStand({ dll: 'gtcp509b' });
-s.call('INIT'); s.initConfig(s.defaultConfig({ step_budget_us: 500 }));
+s.call('INIT'); s.initConfig(s.defaultConfig({ step_budget_us: US(500) }));
 for (let i = 0; i < 200 && s.ctx('hw_state') !== 2; i++) s.tick();
 s.open(); let ev = []; for (let n = 0; n < 400 && !ev.some((e) => e.name === 'CONNECTED'); n++) { s.tick(); ev.push(...s.events()); }
 s.send(Array.from({ length: 300 }, (_, i) => (i * 7) & 255), 0x42);

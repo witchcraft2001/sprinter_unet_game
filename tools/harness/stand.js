@@ -11,6 +11,15 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const ABI = JSON.parse(fs.readFileSync(path.join(__dirname, 'abi.json'), 'utf8'));
 const C = ABI.consts;
 const TRAP = 0x0100;                       // return address of every call
+// Budgets of the ABI are real microseconds of the board; the core counts in
+// units (a microsecond of a 21 MHz Z80 without memory waits, 13/32 of a
+// real one: src/core/profile.inc).  US(n) = the smallest budget that buys
+// n units -- what a test passes when it means "n units".
+const US = (units) => Math.ceil(units * 32 / 13);
+const UNITS = (us) => Math.floor(us * 13 / 32);
+// ТЗ §5.1: no DI section of the network longer than this (real us; the
+// 200 "microseconds" of the 21 MHz model until 2026-11-22).
+const DI_MAX_US = 500;
 const DLLS = ['gtcpesp', 'gudpesp', 'gtcprtl', 'gudprtl', 'gtcp509b', 'gudp509b', 'gloop'];
 const PROFILE = {
   gtcpesp: { hw: 'ESP', transport: 'TCP' }, gudpesp: { hw: 'ESP', transport: 'UDP' },
@@ -59,7 +68,7 @@ class Stand {
   constructor(opts = {}) {
     this.name = opts.dll || 'gloop';
     this.profile = PROFILE[this.name];
-    this.m = new Machine({ mhz: opts.mhz, isaWaitT: opts.isaWaitT });
+    this.m = new Machine({ mhz: opts.mhz, isaWaitT: opts.isaWaitT, waits: opts.waits ?? process.env.UG_WAITS !== '0' });
     const bytes = fs.readFileSync(path.join(ROOT, 'build', `${this.name.toUpperCase()}.DLL`));
     this.l1 = parseL1(bytes);
     this.syms = readSymbols(path.join(ROOT, 'build', `${this.name}.sym`));
@@ -153,7 +162,7 @@ class Stand {
       uart_rx_trigger: hw === 'ESP' ? 8 : 0,
       connect_timeout_ms: 5000, retry_count: 4, retry_wait_ms: [500, 1000, 2000, 2000, 2000],
       send_stall_timeout_ms: 7500, close_timeout_ms: 2000, arp_ttl_ms: 60000,
-      worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: hw === 'LOOP' ? 400 : 500, isr_budget_us: hw === 'LOOP' ? 100 : 150,
+      worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: US(hw === 'LOOP' ? 400 : 500), isr_budget_us: hw === 'LOOP' ? US(100) : ABI.consts.limits.ISR_BODY_MAX_US,
       time_read_cost_us: 20,
       ctx_ptr: L.ctx, ctx_len: L.ctxLen,
       tx_slots_ptr: L.tx, tx_slot_size: L.slotSize, tx_slot_count: L.slots,
@@ -214,7 +223,7 @@ class Stand {
     const isr = !!opts.isr;
     const stackMax = isr ? ABI.consts.limits.STACK_ISR_MAX : ABI.consts.limits.STACK_MAIN_MAX;
     if (res.stack > stackMax) P.push(`stack ${res.stack} > ${stackMax}`);
-    if (res.maxDiUs > 200) P.push(`DI section ${res.maxDiUs.toFixed(1)} us > 200`);
+    if (res.maxDiUs > DI_MAX_US) P.push(`DI section ${res.maxDiUs.toFixed(1)} us > ${DI_MAX_US}`);
     if (exportName === 'STEP' || exportName === 'STEP_ISR') {
       const budget = regs.de ?? 0;
       // never longer than the passed budget, nor than the largest one INIT_CONFIG accepts
@@ -255,13 +264,13 @@ class Stand {
   }
 
   // ---- convenience wrappers -------------------------------------------------
-  step(now, budget = 260, preacq = 0, opts = {}) {
+  step(now, budget = US(260), preacq = 0, opts = {}) {
     const r = this.call('STEP', { de: budget, ix: now & 0xffff, iy: (now >>> 16) & 0xffff, a: preacq }, opts);
     r.deadline = r.de;
     r.flags = r.hl & 0xff;
     return r;
   }
-  stepIsr(source, budget = 150, preacq = false) {
+  stepIsr(source, budget = ABI.consts.limits.ISR_BODY_MAX_US, preacq = false) {
     const r = this.call('STEP_ISR', { a: source | (preacq ? 0x80 : 0), de: budget }, { iff: 0, isr: true });
     r.flags = r.hl & 0xff;
     return r;
@@ -326,4 +335,4 @@ class Stand {
   }
 }
 
-module.exports = { Stand, ABI, C, DLLS, PROFILE, encodeBlock, decodeBlock, TRAP };
+module.exports = { Stand, ABI, C, DLLS, PROFILE, encodeBlock, decodeBlock, TRAP, US, UNITS, DI_MAX_US };

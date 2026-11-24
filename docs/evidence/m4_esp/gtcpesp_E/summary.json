@@ -4,11 +4,11 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 4.1,
+  "wall_s": 5.6,
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "stats": {
     "abi_version": 256,
@@ -17,25 +17,25 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 208,
-    "steps_total": 344,
-    "steps_useful": 344,
-    "budget_yields": 306,
+    "polls_total": 203,
+    "steps_total": 336,
+    "steps_useful": 336,
+    "budget_yields": 299,
     "max_step_gap_ms": 20,
     "tx_frames": 1,
     "rx_frames": 1,
     "tx_bytes": 300,
     "rx_bytes": 300
   },
-  "clock": "CLOCK_RATE 0.299 now_ms per emulated ms, TICK_MS 64.000, FRAME_MS 20.480, STEP_CALLS_PER_S 160 (over 1.5 s)",
+  "clock": "CLOCK_RATE 0.293 now_ms per emulated ms, TICK_MS 68.267, FRAME_MS 20.480, STEP_CALLS_PER_S 165 (over 2.0 s)",
   "cpu_mhz": 20.93,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.68,
+  "ticks_missed_ratio": 0.7,
   "step": {
-    "max_us": 1157,
-    "mean_us": 795,
-    "steps": 344,
-    "over_budget": 344
+    "max_us": 1257,
+    "mean_us": 820,
+    "steps": 336,
+    "over_budget": 0
   },
   "trivial_call_us": 163
 }

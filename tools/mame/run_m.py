@@ -24,7 +24,8 @@ Cards:
   written into cfg/sprinter.cfg.  Without the interface a network scenario
   exits 77 (SKIP); H runs with -networkprovider none (never pcap on a real
   host adapter).  Ethernet runs are throttled (the peer answers in real
-  time) unless --nothrottle.
+  time) unless --nothrottle; ESP runs are unthrottled, except scenario F
+  (the game server sends its states by the host clock).
 
 Steps: config include (mkcfg.js) -> the EXE (sjasmplus) -> FAT12 floppy
 with the EXE and the DLL -> echo server -> MAME with the card and
@@ -69,12 +70,23 @@ SCENARIOS = {'E': 'echo 300 bytes', 'S': '8 KiB stream', 'P': 'peer closes', 'D'
              'W': 'pause 2 s between two echoes', 'L': 'load, check and free the DLL',
              'H': 'card bring-up and SHUTDOWN, no channel', 'K': 'soak (UG_HW, minutes)',
              'T': 'latency under the quota profile: 16 x 64 and 16 x 300 bytes, one at a time',
-             'Q': 'T at the SDK default quota (2 STEPs per period, quota sum <= 2000 us)',
-             'A': 'T with 2 STEPs of 1000 us per period', 'B': 'T with 2 STEPs of 1500 us per period',
-             'C': 'T with 1 STEP of 1000 us per period'}
-NETDEMO_ONLY = ('W', 'L', 'H', 'T', 'Q', 'A', 'B', 'C')
-# latency scenarios with their own quota: scen -> (STEPs per period, STEP budget in us; 0 = the minimum)
-LAT_PROFILE = {'Q': (2, 0), 'A': (2, 1000), 'B': (2, 1500), 'C': (1, 1000)}
+             'Q': 'T at the SDK default profile (2 STEPs of the minimum budget per period)',
+             'A': 'T with 2 STEPs of 1500 us per period', 'B': 'T with 2 STEPs of 2000 us per period',
+             'C': 'T with 1 STEP of 2000 us per period',
+             'G': 'game profile: 1 STEP of 2000 us and one poll per period (ESP: the poll moves UART bytes), 16 x 16 and 16 x 64 bytes',
+             'R': 'G with 1 STEP of 3000 us (the STEP limit) and one poll per period',
+             'F': "game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile"}
+NETDEMO_ONLY = ('W', 'L', 'H', 'T', 'Q', 'A', 'B', 'C', 'G', 'R', 'F')
+# latency scenarios with their own quota: scen -> (STEPs per period, STEP
+# budget in real us; 0 = the minimum, ticks between the guaranteed polls)
+LAT_PROFILE = {'Q': (2, 0, 1), 'A': (2, 1500, 1), 'B': (2, 2000, 1), 'C': (1, 2000, 1), 'G': (1, 2000, 10), 'R': (1, 3000, 10),
+               'F': (1, 3000, 10)}
+# F on the ESP builds: two byte-moving polls per period (the flow's best
+# ESP profile, docs/MEASUREMENTS.md: one poll loses states)
+FLOW_POLLS_ESP = 5
+# STEP_ISR budget of the game profile on the ESP builds, real us: a poll
+# that moves up to 12 UART bytes (0 elsewhere: the empty poll + return)
+GAME_ISR_ESP = 341
 HW_ONLY = ('K',)
 # UG_HW report file name (sdk/example/ughw.inc hw_build_fname / mkcfg.js
 # UG_HWPFX): prog letter + card code + transport letter + scenario + .TXT.
@@ -146,6 +158,10 @@ def main():
                     help='NETDEMO: STEP budget of the profile in us (0 = GET_INFO.min_useful)')
     ap.add_argument('--probe', choices=list(PROBE_CARD),
                     help='run UGPROBE.EXE for card E / R / 3 instead (no DLL, no network)')
+    ap.add_argument('--esp-fw', type=int, choices=[1, 2], default=1,
+                    help='GUDPESP: 2 = the transparent mode (records; echo_server.py --framed)')
+    ap.add_argument('--trigger', type=int, choices=[1, 4, 8, 14],
+                    help='ESP: the UART RX FIFO trigger (default 8)')
     ap.add_argument('--state', action='store_true',
                     help='with --probe: the state snapshot only (UGPROBE <card> 1, STATA<card>.TXT)')
     a = ap.parse_args()
@@ -153,16 +169,26 @@ def main():
         return probe(a)
     if not a.dll or not a.scen:
         ap.error('dll and scen are required (or --probe)')
+    if a.esp_fw == 2 and a.dll != 'gudpesp':
+        sys.exit('--esp-fw 2 is GUDPESP only')
     if a.dll.startswith('gudp') and a.scen == 'P':
         sys.exit('P (peer closes) is a TCP scenario')
+    if not a.dll.startswith('gudp') and a.scen == 'F':
+        sys.exit('F (game flow, datagrams) is a UDP scenario')
     if a.prog == 'ugtest' and a.scen in NETDEMO_ONLY:
         sys.exit(f'{a.scen} is a NETDEMO scenario')
     if a.scen in HW_ONLY and not a.hw:
         sys.exit(f'{a.scen} is a UG_HW scenario (--hw)')
     if a.prog == 'netdemo' and a.scen in HW_ONLY:
         sys.exit(f'{a.scen} is a UGTEST scenario')
+    a.polls = 1
+    a.isr = 0
     if a.scen in LAT_PROFILE:
-        a.steps, a.budget = LAT_PROFILE[a.scen]
+        a.steps, a.budget, a.polls = LAT_PROFILE[a.scen]
+        if a.scen in ('G', 'R', 'F') and card_of(a.dll) == 'ESP':
+            a.isr = GAME_ISR_ESP
+        if a.scen == 'F' and card_of(a.dll) == 'ESP':
+            a.polls = FLOW_POLLS_ESP
     prog = a.prog
     card = card_of(a.dll)
     mame = MAME_3C509B if card == 'EL3' else MAME
@@ -173,7 +199,8 @@ def main():
     if net and index is None:
         print(f'SKIP: pcap interface {NET_IF} not found (create the pair: tools/mame/net_feth.sh)')
         sys.exit(SKIP)
-    work = ROOT / 'build' / 'mame' / (f'{a.dll}_{a.scen}' if prog == 'ugtest' else f'{prog}_{a.dll}_{a.scen}')
+    xs = 'x' if a.esp_fw == 2 else ''        # transparent mode: gudpespx_E, netdemo_gudpespx_G
+    work = ROOT / 'build' / 'mame' / (f'{a.dll}{xs}_{a.scen}' if prog == 'ugtest' else f'{prog}_{a.dll}{xs}_{a.scen}')
     if work.exists():
         shutil.rmtree(work)
     for d in ('cfg', 'nvram', 'diff', 'snap'):
@@ -188,7 +215,8 @@ def main():
     # v1 sends no RST) and drops the new SYN, so every Ethernet run gets
     # its own local port.
     lport = '7001' if card == 'ESP' else str(random.randint(20000, 48999))
-    run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, a.dll, work / 'ugcfg.inc', peer, '7000', lport)
+    mk_opts = (['--esp-fw', str(a.esp_fw)] if a.esp_fw != 1 else []) + (['--trigger', str(a.trigger)] if a.trigger else [])
+    run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, *mk_opts, a.dll, work / 'ugcfg.inc', peer, '7000', lport)
     # UGTEST picks the scenario at runtime under --hw (hw_args, the DSS
     # command line); NETDEMO's scattered per-scenario IF SCEN==... blocks
     # are not worth turning into a runtime dispatch for this, so it keeps
@@ -197,7 +225,7 @@ def main():
     if a.hw:
         scen_define += ['-DUG_HW=1', '-DUG_HW_MTEST=1']
     run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', ROOT / 'sdk', '-I', work, '-I', LIBMAN,
-        *scen_define, f'-DUG_STEPS={a.steps}', f'-DUG_STEP_BUDGET={a.budget}', f'--sym={work / (prog + ".sym")}',
+        *scen_define, f'-DUG_STEPS={a.steps}', f'-DUG_STEP_BUDGET={a.budget}', f'-DUG_POLL_TICKS={a.polls}', f'-DUG_ISR_BUDGET={a.isr}', f'--sym={work / (prog + ".sym")}',
         ROOT / 'sdk/example' / f'{prog}.asm', cwd=work, stdout=subprocess.DEVNULL)
     img = work / f'{prog}.img'
     run('mformat', '-C', '-i', img, '-f', '1440', '::')
@@ -208,12 +236,18 @@ def main():
     srv_args = [sys.executable, ROOT / 'tools/mame/echo_server.py', '--log', srv_log, '--host', peer]
     if a.scen == 'P':
         srv_args += ['--close-after', '64']
+    if a.esp_fw == 2:
+        srv_args += ['--framed']
+    if a.scen == 'F':
+        srv_args += ['--game']
     srv = None
     if card == 'ESP' or net:
         srv = subprocess.Popen([str(x) for x in srv_args], stdout=subprocess.PIPE, text=True)
         if srv.stdout.readline().strip() != 'ready':
             sys.exit(f'echo server did not start on {peer} (is {NET_IF} paired and feth1 at that address?)')
-    card_args = card_args_of(card, work, index, a.nothrottle or not net)
+    # F's server sends its states by the host clock: the machine runs in
+    # real time then, the ESP builds too (unthrottled otherwise)
+    card_args = card_args_of(card, work, index, a.nothrottle or (not net and a.scen != 'F'))
     report = work / 'report.txt'
     cmd = mame_cmd(mame, work, img, card_args, a.timeout, a.window)
     cmd_line = 'b:\\' + prog + '.exe'
@@ -236,6 +270,7 @@ def main():
     text = report.read_text(errors='replace') if report.exists() else 'RESULT: FAIL (no report)\n'
     lines = text.splitlines()
     summary = {'prog': prog, 'dll': a.dll, 'card': card, 'mame': str(mame),
+               **({'esp_fw': 2} if a.esp_fw == 2 else {}), **({'uart_rx_trigger': a.trigger} if a.trigger else {}),
                'scenario': f'{a.scen} {SCENARIOS[a.scen]}', 'wall_s': round(wall, 1)}
     if card != 'ESP':
         summary['network'] = 'none' if index is None else f'pcap {NET_IF} (index {index}), peer {NET_HOST}, local port {lport}'
@@ -245,7 +280,7 @@ def main():
     ok = 'RESULT: PASS' in text
     if a.hw:
         prog_letter = 'N' if prog == 'netdemo' else 'U'
-        trans_letter = 'U' if a.dll.startswith('gudp') else 'T'
+        trans_letter = 'X' if a.esp_fw == 2 else 'U' if a.dll.startswith('gudp') else 'T'
         hw_name = f'{prog_letter}{HW_CARD_CODE[card]}{trans_letter}{a.scen}.TXT'
         hw_file = work / hw_name
         try:
@@ -263,7 +298,7 @@ def main():
     print(json.dumps(summary, indent=2))
     if a.evidence:
         if card == 'ESP':
-            ev = ROOT / 'docs' / 'evidence' / ('m4_esp' if prog == 'ugtest' else 'm5_sdk') / f'{a.dll}_{a.scen}'
+            ev = ROOT / 'docs' / 'evidence' / ('m4_esp' if prog == 'ugtest' else 'm5_sdk') / f'{a.dll}{xs}_{a.scen}'
         else:
             ev = ROOT / 'docs' / 'evidence' / 'm3_eth' / f'{prog}_{a.dll}_{a.scen}'
         if ev.exists():
@@ -277,7 +312,7 @@ def main():
 
 def card_args_of(card, work, index, nothrottle):
     if card == 'ESP':
-        return ['-isa1', 'sprinter_esp', '-isa1:sprinter_esp:esp', 'esp8266_at,bios=at22', '-nothrottle']
+        return ['-isa1', 'sprinter_esp', '-isa1:sprinter_esp:esp', 'esp8266_at,bios=at22'] + (['-nothrottle'] if nothrottle else [])
     tag, mac = ((':isa1:rtl8019as:rtl8019a', '02:80:19:12:34:56') if card == 'RTL'
                 else (':isa1:3c509b', '02:60:8c:12:34:56'))
     args = ['-isa1', 'rtl8019as' if card == 'RTL' else '3c509b']

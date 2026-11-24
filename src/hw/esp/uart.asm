@@ -41,8 +41,24 @@ ES_RX_JOINT_MAX	EQU	6	; RX share of a portion that also sends
 COST_BRINGUP	EQU	COST_PUMP_FIXED + 4 * ES_RX_JOINT_MAX + COST_PUMP_TX_ENTRY + 2 * ES_TX_MAX
 	; = 216 us: the worse of the two NIC_BRINGUP/HW_RUN cases (see above)
 COST_PORTION	EQU	90	; stop step
+	IFDEF	UGB_FAT
+; Fat STEP (profile.inc): the pump pays for what it finds instead of the
+; flat worst case above.  Stand (tools/dev/esp_pump_calib.js, units): the
+; portion alone is 44.5 idle, 76.9 + 4.14 per RX byte, 78.4 + 1.96 per TX
+; byte; HW_RUN_FAT around it 15.  COST_FPUMP buys the bracket, the LSR
+; sample and an idle return; an active portion takes COST_FPUMP_ACT more
+; inside itself (ring and RTS arithmetic, its own sizing), then 4 units
+; per RX byte moved and COST_FPUMP_TX + 2 per TX byte written.
+COST_FPUMP	EQU	85
+COST_FPUMP_ACT	EQU	85
+COST_FPUMP_TX	EQU	0
+COST_FPUMP_RTS	EQU	20	; the RTS line written (pause / resume): on top, when it happens
+	ENDIF
 COST_STOP	EQU	COST_PORTION
 	ASSERT	COST_PUMP_FIXED + 4 * ES_RX_MAX < 256
+	IFDEF	UGB_FAT
+	ASSERT	COST_FPUMP_ACT + 4 * ES_RX_MAX < 256
+	ENDIF
 	ASSERT	COST_PUMP_FIXED + COST_PUMP_TX_ENTRY + 2 * ES_TX_MAX + 4 * ES_RX_JOINT_MAX < 256
 BRINGUP_MS	EQU	5000	; UART + module set-up (AT retries, module boot)
 	ASSERT	COST_BRINGUP <= PROF_MAX_ITEM_US && COST_PORTION <= PROF_MAX_ITEM_US
@@ -56,7 +72,15 @@ BRINGUP_MS	EQU	5000	; UART + module set-up (AT retries, module boot)
 ; >= 93.1 + 4.55 * n: reserve 40.  ISRP_RX_MAX keeps the body itself
 ; under 150 / 1.1 us at any budget (12 bytes: 134.3 us); auto-RTS holds
 ; the module at the FIFO trigger, so a drain rarely finds more anyway.
-ISRP_ENTRY_RESERVE EQU	40
+; ES_ISRCAP is in REAL microseconds (STEP_ISR converts nothing).  In real
+; time a STEP_ISR that moves n bytes costs 197.1 + 8.3 * n us (stand with
+; the memory waits of the board, tools/dev/isr_drain.js: 205.4 us for one
+; byte, 271.7 for nine), 3 % more on the board; the cost rule asks
+; PROF_ISR_MIN_RT (160) + reserve + 8 * n >= 223.3 + 9.4 * n for
+; n <= ISRP_RX_MAX (8 us per byte is a shift; the missing 1.4 us per byte
+; are 17 us at 12 bytes): reserve 85, and n bytes need a budget of
+; 245 + 8 * n us (341 for 12, inside isr_body_max_us).
+ISRP_ENTRY_RESERVE EQU	85
 ISRP_RX_MAX	EQU	12
 	ASSERT	ISRP_RX_MAX <= ES_RX_MAX
 
@@ -89,6 +113,10 @@ NIC_PREPARE
 	LD	(IX+ES_TXN+1),A
 	LD	(IX+ES_TXKIND),A
 	LD	(IX+ES_MCR),A
+	IFDEF	UGB_XMODE
+	LD	(IX+ES_XFL),A		; the bring-up leaves any data mode (NIC_XESC)
+	LD	(IX+ES_XSTG),A
+	ENDIF
 	RET
 
 ; ----------------------------------------------------------------------
@@ -102,6 +130,10 @@ NIC_BRINGUP
 	JR	Z,.probe
 	DEC	A
 	JR	Z,.init
+	IFDEF	UGB_XMODE
+	DEC	A
+	JP	NZ,NIC_XESC		; EUP_XESC
+	ENDIF
 	; EUP_AT: the same RX/TX joint cap as HW_RUN (a portion that also
 	; sends an AT command stays under PROF_MAX_ITEM_US only with a
 	; smaller RX share; COST_BRINGUP covers both cases)
@@ -190,7 +222,17 @@ NIC_BRINGUP
 	SET	ESF_UP,(IX+ES_FLAGS)
 	LD	(IX+HS_PHASE),EUP_AT
 	LD	(IX+HS_RES),NBR_WAIT	; the first pump in the next STEP
+	IFDEF	UGB_XMODE
+	; transparent profile: out of a data mode a past session may have
+	; left, before the first AT (NIC_XESC)
+	CALL	ESP_XCFG
+	RET	NZ
+	LD	(IX+HS_PHASE),EUP_XESC
+	LD	DE,ESP_GUARD_MS
+	JP	X_ARM
+	ELSE
 	RET
+	ENDIF
 
 ; ----------------------------------------------------------------------
 ; NIC_STOP (P): interrupts off, RTS off (the module holds its output).
@@ -198,6 +240,13 @@ NIC_BRINGUP
 ; with AT+CIPCLOSE=5.
 ; ----------------------------------------------------------------------
 NIC_STOP
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IX+ES_XFL)
+	JR	Z,.plain
+	CALL	NIC_XSTOP		; out of the data mode first
+	RET	NC
+.plain
+	ENDIF
 	RES	ESF_UP,(IX+ES_FLAGS)
 	LD	A,U_IER
 	CALL	UREG
@@ -286,7 +335,7 @@ UART_PUMP
 .free_ok
 	LD	A,C
 	OR	A
-	JR	Z,.tx			; ring full: the bytes wait in the FIFO
+	JR	Z,.tx		; ring full: the bytes wait in the FIFO
 	BIT	0,B			; DR, from the snapshot at the top of the portion
 	JR	Z,.tx
 	LD	B,A
@@ -366,6 +415,13 @@ UART_PUMP
 	DJNZ	.tx_loop
 	LD	(IX+ES_TXP),E
 	LD	(IX+ES_TXP+1),D
+	IFDEF	UGB_XMODE
+	; the transparent mode's packet cut follows UART silence (esp_x.asm)
+	LD	A,(IY+CX_NOW_MS)
+	LD	(IX+ES_XLAST),A
+	LD	A,(IY+CX_NOW_MS+1)
+	LD	(IX+ES_XLAST+1),A
+	ENDIF
 	LD	A,(IX+ES_TXN)
 	SUB	C
 	LD	(IX+ES_TXN),A
@@ -524,6 +580,305 @@ HW_RUN
 	SET	4,(IY+CX_WORK)		; UWK_YIELD
 	RET
 
+	IFDEF	UGB_FAT
+; ----------------------------------------------------------------------
+; UART_PUMP_FAT (P): UART_PUMP for a fat STEP (HW_RUN_FAT).  The same
+; exchange, but the portion pays for what it does: COST_FPUMP_ACT once it
+; is active, 4 units per RX byte moved (no more bytes than the budget
+; buys), COST_FPUMP_RTS for a write of the RTS line, COST_FPUMP_TX + 2
+; per TX byte written; and with the transmitter idle it writes 17 bytes.
+; A copy, not a mode of UART_PUMP: the plain portion stays as it was
+; measured.  Clobbers A, BC, DE, HL.
+; ----------------------------------------------------------------------
+UART_PUMP_FAT
+	STAT_INC UNETG_STATS_POLLS_TOTAL
+	RES	ESF_GOT,(IX+ES_FLAGS)
+	LD	A,U_LSR
+	CALL	UREG
+	LD	A,(HL)
+	BIT	1,A			; OE
+	JR	Z,.no_oe
+	SET	ESF_OVERRUN,(IX+ES_FLAGS)
+.no_oe
+	LD	B,A			; B = LSR snapshot (DR used below)
+	BIT	ESF_RTSOFF,(IX+ES_FLAGS)
+	JR	NZ,.active		; paused: always re-check the backlog
+	BIT	0,B			; DR
+	JR	NZ,.active
+	LD	A,(IX+ES_TXN)
+	OR	(IX+ES_TXN+1)
+	RET	Z			; idle: FIFO empty, RTS open, no TX pending
+.active
+	; the active path must fit before anything is touched; it is taken
+	; below together with the RX bytes moved
+	LD	A,(IY+CX_UNITS+1)
+	OR	A
+	JR	NZ,.act_fits
+	LD	A,(IY+CX_UNITS)
+	CP	COST_FPUMP_ACT + COST_FPUMP_RTS
+	JR	NC,.act_fits
+	SET	4,(IY+CX_WORK)		; UWK_YIELD: not this STEP, nothing touched
+	RET
+.act_fits
+	; backlog = (RH - RT) & ER_MASK: bytes the parser has not taken yet
+	LD	L,(IX+ES_RH)
+	LD	H,(IX+ES_RH+1)
+	LD	E,(IX+ES_RT)
+	LD	D,(IX+ES_RT+1)
+	OR	A
+	SBC	HL,DE
+	LD	A,H
+	AND	HIGH ER_MASK
+	LD	H,A
+	; explicit RX pause: RTS off while the parser is ER_PAUSE_AT behind,
+	; on again below ER_RESUME_AT (auto-RTS also holds the module at the
+	; FIFO trigger while the pump does not read)
+	LD	DE,ER_PAUSE_AT
+	BIT	ESF_RTSOFF,(IX+ES_FLAGS)
+	JR	Z,.check
+	LD	DE,ER_RESUME_AT
+.check
+	OR	A
+	SBC	HL,DE			; CF: backlog < threshold
+	LD	C,MCR_RUN
+	JR	C,.below
+	LD	C,MCR_PAUSE
+.below
+	LD	A,C
+	CP	(IX+ES_MCR)
+	JR	Z,.rts_same
+	LD	(IX+ES_MCR),A
+	RES	ESF_RTSOFF,(IX+ES_FLAGS)
+	CP	MCR_RUN
+	JR	Z,.rts_write
+	SET	ESF_RTSOFF,(IX+ES_FLAGS)
+.rts_write
+	LD	A,U_MCR
+	CALL	UREG
+	LD	(HL),C
+	PUSH	BC
+	LD	HL,COST_FPUMP_RTS
+	CALL	TAKE			; fits: checked at .active
+	POP	BC
+.rts_same
+	; no RX while paused (the ring always has room then: 512 > pause level)
+	LD	C,0
+	BIT	ESF_RTSOFF,(IX+ES_FLAGS)
+	JR	NZ,.free_ok
+	LD	C,(IX+ES_RXMAX)
+	; no more RX bytes than the budget buys (4 units each, charged below
+	; for the bytes really moved)
+	LD	A,(IY+CX_UNITS+1)
+	OR	A
+	JR	NZ,.free_ok		; 256 units and more buy a full FIFO
+	LD	A,(IY+CX_UNITS)
+	SUB	COST_FPUMP_ACT		; (fits: checked at .active, less the RTS write)
+	JR	NC,.rx_units
+	XOR	A
+.rx_units
+	RRCA
+	RRCA
+	AND	0x3F
+	CP	C
+	JR	NC,.free_ok
+	LD	C,A
+.free_ok
+	LD	A,C
+	OR	A
+	JR	Z,.tx_act		; ring full: the bytes wait in the FIFO
+	BIT	0,B			; DR, from the snapshot at the top of the portion
+	JR	Z,.tx_act
+	LD	B,A
+	LD	HL,ER_SIZE
+	LD	E,(IX+ES_RH)
+	LD	D,(IX+ES_RH+1)
+	OR	A
+	SBC	HL,DE			; span to the ring end (1..512)
+	LD	A,H
+	OR	A
+	JR	NZ,.span_ok
+	LD	A,L
+	CP	B
+	JR	NC,.span_ok
+	LD	B,A
+.span_ok
+	LD	L,(IY+CX_HW_RING_PTR)
+	LD	H,(IY+CX_HW_RING_PTR+1)
+	ADD	HL,DE
+	EX	DE,HL			; DE = ring + RH
+	LD	A,U_LSR
+	CALL	UREG
+	LD	C,L			; C = LSR low byte, H = register page
+	PUSH	BC			; B = n
+.rx
+	LD	L,C
+	LD	A,(HL)			; LSR
+	RRA				; DR -> CF (OE already handled at the top)
+	JR	NC,.rx_end
+	RES	0,L
+	RES	2,L			; LSR (base+5) -> RBR (base+0)
+	LD	A,(HL)
+	LD	(DE),A
+	INC	DE
+	DJNZ	.rx
+.rx_end
+	POP	AF			; A = n
+	SUB	B			; A = bytes moved
+	LD	C,A
+	CALL	.act_take		; the active path and C RX bytes
+	LD	A,C
+	OR	A
+	JR	Z,.tx
+	SET	ESF_GOT,(IX+ES_FLAGS)
+	ADD	A,(IX+ES_RH)
+	LD	L,A
+	LD	A,(IX+ES_RH+1)
+	ADC	A,0
+	AND	HIGH ER_MASK
+	; publish the head after the data, both bytes inside this DI section
+	LD	(IX+ES_RH),L
+	LD	(IX+ES_RH+1),A
+	JR	.tx
+; .act_take: COST_FPUMP_ACT + 4 units per RX byte (C bytes).
+; It fits: checked at .active, the count capped by the units.  Keeps C.
+.act_take
+	LD	A,C
+	ADD	A,A
+	ADD	A,A
+	ADD	A,COST_FPUMP_ACT
+	LD	L,A
+	LD	H,0
+	PUSH	BC
+	CALL	TAKE
+	POP	BC
+	RET
+.tx_act
+	LD	C,0			; an active portion without RX bytes
+	CALL	.act_take
+.tx
+	LD	A,(IX+ES_TXN)
+	OR	(IX+ES_TXN+1)
+	RET	Z
+	LD	A,U_LSR
+	CALL	UREG
+	LD	A,(HL)
+	LD	C,A
+	AND	LSR_THRE		; THR + TX FIFO empty in FIFO mode (OE already handled)
+	RET	Z
+	; B = min(TXN, ES_TX_MAX)
+	LD	B,ES_TX_MAX
+	; with the transmitter idle too (TEMT) the first byte goes
+	; straight to the shift register and the FIFO takes 16 more: 17 bytes
+	; are "AT+CIPSEND=0,16" with its CR LF in one portion, a frame
+	; earlier than 16 + 1
+	BIT	6,C			; LSR.TEMT
+	JR	Z,.tx_max
+	INC	B
+.tx_max
+	LD	A,(IX+ES_TXN+1)
+	OR	A
+	JR	NZ,.tx_n
+	LD	A,(IX+ES_TXN)
+	CP	B
+	JR	NC,.tx_n
+	LD	B,A
+.tx_n
+	PUSH	BC
+	LD	A,B
+	ADD	A,A
+	ADD	A,COST_FPUMP_TX
+	LD	L,A
+	LD	H,0
+	CALL	TAKE
+	POP	BC
+	RET	C			; the stream waits for the next portion
+.tx_paid
+	LD	C,B
+	LD	A,U_THR
+	CALL	UREG
+	LD	E,(IX+ES_TXP)
+	LD	D,(IX+ES_TXP+1)
+.tx_loop
+	LD	A,(DE)
+	LD	(HL),A
+	INC	DE
+	DJNZ	.tx_loop
+	LD	(IX+ES_TXP),E
+	LD	(IX+ES_TXP+1),D
+	IFDEF	UGB_XMODE
+	; the transparent mode's packet cut follows UART silence (esp_x.asm)
+	LD	A,(IY+CX_NOW_MS)
+	LD	(IX+ES_XLAST),A
+	LD	A,(IY+CX_NOW_MS+1)
+	LD	(IX+ES_XLAST+1),A
+	ENDIF
+	LD	A,(IX+ES_TXN)
+	SUB	C
+	LD	(IX+ES_TXN),A
+	RET	NC
+	DEC	(IX+ES_TXN+1)
+	RET
+
+; ----------------------------------------------------------------------
+; HW_RUN_FAT (main): the pump of a fat STEP.  No sizing here: COST_FPUMP
+; buys an idle portion and UART_PUMP_FAT takes the rest for what it
+; really does (the costs above).  A portion that also sends keeps the RX
+; share of ES_RX_JOINT_MAX (the DI section).  Clobbers A, BC, DE, HL, IX.
+; HW_FAT: the entry (ESP_FAT): as HW_RUN, RX paused and nothing to send
+; leaves the budget to the parser.
+; ----------------------------------------------------------------------
+HW_FAT
+	BIT	ESF_RTSOFF,(IY+EX_FLAGS)
+	JR	Z,HW_RUN_FAT
+	CALL	ER_HEAD			; HL = bytes waiting
+	LD	DE,ER_RESUME_AT
+	OR	A
+	SBC	HL,DE
+	JR	C,HW_RUN_FAT
+	LD	A,(IY+EX_TXN)
+	OR	(IY+EX_TXN+1)
+	JR	NZ,HW_RUN_FAT
+	RES	ESF_GOT,(IY+EX_FLAGS)
+	SET	2,(IY+CX_WORK)		; UWK_MORE
+	RET
+HW_RUN_FAT
+	; (ESF_GOT is this STEP's: a portion that does not run brought nothing)
+	RES	ESF_GOT,(IY+EX_FLAGS)
+	LD	HL,COST_FPUMP
+	CALL	TAKE
+	RET	C
+	HWSM_IX
+	LD	A,(IX+ES_TXN)
+	OR	(IX+ES_TXN+1)
+	LD	A,ES_RX_MAX
+	JR	Z,.cap
+	LD	A,ES_RX_JOINT_MAX
+.cap
+	LD	(IX+ES_RXMAX),A
+	LD	HL,UART_PUMP_FAT
+	CALL	RUN_PORTION
+	RET	C			; BUS_BUSY already counted by RUN_PORTION
+	BIT	ESF_GOT,(IY+EX_FLAGS)
+	JR	Z,.no_rx
+	SET	0,(IY+CX_WORK)		; UWK_HW
+.no_rx
+	LD	A,(IY+EX_TXN)
+	OR	(IY+EX_TXN+1)
+	JR	NZ,.more
+	; bytes waiting in the ring?  Only a hint (UWK_MORE), so the head is
+	; read without DI: a torn value cannot read as "empty" (the backlog
+	; stays far below 256: ER_PAUSE_AT)
+	LD	A,(IY+EX_RH)
+	CP	(IY+EX_RT)
+	JR	NZ,.more
+	LD	A,(IY+EX_RH+1)
+	CP	(IY+EX_RT+1)
+	RET	Z
+.more
+	SET	2,(IY+CX_WORK)		; UWK_MORE
+	RET
+	ENDIF
+
 ; ----------------------------------------------------------------------
 ; ISRP_POLL: the STEP_ISR body of a running card (lock.asm ISR_PORTION;
 ; contract in engine.asm: IY only, CF=1 IDLE / CF=0 WORK, clobbers A, HL,
@@ -556,7 +911,7 @@ ISRP_POLL
 	SCF
 	RET
 .has_dr
-	; cap = min(ISRP_RX_MAX, (ES_ISRCAP - ISRP_ENTRY_RESERVE) / 4).
+	; cap = min(ISRP_RX_MAX, (ES_ISRCAP - ISRP_ENTRY_RESERVE) / 8).
 	; ES_ISRCAP is EXP_STEP_ISR's generic leftover (budget - return - base
 	; - poll, sched.asm); this routine's own entry (backlog/free/span,
 	; re-deriving the LSR address) and the margin of the cost rule come on
@@ -567,8 +922,10 @@ ISRP_POLL
 	OR	A
 	RET
 .afford
-	SRL	A
-	SRL	A
+	RRCA
+	RRCA
+	RRCA
+	AND	0x1F
 	CP	ISRP_RX_MAX+1
 	JR	C,.cap_ok
 	LD	A,ISRP_RX_MAX

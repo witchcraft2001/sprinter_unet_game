@@ -4,10 +4,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Stand, C } = require('../../../tools/harness/stand.js');
+const { Stand, C, US } = require('../../../tools/harness/stand.js');
 
 const S = C.status;
-const B = 500;                                   // STEP body budget used by the vectors
+const B = US(500);                               // STEP body budget used by the vectors: 500 units
 const clean = (r, what) => assert.deepEqual(r.problems, [], `${what}: ${r.problems.join('; ')}`);
 
 function boot(over = {}, dll = 'gloop') {

@@ -16,7 +16,9 @@
 ;   NIC_RX_LIMIT   (P) B = E = bytes of the next RX_READ (1..NIC_CHUNK): may
 ;                      lower both (RTL: never across the ring end); clobbers A, HL
 ;   NIC_RX_DISCARD (P) drop the rest of the current frame (start)
-;   NIC_RX_DISC_DONE (P) CF=1 while the drop is in progress
+;   NIC_RX_DISC_DONE (P) CF=1 while the drop is in progress (not with the
+;                      short path, UGB_SHORT: NIC_RX_STATUS then answers
+;                      "no frame" until the card has done it)
 ;   NIC_TX_BEGIN   (P) HL = frame length; CF=1 when the card has no room
 ;   NIC_TX_WRITE   (P) HL = source, B = 1..NIC_CHUNK
 ;   NIC_TX_END     (P) pad and start transmission
@@ -41,20 +43,75 @@ COST_PORTION	EQU	100	; bracket + a short card step (EL3 poll 82, discard 59 us)
 COST_STOP	EQU	COST_BRINGUP	; a stop-table portion (EL3 144 us)
 COST_BRINGUP	EQU	190	; bracket + the longest bring-up step (RTL 173 us)
 COST_RX_CHUNK	EQU	COST_PORTION + NIC_CHUNK_RX * 5 / 2 + 2 * PROF_DMA_EXTRA_US	; NIC_CHUNK_RX bytes read + summed (RTL 181, EL3 176 us)
+	IFDEF	UGB_SHORT
+; (with the short path's checks behind them: the next dispatch)
+COST_RX_HEADER	EQU	190	; the first RX_HDR_BYTES copied (EL3 169 us)
+COST_TX_CHUNK	EQU	COST_PORTION + NIC_CHUNK * 3 / 2 + 10	; 56 bytes written (EL3 177 us)
+	ELSE
 COST_RX_HEADER	EQU	185 + PROF_DMA_EXTRA_US * 4 / 3	; the first RX_HDR_BYTES copied (RTL 184, EL3 166 us)
 COST_TX_CHUNK	EQU	COST_PORTION + NIC_CHUNK * 3 / 2 + PROF_DMA_EXTRA_US + 5	; 56 bytes written (RTL 178, EL3 158 us)
+	ENDIF
 COST_TX_BEGIN	EQU	105	; TX room check and the 3C509B preamble (EL3 88 us)
+	IFDEF	UGB_BYTECOST
+; Card portions by their bytes (GUDPRTL): an RX copy portion of n bytes
+; (n = the segment's rest, at most NIC_CHUNK_RX) costs COST_RXC_FIXED +
+; 2 n, a TX DATA portion COST_TXD_FIXED + 3/2 n, END without padding
+; COST_TX_END_NOPAD (the table costs stay the bounds: n at its largest,
+; END with the padding's remote DMA; each window holds the dispatch of
+; the next item)
+COST_RXC_FIXED	EQU	145	; + 2 n (stand: 129 us with 1 byte, 160 with 18, 188 with 32)
+COST_TXD_FIXED	EQU	125	; + 3/2 n (stand: 107 us with 1 byte, 168 with 42, 191 with 56)
+COST_TX_END_NOPAD EQU	95	; (stand: 79 us)
+	ASSERT	COST_RXC_FIXED + NIC_CHUNK_RX * 2 <= PROF_MAX_ITEM_US && COST_TXD_FIXED + NIC_CHUNK * 3 / 2 <= PROF_MAX_ITEM_US
+	ASSERT	COST_TX_END_NOPAD <= COST_TX_END
+	ENDIF
 COST_TX_END	EQU	135	; padding to 60 bytes and the start (RTL 117, EL3 91 us)
 COST_TX_WAIT	EQU	140	; completion check + transport notification (125 us)
+; Fused portions (short path): one bracket instead of two.  They are taken
+; only when they fit (TX_FUSE, RXP_POLL) -- the plain items stay the
+; fallback and what the minimum budget is sized for, so these are not
+; bound by PROF_MAX_ITEM_US.  The TX ones add 3/2 per byte.  Stand
+; (tools/dev/items_small.sh, pieces of 1..64 bytes, both transports):
+; BEGIN + 42 / 54 / 56 header bytes 175 / 194 / 196 us; DATA + END with
+; 1 / 23 / 40 bytes: 3C509B 122 / 137 / 160, RTL8019AS 151 (167 with the
+; padding of a UDP frame) / 161 / 186 us.  Each includes the dispatch up
+; to the next item (the next fuse decision).
+COST_TX_BEGIN_DATA EQU	155	; BEGIN + the first DATA portion (197 us with 42 bytes)
+COST_TX_DATA_END EQU	145	; the last DATA portion + END
+	IFDEF	UGB_HW_RTL
+COST_TX_PAD	EQU	40	; a frame below 60 bytes: one more remote DMA for the padding
+	ELSE
+COST_TX_PAD	EQU	15	; ... the zero bytes of the same FIFO write (144 us with 1 byte)
+	ENDIF
+TX_FUSE_END	EQU	40	; most bytes of a DATA portion that shares its DI section with END
+TX_FUSE_FRAME	EQU	ETH_L4 + 20 + TX_FUSE_END	; no fusing in a frame longer than this (a TCP header + such a portion)
+; 3C509B: the header read (and the drop of a frame that is whole in
+; scratch) in the poll's portion: poll + header 224 us against COST_POLL
+; + this
+COST_RX_HDR_FUSED EQU	150
+; RXP_COPY drops the frame in the portion that reads its last byte only
+; when that portion is this much shorter than a full one: the drop then
+; costs no more than the bytes not read (COST_RX_CHUNK stays the bound)
+RX_DISC_BYTES	EQU	8
+	ASSERT	COST_TX_BEGIN_DATA + NIC_CHUNK * 3 / 2 < 256 && COST_TX_DATA_END + COST_TX_PAD + TX_FUSE_END * 3 / 2 < 256
 COST_CLASSIFY	EQU	125	; Ethernet/ARP/IPv4 checks and the IP header checksum (109 us)
 COST_SUM0	EQU	140	; pseudo header + up to 30 segment bytes in scratch (123 us)
 COST_ACCEPT	EQU	200	; transport accept: ports, state, header fields (179 us)
 COST_STORE	EQU	150	; payload placement in the RX ring (TCP, 131 us)
+	IFDEF	UGB_TP_UDP
+COST_FINISH	EQU	90	; checksum verdict + the datagram's publication (73 us)
+	ELSE
 COST_FINISH	EQU	175	; checksum verdict + transport input: payload over RX slots, FIN (156 us; TCP ACK: ERX_TCPACK)
+	ENDIF
 COST_PREPARE	EQU	75	; NIC_PREPARE + bring-up deadline (58 us)
 COST_POLL	EQU	COST_PORTION + PROF_POLL_EXTRA_US	; status poll that may find a frame (RTL 131 us)
+	IFDEF	UGB_SHORT
+COST_ARP_PULL	EQU	140	; ARP frame into ctx.txh and the fuse decision behind it (124 us)
+COST_TP_PULL	EQU	140	; UDP: IPv4 + UDP header with checksums, the fuse decision behind it (126 us)
+	ELSE
 COST_ARP_PULL	EQU	125	; ARP frame into ctx.txh (109 us)
 COST_TP_PULL	EQU	130	; UDP: IPv4 + UDP header with checksums (110 us)
+	ENDIF
 BRINGUP_MS	EQU	3000	; whole bring-up deadline
 TX_TIMEOUT_MS	EQU	50	; transmit completion
 	ASSERT	COST_POLL <= PROF_MAX_ITEM_US && COST_BRINGUP <= PROF_MAX_ITEM_US
@@ -91,7 +148,96 @@ HW_RUN
 	CALL	ETH_RX_STEP
 	LD	(IY+CX_SCHED_ITEMS),0xFF
 	JP	ETH_TX_STEP
+	IFDEF	UGB_CONT
+; Further passes (profile.inc UGB_CONT): after a pass whose start or end
+; saw a frame in progress, the whole order runs again while COST_PASS
+; and the TX completion check fit (the dispatchers check the cost of
+; whatever else comes before its TAKE) -- at most ETH_PASSES passes, and a pass that
+; took no item ends the STEP.  The events of a pass are published before
+; the next one (a TX_DONE or RX_READY a later pass would push past the
+; budget).  COST_PASS pays the dispatch of a further pass (the checks of
+; ETH_PASS that no item pays for).  A pass with RX idle at both ends
+; leaves the later passes without a poll (USCH_POLLED: the card was just
+; seen empty); a pass with a frame in it lets the next poll again.
+; Only a scheduler that starts with PROF_CONT_MIN_US units or more runs
+; them, with PROF_CONT_DEC_US set aside for the loop at once
+; (profile.inc): the plain STEP of a small budget keeps its one pass and
+; pays one test.
+ETH_PASSES	EQU	4
+COST_PASS	EQU	40	; (stand: within 40 with pieces of 1..88 bytes; GUDPRTL, tried, needed 80)
 ETH_SCHED
+	LD	A,(IY+CX_UNITS+1)
+	CP	HIGH PROF_CONT_MIN_US
+	JP	C,ETH_PASS1		; one pass: not even the check of a further one
+	LD	A,(IY+CX_UNITS)
+	SUB	PROF_CONT_DEC_US
+	LD	(IY+CX_UNITS),A
+	JR	NC,.dec
+	DEC	(IY+CX_UNITS+1)
+.dec
+	LD	B,ETH_PASSES
+.pass
+	LD	A,(IY+EX_RXS)
+	LD	D,A			; RX at the start
+	OR	(IY+EX_TXS)
+	LD	C,A			; a frame in progress at the start
+	PUSH	BC
+	PUSH	DE
+	CALL	ETH_PASS
+	CALL	EV_FLUSH
+	POP	DE
+	POP	BC
+	DEC	B
+	RET	Z
+	LD	A,(IY+EX_RXS)
+	OR	D
+	LD	D,A			; RX busy at the start or the end
+	OR	(IY+EX_TXS)
+	OR	C
+	RET	Z			; idle before and after: nothing more to do
+	LD	HL,COST_PASS + COST_TX_WAIT
+	CALL	UNITS_FIT
+	RET	C
+	PUSH	BC
+	PUSH	DE
+	LD	HL,COST_PASS
+	CALL	TAKE
+	POP	DE
+	POP	BC
+	RET	C
+	; per pass: the STEP's parity and short-path decision stay; RX idle
+	; at both ends: the card was polled and found empty -- no poll again
+	LD	A,(IY+CX_SCHED_FLAGS)
+	AND	(1 << USCH_ODD) | (1 << USCH_ODD2) | (1 << USCH_SHORT)
+	INC	D
+	DEC	D
+	JR	NZ,.flags
+	SET	USCH_POLLED,A
+.flags
+	LD	(IY+CX_SCHED_FLAGS),A
+	; a frame on the wire is checked first: its completion frees the
+	; pipeline for the next frame of this pass (an odd pass would poll
+	; first and leave the check no budget); not complete yet -- TX
+	; stops for this pass
+	LD	A,(IY+EX_TXS)
+	CP	ETX_WAIT
+	JR	NZ,.pass
+	PUSH	BC
+	CALL	ETH_TX_PHASE
+	POP	BC
+	LD	A,(IY+EX_TXS)
+	CP	ETX_WAIT
+	JR	NZ,.pass
+	SET	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	JR	.pass
+ETH_PASS
+	; a further pass after a poll that found nothing: no poll, no reserve
+	BIT	USCH_POLLED,(IY+CX_SCHED_FLAGS)
+	JR	NZ,ETH_PASS1.no_rsvd
+ETH_PASS1
+	ELSE
+ETH_SCHED
+	ENDIF
 	; sched_flags: EXP_STEP cleared it (only USCH_ODD / USCH_ODD2 set)
 	; 1. poll first (odd STEPs) or poll reserve
 	LD	A,(IY+EX_RXS)
@@ -133,6 +279,13 @@ ETH_SCHED
 .no_rsvd
 	; 2. frames in progress
 	SET	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	IFDEF	UGB_TXFIRST
+	BIT	USCH_BIG,(IY+CX_SCHED_FLAGS)
+	JR	Z,.plain_order		; a small STEP: the plain order (sched.asm)
+	CALL	ETH_FIRST		; CF=1: RX's turn, the plain order
+	JR	NC,.first_end
+.plain_order
+	ENDIF
 	BIT	USCH_ODD,(IY+CX_SCHED_FLAGS)
 	JR	Z,.tx_cont
 	CALL	ETH_RX_CONT
@@ -147,6 +300,9 @@ ETH_SCHED
 	CALL	TP_IF_RUNNING
 	; 4. TX: a new frame and its portions
 	CALL	ETH_TX_PHASE
+	IFDEF	UGB_TXFIRST
+.first_end
+	ENDIF
 	; 5. the card poll and a frame it finds (the reserve is given back
 	; first: what stopped for lack of budget may fit again)
 	BIT	USCH_POLL_RSVD,(IY+CX_SCHED_FLAGS)
@@ -192,6 +348,98 @@ ETH_TX_PHASE
 	RET	NC
 	SET	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
 	RET
+
+	IFDEF	UGB_TXFIRST
+; ETH_FIRST (ETH_SCHED step 2 of a USCH_BIG STEP, UGB_TXFIRST, USCH_CONT
+; set): steps 2-4 in
+; the order TX, transport, new TX, RX.  Out: CF=1 nothing done, the plain
+; order follows (a long RX frame, or RX's turn); CF=0 done.
+; Clobbers A, BC, DE, HL, IX.
+ETH_FIRST
+	; TX first (a game's input must not wait for a state being received):
+	; the TX frame in progress, the transport, a new TX frame up to its
+	; start on the wire -- then the RX frame in progress.  In front of a
+	; busy RX only when its frame is short (below 256 bytes: reading a
+	; frame costs more per byte than writing one, so long frames keep the
+	; plain order or the ring overflows under a stream), when no other
+	; frame waits behind it on the card (HS_BEHIND: RX keeps up), with at
+	; most ETH_FIRST_ITEMS card items (a small frame whole) and not in
+	; two STEPs running (RF_TXPRI)
+	LD	A,(IY+EX_RXS)
+	OR	A
+	LD	A,0xFF
+	JR	NZ,.rx_busy
+	; RX idle: nobody waits behind TX.  RF_TXPRI means the last STEP
+	; only: left set here, it gave the next busy RX (a state, 4 STEPs
+	; later) the front and the input committed before it waited a STEP
+	; (TX_DONE three STEPs late, the next input skipped: 23 of 251 on the
+	; board, 26 of 250 in MAME at some phases)
+	RES	RF_TXPRI,(IY+EX_RFLAGS)
+	JR	.first_n
+.rx_busy
+	LD	A,(IY+EX_RXLEN+1)
+	OR	A
+	SCF
+	RET	NZ			; a long frame being received
+	LD	A,(IY+EX_BEHIND)
+	OR	A
+	SCF
+	RET	NZ			; more frames wait on the card: RX first
+	BIT	RF_TXPRI,(IY+EX_RFLAGS)
+	RES	RF_TXPRI,(IY+EX_RFLAGS)	; (keeps Z)
+	SCF
+	RET	NZ			; TX had the front last STEP: RX's turn
+	LD	A,ETH_FIRST_ITEMS
+.first_n
+	LD	(IY+CX_SCHED_ITEMS),A
+	RES	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	LD	A,(IY+EX_TXS)
+	OR	A
+	JR	Z,.first_tp		; idle
+	CP	ETX_WAIT
+	CALL	NZ,ETH_TX_FIRST		; (on the wire: the check is the TX phase's)
+.first_tp
+	; 3. transport
+	CALL	TP_IF_RUNNING
+	; 4. TX: a new frame and its portions
+	CALL	ETH_TX_FIRST
+	; TX still busy in front of a busy RX: RX goes first next STEP
+	LD	A,(IY+EX_RXS)
+	OR	A
+	JR	Z,.first_rx
+	LD	A,(IY+EX_TXS)
+	OR	A
+	JR	Z,.first_rx
+	SET	RF_TXPRI,(IY+EX_RFLAGS)
+.first_rx
+	SET	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	CALL	ETH_RX_CONT
+	RES	USCH_CONT,(IY+CX_SCHED_FLAGS)
+	OR	A			; CF=0: done
+	RET
+
+; ETH_TX_FIRST: the TX phase in front of the RX frame in progress
+; (UGB_TXFIRST): as ETH_TX_PHASE, but within the items ETH_SCHED left in
+; CX_SCHED_ITEMS (none left: nothing).  Clobbers A, BC, DE, HL, IX.
+ETH_FIRST_ITEMS	EQU	4		; BEGIN, two DATA portions (header, payload), END
+ETH_TX_FIRST
+	LD	A,(IY+CX_SCHED_ITEMS)
+	OR	A
+	RET	Z			; the share in front of RX is used up
+	BIT	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	RET	NZ			; stopped earlier in this STEP
+	LD	A,(IY+EX_TXS)
+	OR	A
+	JR	NZ,.busy		; the dispatcher checks the item's cost itself
+	LD	E,ETH_MIN_ITEM		; idle: the cheapest pull must fit
+	CALL	ETH_AFFORD_E
+	RET	C
+.busy
+	CALL	ETH_TX_STEP
+	RET	NC
+	SET	USCH_TX_STOP,(IY+CX_SCHED_FLAGS)
+	RET
+	ENDIF
 
 ; ETH_RX_CONT / ETH_TX_CONT: continue a frame in progress (USCH_CONT), at
 ; most ETH_CONT_ITEMS items while the other pipeline is busy too.  A
@@ -280,8 +528,42 @@ ETH_RX_STEP
 	; returns straight into the state routine; every routine starts with
 	; RET C (refused: back to .next with CF=1) and sets its own IX after
 	; it (TAKE clobbers A, DE, HL).
+	IFDEF	UGB_SHORT
+	; Short path.  A frame whose last byte was read is dropped by the
+	; card in that same portion (RXP_POLL / RXP_COPY set bit 7 of
+	; HS_RXLEN+1): its ERX_DISCARD is no item.
+	LD	A,(IY+EX_RXS)
+	CP	ERX_DISCARD
+	JR	NZ,.item
+	BIT	7,(IY+EX_RXLEN+1)
+	JR	Z,.item
+	LD	(IY+EX_RXS),ERX_IDLE
+	LD	A,1			; CF=0 (CP of equals), one frame finished
+	RET
+.item
+	; a small datagram whole in scratch is verified and
+	; published as one item (udp.asm); CF=1 leaves it to the states below
+	CP	ERX_HDR
+	JR	NZ,.states
+	BIT	USCH_SHORT,(IY+CX_SCHED_FLAGS)
+	JR	Z,.states
+	LD	A,(IY+CX_UNITS)		; (its cost checked here: a refusal
+	SUB	LOW COST_UDP_RX_FAST	; must stay cheap -- it is the tail of
+	LD	A,(IY+CX_UNITS+1)	; the header item)
+	SBC	A,HIGH COST_UDP_RX_FAST
+	JR	C,.states
+	CALL	UDP_RX_FAST
+	JR	C,.states
+	XOR	A			; an item; the frame's ERX_DISCARD follows
+	RET
+.states
+	ENDIF
 	CALL	RX_ENTRY		; HL -> {cost, routine}
 	LD	E,(HL)
+	IFDEF	UGB_BYTECOST
+	BIT	USCH_BIG,(IY+CX_SCHED_FLAGS)
+	CALL	NZ,RX_BYTECOST
+	ENDIF
 	CALL	ETH_AFFORD_E		; a refusal without the dispatch and TAKE
 	RET	C
 	INC	HL
@@ -309,17 +591,6 @@ ETH_RX_STEP
 	RET	C
 	CALL	TP_RX_STORE
 	XOR	A
-	RET
-.disc_wait
-	RET	C
-	LD	HL,RXP_DISC_WAIT
-	CALL	RUN_PORTION
-	RET	C
-	LD	A,(IY+EX_RXS)
-	OR	A
-	SCF
-	RET	NZ			; still discarding: next STEP
-	LD	A,1			; CF=0 (OR A), one frame finished
 	RET
 .poll
 	RET	C
@@ -355,6 +626,11 @@ ETH_RX_STEP
 	RET
 .finish
 	RET	C
+	IFDEF	UGB_SHORT
+	CALL	ETH_RX_VERDICT		; (shared with udp.asm UDP_RX_MID)
+	XOR	A
+	RET
+	ELSE
 	HWSM_IX
 	LD	A,1
 	BIT	0,(IX+HS_NOCHK)		; UDP with checksum 0: nothing to verify
@@ -373,6 +649,7 @@ ETH_RX_STEP
 	CALL	TP_RX_COMMIT		; A = 1 valid, 0 corrupt
 	XOR	A
 	RET
+	ENDIF
 .tcpack
 	; TCP: the ACK of the committed segment as its own item (its TC_RX*
 	; fields live until the next ACCEPT: the frame is still on the card)
@@ -386,8 +663,25 @@ ETH_RX_STEP
 	LD	HL,RXP_DISCARD
 	CALL	RUN_PORTION
 	RET	C
+	IFDEF	UGB_NODW
+	LD	A,1			; CF=0, one frame finished (no wait state)
+	ELSE
 	XOR	A
+	ENDIF
 	RET
+	IFNDEF	UGB_NODW
+.disc_wait
+	RET	C
+	LD	HL,RXP_DISC_WAIT
+	CALL	RUN_PORTION
+	RET	C
+	LD	A,(IY+EX_RXS)
+	OR	A
+	SCF
+	RET	NZ			; still discarding: next STEP
+	LD	A,1			; CF=0 (OR A), one frame finished
+	RET
+	ENDIF
 ; per ERX_* state: cost of its item (units), routine
 .tab
 	DB	COST_POLL
@@ -401,7 +695,11 @@ ETH_RX_STEP
 	DB	COST_PORTION
 	DW	.discard		; ERX_DISCARD
 	DB	COST_PORTION
+	IFDEF	UGB_NODW
+	DW	.discard		; ERX_DISC_WAIT (not entered: UGB_NODW)
+	ELSE
 	DW	.disc_wait		; ERX_DISC_WAIT
+	ENDIF
 	DB	COST_RX_HEADER
 	DW	.header			; ERX_HDR_READ
 	DB	COST_ACCEPT
@@ -421,6 +719,28 @@ ETH_RX_STEP
 	ASSERT	COST_PORTION < 256 && COST_ACCEPT < 256 && COST_STORE < 256 && COST_SUM0 < 256
 RX_TAB	EQU	.tab
 
+	IFDEF	UGB_SHORT
+; ETH_RX_VERDICT (ERX_FINISH): the checksum verdict and the transport's
+; commit (publication).  Clobbers A, BC, DE, HL, IX.
+ETH_RX_VERDICT
+	HWSM_IX
+	LD	A,1
+	BIT	0,(IX+HS_NOCHK)		; UDP with checksum 0: nothing to verify
+	JR	NZ,.verdict
+	LD	L,(IX+HS_SUM)
+	LD	H,(IX+HS_SUM+1)
+	LD	A,H
+	AND	L
+	INC	A			; Z <=> sum == 0xFFFF
+	LD	A,1
+	JR	Z,.verdict
+	STAT_INC UNETG_STATS_DROP_CHECKSUM
+	XOR	A
+.verdict
+	LD	(IY+EX_RXS),ERX_DISCARD	; TCP may continue with ERX_TCPACK
+	JP	TP_RX_COMMIT		; A = 1 valid, 0 corrupt
+	ENDIF
+
 ; RX_ENTRY: HL -> RX_TAB entry of the current RX state.  Clobbers A.
 RX_ENTRY
 	LD	A,(IY+EX_RXS)
@@ -433,6 +753,29 @@ RX_ENTRY
 	ADC	A,0
 	LD	H,A
 	RET
+
+	IFDEF	UGB_BYTECOST
+; RX_BYTECOST (a USCH_BIG STEP): in ERX_COPY E = COST_RXC_FIXED + 2 n,
+; n = min(HS_RXREM, NIC_CHUNK_RX) -- the most the next portion reads (it
+; may read fewer: a ring end, the stored part's end); any other state
+; keeps the table cost in E.  Clobbers A.
+RX_BYTECOST
+	LD	A,(IY+EX_RXS)
+	CP	ERX_COPY
+	RET	NZ			; another state: the table cost
+	LD	A,(IY+EX_RXREM+1)
+	OR	A
+	LD	A,NIC_CHUNK_RX
+	JR	NZ,.n
+	CP	(IY+EX_RXREM)
+	JR	C,.n
+	LD	A,(IY+EX_RXREM)
+.n
+	ADD	A,A
+	ADD	A,COST_RXC_FIXED
+	LD	E,A
+	RET
+	ENDIF
 
 ; (P) poll the card; when a frame waits, read its first bytes into scratch.
 RXP_POLL
@@ -461,10 +804,36 @@ RXP_POLL
 	SBC	HL,DE
 	POP	HL
 	JR	NC,.bad
+	IFDEF	UGB_SHORT_EL3
+	; 3C509B: the header in this same portion when its cost fits (the
+	; status read is short: both stay inside the DI limit); otherwise
+	; ERX_HDR_READ is the next item.  No refusal flag: nothing is refused.
+	BIT	USCH_SHORT,(IY+CX_SCHED_FLAGS)
+	RET	Z
+	LD	HL,COST_RX_HDR_FUSED
+	CALL	SHORT_TAKE
+	RET	C
+	CALL	RXP_HEADER
+	; the whole frame is in scratch: the card drops it in this portion
+	; (bit 7 of HS_RXLEN+1: the later ERX_DISCARD is no item)
+	LD	A,(IX+HS_RXLEN+1)
+	OR	A
+	RET	NZ
+	LD	A,(IX+HS_RXLEN)
+	CP	RX_HDR_BYTES + 1
+	RET	NC
+	CALL	NIC_RX_DISCARD
+	SET	7,(IX+HS_RXLEN+1)
+	RET
+	ELSE
 	RET				; header read in the next portion
+	ENDIF
 .bad
 	STAT_INC UNETG_STATS_DROP_SIZE
 	LD	(IX+HS_RXS),ERX_DISCARD
+	IFDEF	UGB_SHORT
+	RES	7,(IX+HS_RXLEN+1)	; (an error frame leaves the length of the last one)
+	ENDIF
 	RET
 
 ; (P) read the first bytes of the waiting frame into scratch.
@@ -577,6 +946,15 @@ RXP_COPY
 	OR	(IX+HS_RXREM+1)
 	RET	NZ
 	LD	(IX+HS_RXS),ERX_FINISH
+	IFDEF	UGB_SHORT
+	; the segment's last byte: the card drops the frame in this portion
+	; when the portion was short enough to pay for it (E = its bytes)
+	LD	A,E
+	CP	NIC_CHUNK_RX - RX_DISC_BYTES + 1
+	RET	NC
+	CALL	NIC_RX_DISCARD
+	SET	7,(IX+HS_RXLEN+1)
+	ENDIF
 	RET
 .chunk_of_hl				; B = E = min(HL, NIC_CHUNK_RX), HL > 0
 	LD	A,H
@@ -846,9 +1224,15 @@ NIC_PORT_READ
 	RET
 
 
-; (P) drop the rest of the frame
+; (P) drop the rest of the frame (UGB_NODW: no wait state -- the 3C509B
+; short path's card answers "no frame" until it has done so, the RTL8019AS
+; drops a frame with its BNRY write)
 RXP_DISCARD
 	CALL	NIC_RX_DISCARD
+	IFDEF	UGB_NODW
+	LD	(IX+HS_RXS),ERX_IDLE
+	RET
+	ELSE
 	LD	(IX+HS_RXS),ERX_DISC_WAIT
 	RET
 RXP_DISC_WAIT
@@ -856,6 +1240,7 @@ RXP_DISC_WAIT
 	RET	C
 	LD	(IX+HS_RXS),ERX_IDLE
 	RET
+	ENDIF
 
 ; ----------------------------------------------------------------------
 ; ETH_CLASSIFY: header of the frame in ctx.scratch (main, no card access).
@@ -921,6 +1306,11 @@ ETH_CLASSIFY
 	INC	HL
 	LD	H,(HL)
 	LD	L,A			; HL = frame length from the card
+	IFDEF	UGB_SHORT
+	LD	A,H
+	AND	0x07			; (bits 6 and 7 of HS_RXLEN+1 are flags)
+	LD	H,A
+	ENDIF
 	OR	A
 	SBC	HL,DE
 	POP	BC			; BC = segment length
@@ -1088,9 +1478,18 @@ ETH_TX_STEP
 	LD	(IX+HS_TXKIND),A
 	LD	(IX+HS_TXS),ETX_BEGIN
 .busy
+	IFDEF	UGB_SHORT
+	; a fused portion when its cost fits (short path), else the plain item
+	CALL	TX_FUSE
+	JR	NC,.run
+	ENDIF
 	; table dispatch as in ETH_RX_STEP: TAKE returns into the routine
 	CALL	TX_ENTRY		; HL -> {cost, routine}
 	LD	E,(HL)
+	IFDEF	UGB_BYTECOST
+	BIT	USCH_BIG,(IY+CX_SCHED_FLAGS)
+	CALL	NZ,TX_BYTECOST
+	ENDIF
 	CALL	ETH_AFFORD_E		; a refusal without the dispatch and TAKE
 	RET	C
 	INC	HL
@@ -1174,6 +1573,51 @@ ETH_TX_STEP
 	ASSERT	COST_TX_BEGIN < 256 && COST_TX_CHUNK < 256 && COST_TX_WAIT < 256 && COST_TX_END < 256
 TX_TAB	EQU	.tab - 3		; indexed from ETX_IDLE
 
+	IFDEF	UGB_BYTECOST
+; TX_BYTECOST (a USCH_BIG STEP): E = the cost of the current TX state's item by what it
+; moves: DATA COST_TXD_FIXED + 3/2 n (n = the bytes of the next portion:
+; header bytes first, then payload, at most NIC_CHUNK, as TXP_DATA picks
+; them), END COST_TX_END_NOPAD for a frame that needs no padding; any
+; other state keeps the table cost in E.  Keeps HL.  Clobbers A, IX.
+TX_BYTECOST
+	LD	A,(IY+EX_TXS)
+	CP	ETX_DATA
+	JR	Z,.data
+	CP	ETX_END
+	RET	NZ
+	HWSM_IX
+	LD	A,(IX+HS_TXLEN+1)
+	OR	A
+	JR	NZ,.nopad
+	LD	A,(IX+HS_TXLEN)
+	CP	ETH_MIN_FRAME
+	RET	C			; padded: the table cost
+.nopad
+	LD	E,COST_TX_END_NOPAD
+	RET
+.data
+	HWSM_IX
+	LD	A,(IX+HS_TXHDR)
+	OR	A
+	JR	NZ,.n
+	LD	A,(IX+HS_TXREM+1)
+	OR	A
+	LD	A,NIC_CHUNK
+	JR	NZ,.n
+	LD	A,(IX+HS_TXREM)
+.n
+	CP	NIC_CHUNK
+	JR	C,.fit
+	LD	A,NIC_CHUNK
+.fit
+	LD	E,A
+	SRL	A
+	ADD	A,E
+	ADD	A,COST_TXD_FIXED
+	LD	E,A
+	RET
+	ENDIF
+
 ; TX_ENTRY: HL -> TX_TAB entry of the current (busy) TX state.  Clobbers A.
 TX_ENTRY
 	LD	A,(IY+EX_TXS)
@@ -1186,6 +1630,87 @@ TX_ENTRY
 	ADC	A,0
 	LD	H,A
 	RET
+
+	IFDEF	UGB_SHORT
+; TX_FUSE: the fused portion of the current TX state of a small frame,
+; taken only when its cost fits: BEGIN with the first DATA portion, then
+; the payload (1..TX_FUSE_END bytes) with END -- two card portions for the
+; whole frame.  Never all three in one DI section.
+; Out: CF=0: HL = the portion routine, its cost taken; CF=1: nothing
+; taken, no refusal flag.  Clobbers A, BC, DE, HL, IX.
+TX_FUSE
+	BIT	USCH_SHORT,(IY+CX_SCHED_FLAGS)
+	SCF
+	RET	Z			; a small budget: the plain items
+	LD	A,(IY+EX_TXS)
+	CP	ETX_END
+	CCF
+	RET	C			; END / WAIT: nothing to fuse
+	HWSM_IX				; (keeps A)
+	LD	C,A
+	; only a small frame (TX_FUSE_FRAME: a header and one short payload
+	; portion): both fusions then pay for the short path's share, and
+	; the portions of a long frame leave here at once
+	LD	A,(IX+HS_TXLEN+1)
+	OR	A
+	SCF
+	RET	NZ
+	LD	A,TX_FUSE_FRAME
+	CP	(IX+HS_TXLEN)
+	RET	C
+	LD	A,C
+	CP	ETX_BEGIN
+	JR	Z,TX_FUSE_BEGIN
+	; DATA: only the last portion, only payload and only a short one
+	LD	A,(IX+HS_TXHDR)
+	OR	A
+	SCF
+	RET	NZ
+	LD	B,(IX+HS_TXREM)		; its bytes (the frame is small: no high byte)
+	LD	A,TX_FUSE_END
+	CP	B
+	RET	C			; too long to share a DI section with END
+	LD	C,COST_TX_DATA_END
+	LD	A,(IX+HS_TXLEN)
+	CP	ETH_MIN_FRAME
+	JR	NC,.full
+	LD	C,COST_TX_DATA_END + COST_TX_PAD
+.full
+	CALL	TX_COST
+	CALL	SHORT_TAKE
+	RET	C
+	LD	HL,TXP_DATA_END
+	RET
+TX_FUSE_BEGIN
+	LD	A,(IX+HS_TXLEN)
+	SUB	(IX+HS_TXHDR)
+	SCF
+	RET	Z			; no payload (ARP, a bare TCP header): END stays alone
+	CP	TX_FUSE_END + 1
+	CCF
+	RET	C			; (its payload portion would not fuse with END)
+	LD	A,(IX+HS_TXHDR)		; bytes of the first DATA portion
+	CP	NIC_CHUNK
+	JR	C,.n
+	LD	A,NIC_CHUNK
+.n
+	LD	B,A
+	LD	C,COST_TX_BEGIN_DATA
+	CALL	TX_COST
+	CALL	SHORT_TAKE
+	RET	C
+	LD	HL,TXP_BEGIN_DATA
+	RET
+; TX_COST: HL = C + B * 3 / 2.  Clobbers A.
+TX_COST
+	LD	A,B
+	SRL	A
+	ADD	A,B
+	ADD	A,C
+	LD	L,A
+	LD	H,0
+	RET
+	ENDIF
 
 ; ETH_TX_COPYING: CF=1 while the TX pipeline still reads the payload of a
 ; transport frame out of an application TX slot (EV_FLUSH then holds the
@@ -1224,6 +1749,15 @@ TXP_BEGIN
 	LD	(IX+HS_TXS),ETX_DATA	; HS_TXREM >= the header (> 0)
 	RET
 
+	IFDEF	UGB_SHORT
+; (P) fused: BEGIN and, when the card took the frame, its first DATA portion
+TXP_BEGIN_DATA
+	CALL	TXP_BEGIN
+	LD	A,(IX+HS_TXS)
+	CP	ETX_DATA
+	RET	NZ			; no room: BEGIN again next STEP
+	; falls into TXP_DATA
+	ENDIF
 ; (P) one portion of the frame: header bytes from HS_TXHSRC first, then
 ; the payload from HS_TXSRC, at most NIC_CHUNK each (a portion never
 ; mixes the two: one remote DMA per portion)
@@ -1283,6 +1817,12 @@ TXP_DATA
 	LD	(IX+HS_TXS),ETX_END
 	RET
 
+	IFDEF	UGB_SHORT
+; (P) fused: the last DATA portion, then END
+TXP_DATA_END
+	CALL	TXP_DATA
+	; falls into TXP_END
+	ENDIF
 ; (P) pad, start, arm the completion deadline
 TXP_END
 	CALL	NIC_TX_END

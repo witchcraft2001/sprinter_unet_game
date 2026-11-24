@@ -3,9 +3,9 @@
   "dll": "gtcprtl",
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
-  "scenario": "Q T at the SDK default quota (2 STEPs per period, quota sum <= 2000 us)",
-  "wall_s": 32.3,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 21298",
+  "scenario": "Q T at the SDK default profile (2 STEPs of the minimum budget per period)",
+  "wall_s": 32.7,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 20083",
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -16,34 +16,34 @@
   },
   "env": {
     "init_config": 0,
-    "env": 0,
-    "quota_sum_us": 2000
+    "env": 1,
+    "quota_sum_us": 4792
   },
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1071,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 950,
+      "main": 2382,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 475,
-    "periods": 665,
-    "largest_period_debit_us": 1900,
-    "now_ms": 13302,
+    "cost_poll_us": 231,
+    "cost_step_us": 1191,
+    "periods": 660,
+    "largest_period_debit_us": 4692,
+    "now_ms": 13202,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1331,
-      "early": 6789,
-      "frames": 507,
-      "ticks": 6654,
+      "step": 1321,
+      "early": 6721,
+      "frames": 525,
+      "ticks": 6604,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,11 +58,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 6735,
+    "polls_total": 6684,
     "polls_useful": 69,
-    "steps_total": 1331,
-    "steps_useful": 1331,
-    "budget_yields": 1292,
+    "steps_total": 1321,
+    "steps_useful": 1321,
+    "budget_yields": 1294,
     "max_step_gap_ms": 12,
     "drop_foreign": 1,
     "arp_requests": 1,
@@ -72,29 +72,29 @@
     "rx_bytes": 5824
   },
   "timing_us": {
-    "tick_isr_max": 308,
-    "admitted_ug_step_max": 1271,
-    "largest_tick_gap": 2018,
+    "tick_isr_max": 309,
+    "admitted_ug_step_max": 1288,
+    "largest_tick_gap": 2026,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 12.8 s)",
+  "clock": "CLOCK_RATE 0.994 now_ms per emulated ms, TICK_MS 2.012, FRAME_MS 20.480, STEP_CALLS_PER_S 99 (over 12.8 s)",
   "hw": {
     "latms": [
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 236,
-        "txdone_mean_ms": 204.4,
-        "echo_max_ms": 338,
-        "echo_mean_ms": 310.9
+        "txdone_max_ms": 218,
+        "txdone_mean_ms": 201.2,
+        "echo_max_ms": 320,
+        "echo_mean_ms": 307.5
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 334,
-        "txdone_mean_ms": 280.2,
-        "echo_max_ms": 530,
-        "echo_mean_ms": 466.8
+        "txdone_max_ms": 360,
+        "txdone_mean_ms": 276.4,
+        "echo_max_ms": 546,
+        "echo_mean_ms": 463.6
       }
     ]
   }

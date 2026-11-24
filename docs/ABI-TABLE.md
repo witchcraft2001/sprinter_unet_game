@@ -60,7 +60,7 @@
 
 **cfgf:** `HAS_EXPIRY`=0x01, `ALLOW_PROBE`=0x02, `CBL_QUALIFIED`=0x04, `FLOW_VERIFIED`=0x08
 
-**cap:** `POLL`=0x01, `AUTO`=0x02, `IRQ_ROUTE_QUALIFIED`=0x04, `TCP`=0x08, `UDP`=0x10, `LOOPBACK`=0x20, `CHECKSUM_VERIFY`=0x40, `FLOW_CONTROL_REQUIRED`=0x80, `NATIVE_RTO`=0x0100, `PROBE`=0x0200
+**cap:** `POLL`=0x01, `AUTO`=0x02, `IRQ_ROUTE_QUALIFIED`=0x04, `TCP`=0x08, `UDP`=0x10, `LOOPBACK`=0x20, `CHECKSUM_VERIFY`=0x40, `FLOW_CONTROL_REQUIRED`=0x80, `NATIVE_RTO`=0x0100, `PROBE`=0x0200, `ESP_TRANSPARENT`=0x0400
 
 **route:** `NO_ROUTE`=0x00, `POLL_PRE_PROBE`=0x01, `PROBING`=0x02, `IRQ_ENABLED`=0x03, `IRQ_SUSPECT`=0x04, `POLL_FALLBACK`=0x05, `IRQ_UNCONFIRMED`=0x06
 
@@ -72,7 +72,7 @@
 
 **avail:** `MAX_STEP_GAP`=0x01, `MAX_CALL_TIME`=0x02, `MAX_DI`=0x04, `MAX_SERVICE_GAP`=0x08
 
-**limits:** `TCP_MSS`=0x0218, `UDP_MAX`=0x0200, `EVENT_SIZE`=0x08, `SLOTS_MIN`=0x04, `EVENT_EXTRA`=0x04, `UART_RING_MIN`=0x0200, `STEP_BODY_MAX_US`=0x07D0, `ISR_BODY_MAX_US`=0x96, `STACK_MAIN_MAX`=0x0100, `STACK_ISR_MAX`=0x60, `TAG_RESERVED`=0xFFFF, `SLOT_NONE`=0xFF, `CHANNEL_GLOBAL`=0xFF, `DEADLINE_NONE`=0xFFFF, `DEADLINE_MAX`=0xFFFE
+**limits:** `TCP_MSS`=0x0218, `UDP_MAX`=0x0200, `EVENT_SIZE`=0x08, `SLOTS_MIN`=0x04, `EVENT_EXTRA`=0x04, `UART_RING_MIN`=0x0200, `STEP_BODY_MAX_US`=0x0BB8, `ISR_BODY_MAX_US`=0x0172, `STACK_MAIN_MAX`=0x0100, `STACK_ISR_MAX`=0x60, `TAG_RESERVED`=0xFFFF, `SLOT_NONE`=0xFF, `CHANNEL_GLOBAL`=0xFF, `DEADLINE_NONE`=0xFFFF, `DEADLINE_MAX`=0xFFFE
 
 ## INIT_CONFIG v1.0 (134 байт)
 
@@ -105,7 +105,7 @@
 | 52 | `uart_divisor` | u16 | 16550 divisor (8 = 115200 at 14.7456 MHz) |
 | 54 | `uart_flow` | u8 | local 16550: 0 none, 1 AFE RTS/CTS |
 | 55 | `esp_flow` | u8 | ESP side: 0 none, 3 RTS/CTS (AT+UART_CUR) |
-| 56 | `esp_fw` | u8 | 1 = ESP-AT 2.2.2 passive TCP profile |
+| 56 | `esp_fw` | u8 | 1 = ESP-AT 2.2.2 command profile; 2 = transparent UDP (GUDPESP, CAP_ESP_TRANSPARENT) |
 | 57 | `uart_rx_trigger` | u8 | FIFO trigger: 1, 4, 8, 14 |
 | 58 | `connect_timeout_ms` | u16 | 5000 |
 | 60 | `retry_count` | u8 | 4; schedule length = retry_count + 1 <= 8 |
@@ -163,7 +163,7 @@
 | 26 | `irq_delivery_us` | u16 | probe observation window |
 | 28 | `max_service_gap_us` | u16 | physical limit of the profile |
 | 30 | `max_step_gap_ms` | u16 | 20 for the game profile |
-| 32 | `step_body_max_us` | u16 | 2000: the largest step_budget_us accepted |
+| 32 | `step_body_max_us` | u16 | 3000: the largest step_budget_us accepted |
 | 34 | `isr_body_max_us` | u16 | 150 |
 | 36 | `stack_main_max` | u16 | bytes, all branches |
 | 38 | `stack_isr_max` | u16 | bytes, all branches |

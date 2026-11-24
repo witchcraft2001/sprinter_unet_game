@@ -4,12 +4,13 @@
 // sequence offset and report checksum failures and retransmissions.
 // Usage: node tools/dev/tcpcheck.js gtcp509b [bytes] [budget]
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { boot, bytes, has } = require('../../tests/z/hw/eth_scenarios.js');
 const { be16, be32 } = require('../harness/net/peer.js');
 const dll = process.argv[2] || 'gtcp509b';
 const total = +(process.argv[3] || 8192);
 const budget = +(process.argv[4] || 500);
-const s = boot(dll, {}, { budget });
+const s = boot(dll, {}, { budget: US(budget) });
 s.open(); s.until(has('CONNECTED'));
 const d = bytes(total, 3);
 const orig = s.peer.input.bind(s.peer);

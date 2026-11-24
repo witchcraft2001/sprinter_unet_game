@@ -18,6 +18,7 @@
 // every byte the DLL sends must form a valid command or payload.
 'use strict';
 
+const xrec = require('../net/xrec.js');
 const XIN = 14745600;
 const LSR = { DR: 0x01, OE: 0x02, THRE: 0x20, TEMT: 0x40 };
 
@@ -225,6 +226,16 @@ class EspAt {
     this.recvCap = o.recvCap ?? 0;          // >0: a CIPRECVDATA answer carries at most this many bytes
     this.zeroAnswers = o.zeroAnswers ?? 0;  // next N CIPRECVDATA answers are "+CIPRECVDATA:0,"
     this.mute = false;                      // true: commands get no answer at all
+    // transparent mode (AT+CIPMODE=1, AT+CIPSEND without parameters): the
+    // UART bytes go out as UDP packets cut after xGapUs of silence (after
+    // the LAST byte; xFirst: xGapUs after the FIRST byte of a packet -- the
+    // documentation does not say which) or xMax bytes; "+++" alone between
+    // two silences of xGapUs leaves it, and the next command must wait
+    // xQuietUs (an earlier one is a model error)
+    this.xGapUs = o.xGapUs ?? 20000; this.xFirst = !!o.xFirst; this.xMax = o.xMax ?? 1460;
+    this.xQuietUs = o.xQuietUs ?? 1000000;
+    this.cipmode = 0; this.xdata = false; this.xbuf = []; this.xStart = 0; this.xLast = 0; this.xIdleSince = 0;
+    this.quietUntil = 0; this.escapes = 0; this.xPackets = [];
     this.echo = true; this.mux = 0; this.recvMode = 0; this.dinfo = 1;
     this.line = []; this.dataLeft = 0; this.data = [];
     this.link = null;                       // { proto, held: [], notice }
@@ -234,6 +245,7 @@ class EspAt {
 
   out(t, s) { this.card.emit(t, s); }
   input(b, t) {
+    if (this.xdata) { this.xInput(b, t); return; }
     if (this.dataLeft > 0) {               // CIPSEND payload
       this.data.push(b);
       if (--this.dataLeft === 0) this.sent(t);
@@ -249,8 +261,39 @@ class EspAt {
     }
   }
 
+  // ---- transparent mode ----------------------------------------------------
+  xInput(b, t) {
+    if (!this.xbuf.length) { this.xStart = t; this.xGapBefore = t - this.xLast; }
+    this.xbuf.push(b);
+    this.xLast = t;
+    if (this.xbuf.length >= this.xMax) { this.xFlush(t); return; }
+    const due = (this.xFirst ? this.xStart : t) + this.xGapUs;
+    this.card.at(due, () => this.xCheck());
+  }
+  xCheck() {
+    if (!this.xbuf.length) return;
+    const now = this.card.now();
+    const due = (this.xFirst ? this.xStart : this.xLast) + this.xGapUs;
+    if (now < due) return;
+    const b = this.xbuf;
+    // "+++" alone, with silence before and after: out of the data mode
+    if (b.length === 3 && b.every((x) => x === 0x2b) && this.xGapBefore >= this.xGapUs && now >= this.xLast + this.xGapUs) {
+      this.xbuf = [];
+      this.xdata = false; this.escapes++;
+      this.quietUntil = this.xLast + this.xQuietUs;
+      return;
+    }
+    this.xFlush(now);
+  }
+  xFlush(t) {
+    const d = this.xbuf; this.xbuf = [];
+    this.xPackets.push(d.length);
+    if (this.link) this.peer.receive(this.link, d, t + this.sendUs);
+  }
+
   command(text, t) {
     this.cmds.push(text);
+    if (t < this.quietUntil) this.card.errors.push(`AT command ${JSON.stringify(text)} ${((this.quietUntil - t) / 1000).toFixed(0)} ms too early after "+++"`);
     if (this.mute) return;
     const at = t + this.respUs;
     if (this.echo) this.out(at, text + '\r\n');
@@ -263,8 +306,40 @@ class EspAt {
     if (text === 'ATE0') { this.echo = false; return ok(); }
     if (text === 'ATE1') { this.echo = true; return ok(); }
     if ((m = /^AT\+CIPMUX=([01])$/.exec(text))) {
-      if (this.link) return err();
+      if (this.link || (+m[1] && this.cipmode)) return err();
       this.mux = +m[1]; return ok();
+    }
+    if ((m = /^AT\+CIPMODE=([01])$/.exec(text))) {
+      // MAME esp8266_at: ERROR with CIPMUX=1 or a UDP link not in mode 0
+      if (this.mux) return err();
+      if (+m[1] && this.link && (this.link.proto !== 'UDP' || this.link.udpMode !== 0)) return err();
+      this.cipmode = +m[1]; return ok();
+    }
+    if (text === 'AT+CIPSEND') {
+      if (this.mux || !this.cipmode || !this.link) return err();
+      this.out(at, '\r\nOK\r\n\r\n>');
+      this.xdata = true; this.xbuf = []; this.xLast = at;
+      return;
+    }
+    if (text === 'AT+CIPCLOSE') {
+      if (this.mux || !this.link) return err();
+      this.peer.closedByModule(at);
+      this.link = null;
+      this.out(at, 'CLOSED\r\n');
+      return ok();
+    }
+    if ((m = /^AT\+CIPSTART="UDP","(\d+\.\d+\.\d+\.\d+)",(\d+),(\d+),([012])$/.exec(text))) {
+      if (this.mux) return err();
+      if (this.link) { this.out(at, 'ALREADY CONNECTED\r\n'); return err(); }
+      const conn = { proto: 'UDP', host: m[1], port: +m[2], lport: +m[3], udpMode: +m[4], held: [], notice: false };
+      this.peer.target = conn;
+      if (this.connectFail) { this.card.at(at + this.connectUs, () => this.out(at + this.connectUs, 'CONNECT FAIL\r\n\r\nERROR\r\n')); return; }
+      this.card.at(at + this.connectUs, () => {
+        this.link = conn;
+        this.peer.connected(conn, at + this.connectUs);
+        this.out(at + this.connectUs, 'CONNECT\r\n\r\nOK\r\n');
+      });
+      return;
     }
     if ((m = /^AT\+CIPRECVMODE=([01])$/.exec(text))) {
       if (!v22) return err();
@@ -273,6 +348,7 @@ class EspAt {
     if ((m = /^AT\+CIPDINFO=([01])$/.exec(text))) { this.dinfo = +m[1]; return ok(); }
     if (/^AT\+CIPTCPOPT=\d,-?\d+,[01],\d+$/.test(text)) return v22 ? ok() : err();
     if ((m = /^AT\+CIPCLOSE=([0-5])$/.exec(text))) {
+      if (!this.mux) return err();
       const id = +m[1];
       if (this.link && (id === 0 || id === 5)) {
         this.peer.closedByModule(at);
@@ -327,6 +403,9 @@ class EspAt {
       this.out(at, `+CIPRECVLEN:${n},0,0,0,0\r\n\r\nOK\r\n`);
       return;
     }
+    // "+++" sent to a module in command mode (GUDPESP's bring-up escape):
+    // it prefixes the next command, which the module refuses
+    if (text.startsWith('+++')) return err();
     this.card.errors.push(`unknown AT command: ${JSON.stringify(text)}`);
     return err();
   }
@@ -346,6 +425,11 @@ class EspAt {
   // data from the network for link 0
   arrive(conn, d, t) {
     if (this.link !== conn) return false;
+    if (conn.proto === 'UDP' && this.xdata) { this.out(t, Buffer.from(d)); return true; }
+    if (conn.proto === 'UDP' && !this.mux) {
+      this.out(t, Buffer.concat([Buffer.from(`\r\n+IPD,${d.length}:`, 'latin1'), Buffer.from(d)]));
+      return true;
+    }
     if (conn.proto === 'UDP') {
       this.out(t, Buffer.concat([Buffer.from(`\r\n+IPD,0,${d.length}:`, 'latin1'), Buffer.from(d)]));
       return true;
@@ -380,6 +464,7 @@ class EspAt {
   // test hooks (t defaults to the card clock)
   reboot(t = this.card.now()) {
     this.echo = true; this.mux = 0; this.recvMode = 0; this.link = null; this.dataLeft = 0; this.line = [];
+    this.cipmode = 0; this.xdata = false; this.xbuf = [];
     this.out(t, Buffer.from([0x00, 0xfe, 0x8a, 0x13]));    // boot ROM noise at 74880 baud
     this.out(t + 300, '\r\nready\r\n');
   }
@@ -399,18 +484,30 @@ class NetPeer {
     this.errors = [];
     this.pendingOut = [];                   // TCP bytes waiting for module window
     this.conn = null; this.target = null; this.closes = 0;
+    // transparent mode: records (net/xrec.js) -- one per datagram sent,
+    // a stream of them in what arrives
+    this.xdec = new xrec.Decoder();
   }
+  framed() { return this.esp.cipmode === 1; }
   connected(conn) { this.conn = conn; }
   closedByModule() { this.closes++; this.conn = null; this.pendingOut = []; }
   receive(conn, d, t) {
+    if (conn.proto === 'UDP' && this.framed()) {
+      for (const r of this.xdec.feed(d, { packet: true })) {
+        this.udpIn.push(r);
+        if (this.echo) this.send(r, t + this.esp.netUs * 2, conn);
+      }
+      return;
+    }
     if (conn.proto === 'UDP') this.udpIn.push(d); else this.received.push(...d);
     if (this.echo) this.send(d, t + this.esp.netUs * 2, conn);
   }
   send(d, t, conn = this.conn) {
     if (!conn) return;
     const card = this.esp.card;
+    const framed = conn.proto === 'UDP' && this.framed();
     card.at(t, () => {
-      if (conn.proto === 'UDP') { this.esp.arrive(conn, d, t); return; }
+      if (conn.proto === 'UDP') { this.esp.arrive(conn, framed ? xrec.encode(d) : d, t); return; }
       this.pendingOut.push(...d);
       this.flush(t);
     });
@@ -426,6 +523,11 @@ class NetPeer {
   windowOpened(t) { this.esp.card.at(t + this.esp.netUs, () => this.flush(t + this.esp.netUs)); }
   // test API (same names as net/peer.js where they overlap)
   sendData(bytes) { this.send(bytes, this.esp.card.now() + this.esp.netUs); }
+  // a datagram as it is, never framed (a broken record, foreign traffic)
+  sendRaw(bytes) {
+    const conn = this.conn, t = this.esp.card.now() + this.esp.netUs;
+    if (conn) this.esp.card.at(t, () => this.esp.arrive(conn, bytes, t));
+  }
   close() {
     const conn = this.conn;
     if (!conn) return;

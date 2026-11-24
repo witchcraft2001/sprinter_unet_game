@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "P peer closes",
-  "wall_s": 19.7,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 47377",
+  "wall_s": 19.6,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 40105",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,32 +17,32 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3425
+    "quota_sum_us": 8365
   },
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1071,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 2375,
+      "main": 5955,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 475,
+    "cost_poll_us": 231,
+    "cost_step_us": 1191,
     "periods": 22,
-    "largest_period_debit_us": 3325,
+    "largest_period_debit_us": 8265,
     "now_ms": 445,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 112,
-      "early": 223,
-      "frames": 19,
+      "early": 224,
+      "frames": 17,
       "ticks": 223,
       "unknown": 0,
       "mask": 0,
@@ -72,7 +72,7 @@
   },
   "timing_us": {
     "tick_isr_max": 305,
-    "admitted_ug_step_max": 1198,
+    "admitted_ug_step_max": 997,
     "largest_tick_gap": 2018,
     "late_ticks": 0
   }

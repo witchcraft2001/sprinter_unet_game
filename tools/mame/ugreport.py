@@ -93,7 +93,7 @@ def parse_report(lines, frame_ms=None):
         if ln.startswith('CALLTIME16 '):
             calltime = int(ln[11:].strip(), 16)
         for key in ('SCEN', 'SLOT', 'LPORT', 'BRING', 'LAT', 'LATMS', 'ISRTIME16', 'BUSYTIME16', 'EMPTYSTEP16',
-                    'SOAK', 'CBL'):
+                    'SOAK', 'CBL', 'FLOW'):
             if ln.startswith(key + ' '):
                 hw[key] = ln[len(key) + 1:].split()
     if cal_ctc and frame_ms is not None and steptime is not None:
@@ -117,6 +117,9 @@ def parse_report(lines, frame_ms=None):
         out['hw'] = hw_lines(hw, us_per_count)
     return out
 
+
+# NETDEMO F (sdk/example/netdemo.asm FLOW_MS): the length of the game flow, s
+FLOW_S = 10
 
 def hw_lines(hw, us_per_count):
     """The UG_HW report lines (sdk/example/ugtest.asm, netdemo.asm) in us.
@@ -163,6 +166,14 @@ def hw_lines(hw, us_per_count):
                          'txdone_max_ms': tm, 'txdone_mean_ms': round(ts / n, 1) if n else None,
                          'echo_max_ms': em, 'echo_mean_ms': round(es / n, 1) if n else None}
                         for b, n, tm, ts, em, es in (f[i:i + 6] for i in range(0, len(f) - 5, 6))]
+    if 'FLOW' in hw and len(hw['FLOW']) >= 10:
+        # NETDEMO F: the game flow against echo_server.py --game, ms of now_ms
+        off, sent, srv, nst, s0, s1, txm, lpm, lps, gap = (h(v) for v in hw['FLOW'][:10])
+        out['flow'] = {'seconds': FLOW_S, 'offered': off, 'sent': sent, 'skipped': off - sent,
+                       'at_server': srv, 'inputs_per_s': round(srv / FLOW_S, 1),
+                       'states': nst, 'states_lost': (((s1 - s0) & 0xFFFF) + 1 - nst) if nst else None,
+                       'txdone_max_ms': txm, 'loop_max_ms': lpm,
+                       'loop_mean_ms': round(lps / nst, 1) if nst else None, 'state_gap_max_ms': gap}
     for key, name in (('ISRTIME16', 'isr'), ('BUSYTIME16', 'busy'), ('EMPTYSTEP16', 'empty_step')):
         if key in hw and hw[key]:
             c = h(hw[key][0])

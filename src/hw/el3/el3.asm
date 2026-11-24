@@ -597,9 +597,32 @@ EL3_STOP_OFS	EQU	$ - EL3_TABLES
 ; RX
 ; ----------------------------------------------------------------------
 ; NIC_RX_STATUS (P): CF=1 no frame; else HL = length, A = 0 / 1 (error).
+; Short path (UGB_SHORT): "no frame" while a command is in progress --
+; RX_DISCARD of the previous frame (NIC_RX_DISCARD) has no wait state.
 NIC_RX_STATUS
+	IFDEF	UGB_SHORT
+	; The command first, the RX status after it: a status read before the
+	; command is seen complete may still be the dropped frame's (the
+	; other order passed every test but the slow-discard one).
+	; Both registers by hand (io_base is a multiple of 16, as in
+	; NIC_ISR_POLL): the poll is the item every STEP pays for.
+	LD	A,(IX+HS_IO)
+	OR	EL3_REG_CMD
+	LD	L,A
+	LD	H,(IX+HS_IO+1)
+	LD	A,(HL)
+	INC	HL
+	LD	A,(HL)
+	AND	EL3_CIP_H
+	SCF
+	RET	NZ
+	LD	A,L
+	XOR	(EL3_REG_CMD + 1) ^ EL3_W1_RX_STATUS
+	LD	L,A
+	ELSE
 	LD	A,EL3_W1_RX_STATUS
 	CALL	EL3_REG
+	ENDIF
 	LD	E,(HL)
 	INC	HL
 	LD	D,(HL)
@@ -662,16 +685,24 @@ NIC_RX_READ
 NIC_RX_LIMIT
 	RET
 
-; NIC_RX_DISCARD (P): RX_DISCARD drops the whole top frame.
+; NIC_RX_DISCARD (P): RX_DISCARD drops the whole top frame.  Short path:
+; the next NIC_RX_STATUS waits for the command, and a STEP_ISR sample
+; taken while it runs must not make the main STEP skip its poll --
+; UPEND_RX stays set until that poll (STEP_ISR only ever sets these bits).
 NIC_RX_DISCARD
+	IFDEF	UGB_SHORT
+	SET	UPEND_RX,(IY+CX_ISR_PENDING)
+	ENDIF
 	LD	DE,0x4000
 	JP	EL3_CMD
+	IFNDEF	UGB_SHORT
 NIC_RX_DISC_DONE
 	CALL	EL3_STATUS_H
 	AND	EL3_CIP_H
 	RET	Z			; CF=0
 	SCF
 	RET
+	ENDIF
 
 ; ----------------------------------------------------------------------
 ; TX

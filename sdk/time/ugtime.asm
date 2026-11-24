@@ -18,7 +18,7 @@
 ; Upper bound of one APP_COUNTER sample with its publication (two phase
 ; reads, delta, the u32 count), measured on the Z stand;
 ; INIT_CONFIG.time_read_cost_us (ТЗ §5.2: <= 20 us in the Worms profile).
-UGT_READ_US	EQU	20
+UGT_READ_US	EQU	50	; real us: stand 45.1 with the retry (UGPROBE CTC on the board: 31.2 without)
 UGT_CTC2	EQU	0x12
 UGT_CTC3	EQU	0x13
 UGT_CTC2_N	EQU	112

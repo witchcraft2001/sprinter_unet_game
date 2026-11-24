@@ -32,7 +32,7 @@ DSS		EQU	0x10
 DSS_EXIT	EQU	0x41
 DSS_PCHARS	EQU	0x5C
 P_SYS		EQU	0x3C		; SYS port, user mode
-STEP_BUDGET	EQU	500
+STEP_BUDGET	EQU	1280		; real us (520 units of the core); 1/16 of a frame
 UHW_RUN		EQU	2
 SH_1FFD		EQU	0x01		; DSS value: RAM in WIN0, ISA closed
 SH_9FBD		EQU	0x00
@@ -140,9 +140,10 @@ start
 	LD	HL,(cal_loop)
 	CALL	rp_hex16
 	CALL	rp_nl
-	; counts of STEP_BUDGET us: a frame is ~20.5 ms, 500 us ~ 1/41 of it
+	; counts of STEP_BUDGET us: a frame is 20.48 ms
+	ASSERT	20480 % STEP_BUDGET == 0
 	LD	HL,(cal_ctc)
-	LD	DE,41
+	LD	DE,20480 / STEP_BUDGET
 	LD	BC,0
 .lim
 	OR	A
@@ -1075,7 +1076,7 @@ lat_report
 	CALL	rp_hex8
 	JP	rp_nl
 
-; hw_costs16: ISRTIME16 (16 x STEP_ISR source=TIMER, budget 150, the
+; hw_costs16: ISRTIME16 (16 x STEP_ISR source=TIMER, the largest budget, the
 ; gateway's own ISR-path burst), BUSYTIME16 (the same burst with the ISA
 ; lock held by another owner: the BUS_BUSY path) and EMPTYSTEP16 (16 x
 ; STEP with nothing pending) -- one DI section each, in CTC counts.
@@ -1089,7 +1090,7 @@ hw_costs16
 .isr
 	PUSH	BC
 	LD	A,UNETG_SRC_TIMER
-	LD	DE,150
+	LD	DE,UNETG_ISR_BODY_MAX_US
 	LD	B,UNETG_STEP_ISR
 	CALL	dll
 	POP	BC
@@ -1110,7 +1111,7 @@ hw_costs16
 .busy
 	PUSH	BC
 	LD	A,UNETG_SRC_TIMER
-	LD	DE,150
+	LD	DE,UNETG_ISR_BODY_MAX_US
 	LD	B,UNETG_STEP_ISR
 	CALL	dll
 	POP	BC

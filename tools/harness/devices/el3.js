@@ -141,7 +141,9 @@ class EL3 {
       case 0x1800: this.rxEnabled = false; break;
       case 0x2000: this.rxEnabled = true; break;
       case 0x2800: this.rxEnabled = false; this.rxQueue = []; break;
-      case 0x4000: if (!this.rxQueue.length) throw new Error('EL3: RX_DISCARD on an empty queue'); this.rxQueue.shift(); break;
+      case 0x4000: if (!this.rxQueue.length) throw new Error('EL3: RX_DISCARD on an empty queue');
+        // until CIP clears the RX status still shows the frame being dropped and the FIFO must not be read
+        this.staleLen = this.rxQueue.shift().frame.length; this.discarding = this.cipReads > 0; break;
       case 0x4800: this.txEnabled = true; break;
       case 0x5000: this.txEnabled = false; break;
       case 0x5800: this.txEnabled = false; this.txFifo = []; this.txExpected = 0; this.txStatus = []; break;
@@ -172,17 +174,21 @@ class EL3 {
   }
   rxByte() {
     if (this.window !== 1) throw new Error(`EL3: RX FIFO read in window ${this.window}`);
+    if (this.discarding) throw new Error('EL3: RX FIFO read while RX_DISCARD is in progress');
     if (!this.rxQueue.length) throw new Error('EL3: RX FIFO read on an empty queue');
     const q = this.rxQueue[0];
     return q.cursor < q.frame.length ? q.frame[q.cursor++] : 0;
   }
 
   readWord(off) {
-    if (off === 0x0e) { const cip = this.cipLeft > 0 ? 0x1000 : 0; if (this.cipLeft > 0) this.cipLeft--; return (this.window << 13) | cip; }
+    if (off === 0x0e) { const cip = this.cipLeft > 0 ? 0x1000 : 0; if (this.cipLeft > 0) this.cipLeft--; else this.discarding = false; return (this.window << 13) | cip; }
     switch (this.window) {
       case 0: if (off === 0) return this.eeprom[7]; if (off === 2) return this.eeprom[3]; return 0;
       case 1:
-        if (off === 0x08) return this.rxQueue.length ? this.rxQueue[0].frame.length : 0;
+        if (off === 0x08) {
+          if (this.discarding) return this.staleLen;   // a driver that trusts it reads the FIFO: rxByte throws
+          return this.rxQueue.length ? this.rxQueue[0].frame.length : 0;
+        }
         if (off === 0x0c) return 0x0800;
         return 0;
       case 4:

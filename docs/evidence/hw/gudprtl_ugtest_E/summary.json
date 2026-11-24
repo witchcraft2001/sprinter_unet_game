@@ -1,0 +1,99 @@
+{
+  "stand": "Ж",
+  "prog": "ugtest",
+  "dll": "gudprtl",
+  "scenario": "E",
+  "file": "URTLUE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "info": {
+    "min_useful_budget_us": 1047,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 105,
+    "polls_useful": 2,
+    "steps_total": 134,
+    "steps_useful": 134,
+    "budget_yields": 59,
+    "bus_busy": 16,
+    "max_step_gap_ms": 20,
+    "arp_requests": 1,
+    "tx_frames": 2,
+    "rx_frames": 2,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": null,
+  "step": {
+    "max_us": 1162,
+    "mean_us": 820,
+    "steps": 118,
+    "over_budget": 0
+  },
+  "trivial_call_us": 197,
+  "hw": {
+    "scen": "E",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 59569,
+    "bring": {
+      "ms": 20,
+      "scratch": 0
+    },
+    "lat": {
+      "txdone": {
+        "n": 1,
+        "max_counts": 52503,
+        "max_us": 40003.8
+      },
+      "echo": {
+        "n": 1,
+        "max_counts": 65535
+      },
+      "saturated": 1,
+      "saturated_max_frames": 3
+    },
+    "costs16": {
+      "isr": {
+        "counts": 5460,
+        "per_call_us": 260.0
+      },
+      "busy": {
+        "counts": 4299,
+        "per_call_us": 204.7
+      },
+      "empty_step": {
+        "counts": 15028,
+        "per_call_us": 715.6
+      }
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "step": true,
+    "latency": false,
+    "isr": true,
+    "bus_busy": true,
+    "card_found": true
+  }
+}

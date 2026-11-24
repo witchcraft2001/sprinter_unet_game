@@ -207,6 +207,7 @@ CHECKSUM_VERIFY = 0x0040
 FLOW_CONTROL_REQUIRED = 0x0080
 NATIVE_RTO = 0x0100
 PROBE = 0x0200
+ESP_TRANSPARENT = 0x0400   # GUDPESP: esp_fw = 2, transparent UDP (records, docs/unet-game-abi.md)
 
 [route]                     # GET_STATS.route_state
 NO_ROUTE = 0
@@ -250,8 +251,8 @@ EVENT_SIZE = 8
 SLOTS_MIN = 4
 EVENT_EXTRA = 4             # event queue useful entries >= tx_slots + 4
 UART_RING_MIN = 512
-STEP_BODY_MAX_US = 2000     # the largest step_budget_us INIT_CONFIG accepts (500 until 2026-11-21)
-ISR_BODY_MAX_US = 150
+STEP_BODY_MAX_US = 3000     # the largest step_budget_us INIT_CONFIG accepts, real us (2026-11-22: budgets are real time; 2000 before the game stage)
+ISR_BODY_MAX_US = 370       # real us (150 units of the 21 MHz model until 2026-11-22)
 STACK_MAIN_MAX = 256
 STACK_ISR_MAX = 96
 TAG_RESERVED = 0xFFFF
@@ -296,7 +297,7 @@ fields = [
   ["uart_divisor", "u16", "16550 divisor (8 = 115200 at 14.7456 MHz)"],
   ["uart_flow", "u8", "local 16550: 0 none, 1 AFE RTS/CTS"],
   ["esp_flow", "u8", "ESP side: 0 none, 3 RTS/CTS (AT+UART_CUR)"],
-  ["esp_fw", "u8", "1 = ESP-AT 2.2.2 passive TCP profile"],
+  ["esp_fw", "u8", "1 = ESP-AT 2.2.2 command profile; 2 = transparent UDP (GUDPESP, CAP_ESP_TRANSPARENT)"],
   ["uart_rx_trigger", "u8", "FIFO trigger: 1, 4, 8, 14"],
   ["connect_timeout_ms", "u16", "5000"],
   ["retry_count", "u8", "4; schedule length = retry_count + 1 <= 8"],
@@ -355,7 +356,7 @@ fields = [
   ["irq_delivery_us", "u16", "probe observation window"],
   ["max_service_gap_us", "u16", "physical limit of the profile"],
   ["max_step_gap_ms", "u16", "20 for the game profile"],
-  ["step_body_max_us", "u16", "2000: the largest step_budget_us accepted"],
+  ["step_body_max_us", "u16", "3000: the largest step_budget_us accepted"],
   ["isr_body_max_us", "u16", "150"],
   ["stack_main_max", "u16", "bytes, all branches"],
   ["stack_isr_max", "u16", "bytes, all branches"],

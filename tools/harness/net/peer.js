@@ -79,7 +79,8 @@ class Peer {
     }
     if (proto === 17) {
       const c = be16(f, 40);
-      if (c !== 0 && l4sum(f, 17, len) !== 0xffff) this.errors.push('UDP checksum');
+      if (c === 0) this.errors.push('UDP datagram without a checksum');
+      else if (l4sum(f, 17, len) !== 0xffff) this.errors.push('UDP checksum');
       return this.udpInput(f, len);
     }
     this.errors.push(`IP protocol ${proto}`);

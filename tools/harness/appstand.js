@@ -25,7 +25,7 @@ const path = require('path');
 const { ethStand, C } = require('./ethnet.js');
 const { readSymbols } = require('./dll-loader.js');
 const { Ctc } = require('./devices/ctc.js');
-const { ABI, encodeBlock, decodeBlock } = require('./stand.js');
+const { ABI, encodeBlock, decodeBlock, DI_MAX_US } = require('./stand.js');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const PROG_BASE = 0xa000;
@@ -218,17 +218,15 @@ class AppStand {
         if (op === 0xfb && this.isrs.length) m.violation('ei-in-isr', 'EI inside the network ISR path');
       }
       const reti = m.peek(s.pc) === 0xed && m.peek(s.pc + 1) === 0x4d;
-      m.extraCycles = 0;
-      const t = cpu.run_instruction();
-      m.cycles += t + m.extraCycles;
-      if (this.isrs.length) this.isrCycles += t + m.extraCycles;
+      const t = m.exec();
+      if (this.isrs.length) this.isrCycles += t;
       const n = cpu.getState();
       for (const c of this.calls) if (this.isrs.length === c.depth && n.sp < c.minSp) c.minSp = n.sp;
       if (!n.iff1 && this.diStart === null && this.armed) this.diStart = m.cycles - t;
       if (n.iff1 && this.diStart !== null) {
         const us = (m.cycles - this.diStart) / m.mhz;
         if (us > this.maxDiUs) this.maxDiUs = us;
-        if (us > 200) this.problems.push(`DI section ${us.toFixed(1)} us > 200 ending at PC=0x${n.pc.toString(16)}`);
+        if (us > DI_MAX_US) this.problems.push(`DI section ${us.toFixed(1)} us > ${DI_MAX_US} ending at PC=0x${n.pc.toString(16)}`);
         this.diStart = null;
       }
       if (reti && this.isrs.length) {

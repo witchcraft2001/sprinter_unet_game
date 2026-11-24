@@ -98,6 +98,9 @@ USCH_TX_STOP	EQU	3	; TX stopped in this STEP
 USCH_ODD	EQU	4	; bit 0 of steps_total (this STEP), latched by EXP_STEP
 USCH_ODD2	EQU	5	; bit 1 of steps_total
 USCH_POLLED	EQU	6	; the card was polled first in this STEP (odd STEPs)
+USCH_SHORT	EQU	7	; Ethernet: a budget large enough for the short path (PROF_SHORT_MIN_US)
+USCH_FAT	EQU	7	; SprinterESP: a budget large enough for the fat STEP (PROF_FAT_MIN_US)
+USCH_BIG	EQU	7	; GUDPRTL: a budget large enough for UGB_TXFIRST / UGB_BYTECOST (PROF_FIRST_MIN_US)
 
 ; UCTX.work bits (what the current STEP achieved)
 UWK_HW		EQU	0x01

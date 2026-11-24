@@ -37,15 +37,17 @@ EXP_STEP
 	LD	(IY+CX_NOW_MS+1),B
 	LD	(IY+CX_NOW_MS+2),L
 	LD	(IY+CX_NOW_MS+3),H
-	; units = budget * f16 / 16 - return (UNITS_FROM_BUDGET), and the
-	; fixed STEP path taken from them at once (TAKE PROF_STEP_BASE_US)
+	; units = (budget * f16 / 16) * 13 / 32 - return (real microseconds
+	; into units: profile.inc), and the fixed STEP path taken from them
+	; at once (TAKE PROF_STEP_BASE_US)
 	LD	A,(IY+CX_CPU_F16)
 	EX	DE,HL			; HL = budget
 	CP	16
-	JR	Z,.turbo		; 21 MHz: one unit per microsecond
+	JR	Z,.turbo		; 21 MHz: no clock scaling
 	EX	DE,HL
 	CALL	MUL_F16
 .turbo
+	CALL	US_UNITS
 	XOR	A
 	LD	(IY+CX_WORK),A
 	LD	(IY+CX_FLAGS_OUT),A
@@ -63,6 +65,19 @@ EXP_STEP
 	JR	C,.base
 	SBC	HL,DE			; the refusal keeps the units (CF=0 here)
 .base
+	IFDEF	UGB_TXFIRST
+	; TX-first order and portions priced by their bytes (GUDPRTL,
+	; profile.inc): on in a STEP whose units after the base reach
+	; PROF_FIRST_MIN_US; E = USCH_BIG for sched_flags (.counters keeps E)
+	LD	E,0
+	LD	A,L
+	SUB	LOW PROF_FIRST_MIN_US
+	LD	A,H
+	SBC	A,HIGH PROF_FIRST_MIN_US
+	JR	C,.small
+	LD	E,1 << USCH_BIG
+.small
+	ENDIF
 	LD	(IY+CX_UNITS),L
 	LD	(IY+CX_UNITS+1),H
 .counters
@@ -85,6 +100,36 @@ EXP_STEP
 	ADD	A,A
 	ADD	A,A
 	ADD	A,A			; bits 0/1 -> USCH_ODD / USCH_ODD2
+	IFDEF	UGB_SHORT
+	; short path (profile.inc): on in a STEP with enough units that
+	; starts with no frame in progress either way (a transmitted frame
+	; waiting for its completion is none) -- with its share of the fixed
+	; path set aside at once
+	LD	C,A
+	LD	A,(IY+CX_UNITS+1)
+	CP	HIGH PROF_SHORT_MIN_US
+	JR	C,.long
+	LD	A,(IY+EX_RXS)
+	OR	A
+	JR	NZ,.long
+	LD	A,(IY+EX_TXS)
+	OR	A
+	JR	Z,.short
+	CP	ETX_WAIT
+	JR	NZ,.long
+.short
+	SET	USCH_SHORT,C
+	LD	A,(IY+CX_UNITS)
+	SUB	PROF_SHORT_DEC_US
+	LD	(IY+CX_UNITS),A
+	JR	NC,.long
+	DEC	(IY+CX_UNITS+1)
+.long
+	LD	A,C
+	ENDIF
+	IFDEF	UGB_TXFIRST
+	OR	E			; USCH_BIG (.base)
+	ENDIF
 	LD	(IY+CX_SCHED_FLAGS),A
 	INC	HL			; -> steps_useful
 	POP	AF
@@ -125,6 +170,34 @@ EXP_STEP
 	CALL	ETH_SCHED
 	JR	.served
 .alternate
+	ENDIF
+	IFDEF	UGB_FAT
+	; Fat STEP of the SprinterESP builds (profile.inc): a running card
+	; and PROF_FAT_MIN_US units left here -- rounds of pump, parser and
+	; sequencer (ESP_FAT), with the dispatch of its extra visit set
+	; aside at once.  Decided here, in one test, so that a plain STEP
+	; pays nothing else for it.
+	LD	A,(IY+CX_UNITS+1)
+	CP	HIGH PROF_FAT_MIN_US
+	JR	C,.thin_step
+	LD	A,(IY+CX_HW_STATE)
+	CP	UHW_RUN
+	JR	NZ,.thin_step
+	SET	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	; until this STEP's pump says otherwise, bytes may be on their way
+	; (ESP_LEAN waits for a whole answer while they are)
+	SET	ESF_GOT,(IY+EX_FLAGS)
+	IF	PROF_FAT_DEC_US
+	LD	A,(IY+CX_UNITS)
+	SUB	PROF_FAT_DEC_US
+	LD	(IY+CX_UNITS),A
+	JR	NC,.fat
+	DEC	(IY+CX_UNITS+1)
+.fat
+	ENDIF
+	CALL	ESP_FAT
+	JR	.served
+.thin_step
 	ENDIF
 	; Alternate who is served first, so that neither the hardware nor the
 	; transport is starved when a portion of the other does not fit.
@@ -553,27 +626,28 @@ EXP_STEP_ISR
 .run_ok
 	; Budget first, without touching the context: a call that cannot pay
 	; the fixed path and the card sample returns YIELD at once.
-	; units = budget * f16 / 16 - return - base - poll.
+	; left = budget * f16 / 16 - (return + base + poll), all in real
+	; microseconds (PROF_ISR_MIN_RT: no unit conversion on this path).
 	LD	A,(IY+CX_CPU_F16)
 	EX	DE,HL			; HL = budget
 	CP	16
-	JR	NZ,.scale_r		; 21 MHz: one unit per microsecond
+	JR	NZ,.scale_r		; 21 MHz: no clock scaling
 .units_r
-	LD	DE,-(PROF_MIN_RETURN_US + PROF_ISR_BASE_US + PROF_ISR_POLL_US)
+	LD	DE,-PROF_ISR_MIN_RT
 	ADD	HL,DE
 	JR	NC,ISR_YIELD
 	IFDEF	UGB_HW_ESP
-	; stash the leftover units (this call's budget for the card's own
+	; stash the leftover microseconds (this call's budget for the card's own
 	; ISR-side byte pump, ES_ISRCAP, unetg_esp.inc) before HL is reused
 	; for the stats pointer below; ISRP_POLL (uart.asm) reads it, and
 	; only when it actually finds DR set -- an empty channel pays only
 	; this write.  L alone (no min(255,HL) clamp: that branch cost the
 	; empty path too much margin against PROF_EMPTY_POLL_US): ISRP_POLL
-	; clamps its own cap to ISRP_RX_MAX right after, so a leftover
-	; above 255 (STEP_ISR body <= 150 us; unreachable at the 21 MHz
-	; 1 unit/us scale, and still only ever under-caps at other speeds)
-	; costs nothing extra and never over-runs the real budget.
+	; clamps its own cap to ISRP_RX_MAX right after, and a leftover
+	; above 255 is unreachable (isr_body_max_us - PROF_ISR_MIN_RT,
+	; asserted below).
 	LD	(IY+EX_ISRCAP),L
+	ASSERT	UNETG_ISR_BODY_MAX_US - PROF_ISR_MIN_RT < 256
 	ENDIF
 	; isr_calls[source] and irq_count through ctx.isr_stats_ptr (INC (HL)
 	; is atomic per byte, see STAT_INC); HL = that pointer afterwards
@@ -666,13 +740,14 @@ EXP_STEP_ISR
 .idle_ok
 	; Budget first, without touching the context: a call that cannot pay
 	; even the fixed path returns YIELD at once and leaves the fields of an
-	; interrupted main call alone.  units = budget * f16 / 16 - return.
+	; interrupted main call alone.  left = budget * f16 / 16 - (return +
+	; base), real microseconds.
 	LD	A,(IY+CX_CPU_F16)
 	EX	DE,HL			; HL = budget
 	CP	16
-	JR	NZ,.scale_i		; 21 MHz: one unit per microsecond
+	JR	NZ,.scale_i		; 21 MHz: no clock scaling
 .units_i
-	LD	DE,-(PROF_MIN_RETURN_US + PROF_ISR_BASE_US)
+	LD	DE,-PROF_ISR_IDLE_RT
 	ADD	HL,DE
 	JP	NC,ISR_YIELD
 	EX	DE,HL			; DE = units left after the fixed path

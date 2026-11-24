@@ -54,6 +54,10 @@ COST_OVERRUN	EQU	60	; TP_STEP's realignment after LSR.OE (ESP_OVERRUN)
 ; ----------------------------------------------------------------------
 ESP_PARSE
 	ET_IX
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IY+EX_XFL)
+	JP	NZ,ESP_XPARSE		; data mode: records, no AT lines
+	ENDIF
 	CALL	.one			; CF=0: the round reached the ring end
 	RET	C
 	; the bytes after the wrap
@@ -120,6 +124,9 @@ ESP_PARSE
 	POP	DE
 	RET	C
 .go
+	IFDEF	UGB_FAT
+	RES	ESF_LWAIT,(IY+EX_FLAGS)	; the tail moves: ESP_LEAN's mark is void
+	ENDIF
 	PUSH	DE			; [tail]
 	PUSH	BC			; [tail][n]
 	LD	L,(IY+CX_HW_RING_PTR)
@@ -490,6 +497,11 @@ ESP_PEND
 	JR	Z,.take
 	LD	HL,COST_HDR		; EPD_COLON / EPD_COMMA
 .take
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JR	NZ,.fat
+.took
+	ENDIF
 	CALL	TAKE
 	RET	C
 	ET_IX
@@ -518,6 +530,14 @@ ESP_PEND
 	LD	(IX+ET_LLEN),0
 	OR	A
 	RET
+	IFDEF	UGB_FAT
+.fat
+	; fat STEP: the way back through TP_FAT is longer (stand: a
+	; publication 102 units against COST_PUBLISH 80)
+	LD	DE,COST_PEND_FAT
+	ADD	HL,DE
+	JR	.took
+	ENDIF
 .publish
 	; a completed UDP datagram (ESP_PAY deferred this out of its own round)
 	IFDEF	UGB_RX_DGRAM
@@ -535,6 +555,629 @@ ESP_PEND
 	ENDIF
 	OR	A			; CF=0: performed
 	RET
+
+	IFDEF	UGB_FAT
+; ----------------------------------------------------------------------
+; ESP_LEAN (fat STEP, profile.inc): what the module says in a small-packet
+; exchange, taken from the UART ring in one pass instead of a parse round
+; and a pending action per line.
+;
+; The pass walks the bytes that lie in the ring without a wrap, line by
+; line, and stops at the first one that is an action or is not for it:
+;   - line ends (CR, LF: the empty lines between the answers);
+;   - the answers of a CIPSEND in flight, recognised in place: "OK" (it
+;     comes before the prompt and means nothing), "Recv <n> bytes"
+;     (noise), "SEND OK" (the terminal line: ET_TERM, ECS_DONE -- the
+;     pass ends, the result is the sequencer's);
+;   - the CIPSEND prompt '>' at a line start (ESP_PROMPT; the pass ends);
+;   - any other complete text line ("0,CLOSED", "ERROR", TCP: the passive
+;     "+IPD,0,<n>" notice): copied into the line buffer and classified by
+;     ESP_LINE, exactly as ESP_PEND's EPD_EOL does (the pass ends);
+;   - UDP: "+IPD,0,<n>:" with all its n bytes (n < 256): slot, copy,
+;     publication -- what ESP_HDR_IPD, ESP_PAY and EPD_PUBLISH do (the
+;     pass ends).
+; Only at a line start with nothing pending.  Everything else (a line
+; across the ring end, a line too long for the buffer, another link's
+; datagram, a datagram with no free slot, "+CIPRECVDATA:" and its
+; payload) is left untouched to the generic parser, which also counts the
+; losses.  A line whose end has not arrived yet is waited for (the pump
+; brings it in the next round or STEP): parsed in part it would fall back
+; to a round and an action; a datagram is waited for only up to
+; LEAN_IPD_WAIT bytes -- a longer one is parsed as it comes (the pump
+; pauses the module at ER_PAUSE_AT bytes of backlog, so it would never be
+; whole).  An incomplete line is not looked at again until the bytes it
+; needs are in the ring (ESF_LWAIT / ET_LNEED: one more for a line, the
+; whole datagram once its length is known; ESP_PROMPT sets the length of
+; the CIPSEND answer the same way, ESF_LANS; any pass and a round of
+; the generic parser clear the mark).
+; Out: A = 0: an action was done or bytes were consumed (call again);
+; 1: not for this path; 2: wait (nothing to parse now, or no budget for
+; it in this STEP: UWK_YIELD, the bytes stay in the ring).
+; Clobbers all but IY.
+; Costs (stand, units; cost rule): COST_LEAN_SCAN is taken before the
+; ring is looked at and is all that a pass without an action costs;
+; every recognised answer and every action takes its own cost on top,
+; checked before it starts.
+; ----------------------------------------------------------------------
+; Stand (tools/dev/items_fat.sh; the TAKEs of one visit are one item for
+; the tools, budget_calls.js FOLD): a pass without an action 116 units
+; with its way back through TP_FAT, one with "OK" 135, with the prompt
+; too 179, a line of 5 bytes 184, a datagram of 16 bytes 223.
+COST_LEAN_SCAN	EQU	135	; the pass: ring head, sizing, line ends, the tail, the way back
+COST_LEAN_HOT	EQU	25	; an answer recognised in place ("Recv": the search for its CR)
+COST_LEAN_LINE	EQU	65	; a text line: the search for its CR, copy, ESP_LINE, token (+ 1 unit per byte)
+COST_LEAN_PROMPT EQU	70	; the prompt: ESP_PROMPT
+COST_LEAN_IPD	EQU	120	; a datagram: slot, publication, counters (+ 1.25 units per byte)
+COST_LEAN_PREFIX EQU	105	; ... on top for a line with a link prefix ("0,CONNECT", "0,CLOSED": stand 285 in all)
+COST_LEAN_NOTICE EQU	50	; TCP: the notice of held bytes in place, the sequencer's look after it
+LEAN_IPD_WAIT	EQU	40	; a datagram up to this long is waited for
+LEAN_IPD_MAX	EQU	64	; a longer one never lies whole in the ring (ER_PAUSE_AT)
+COST_PEND_FAT	EQU	40	; a generic pending action in a fat STEP: on top of its cost
+	ASSERT	COST_LEAN_LINE + COST_LEAN_PREFIX + ES_LINE_MAX < 256
+	ASSERT	LEAN_IPD_WAIT + 12 + 4 < ER_PAUSE_AT
+ESP_LEAN
+	ET_IX
+	IFDEF	UGB_XMODE
+	; the transparent profile has no CIPSEND exchanges to recognise: its
+	; few AT lines (set-up, OPEN, CLOSE) go to the generic parser, whose
+	; actions are priced by kind, and its records to ESP_XPARSE
+	CALL	ESP_XCFG
+	JP	Z,.generic
+	ENDIF
+	LD	A,(IX+ET_PEND)
+	OR	(IX+ET_PST)
+	OR	(IX+ET_LLEN)
+	JP	NZ,.generic
+	BIT	EF_RESYNC,(IX+ET_FL)
+	JP	NZ,.generic
+	; the backlog (read without DI: a torn value only delays the pass)
+	LD	A,(IY+EX_RH)
+	SUB	(IY+EX_RT)
+	LD	L,A
+	LD	A,(IY+EX_RH+1)
+	SBC	A,(IY+EX_RT+1)
+	AND	HIGH ER_MASK
+	LD	H,A
+	OR	L
+	JP	Z,.wait			; the ring is empty
+	BIT	ESF_LWAIT,(IY+EX_FLAGS)
+	JR	Z,.pass
+	LD	A,H
+	OR	A
+	JR	NZ,.pass
+	LD	A,L
+	CP	(IX+ET_LNEED)
+	JR	NC,.pass		; what was waited for is here
+	; Fewer bytes than waited for.  A line seen in part: nothing to
+	; look at.  The estimate of a CIPSEND answer (ESP_PROMPT: "Recv <n>
+	; bytes" and "SEND OK" are 25 bytes and the digits, in several FIFO
+	; loads): wait while the pump is bringing bytes; once it has brought
+	; nothing new, a shorter answer (SEND FAIL, ERROR, busy) is all here.
+	BIT	ESF_LANS,(IY+EX_FLAGS)
+	JP	Z,.wait
+	BIT	ESF_GOT,(IY+EX_FLAGS)
+	JP	NZ,.wait
+.pass
+	RES	ESF_LWAIT,(IY+EX_FLAGS)
+	RES	ESF_LANS,(IY+EX_FLAGS)
+	LD	HL,COST_LEAN_SCAN
+	CALL	TAKE			; refused: the bytes wait (UWK_YIELD)
+	JP	C,.wait
+	CALL	ER_HEAD			; HL = waiting, DE = tail
+	LD	A,H
+	OR	L
+	JP	Z,.wait
+	PUSH	DE			; [tail]
+	LD	B,H
+	LD	C,L
+	LD	HL,ER_SIZE
+	OR	A
+	SBC	HL,DE			; bytes up to the ring end
+	LD	D,B
+	LD	E,C
+	CALL	MIN_DE_HL		; DE = bytes waiting without a wrap
+	LD	B,E
+	LD	A,D
+	OR	A
+	JR	Z,.n_ok
+	LD	B,255
+.n_ok
+	POP	DE
+	PUSH	DE			; [tail]
+	LD	L,(IY+CX_HW_RING_PTR)
+	LD	H,(IY+CX_HW_RING_PTR+1)
+	ADD	HL,DE			; HL -> the first byte
+	PUSH	HL			; [tail][first]
+	; ---- a line start: HL -> byte, B = bytes from it --------------------
+.line
+	LD	A,B
+	OR	A
+	JR	Z,.all			; everything here is consumed
+	LD	A,(HL)
+	CP	13
+	JR	Z,.eol
+	CP	10
+	JR	NZ,.text
+.eol
+	INC	HL
+	DJNZ	.line
+.all
+	CALL	.commit
+	XOR	A
+	RET
+.text
+	; HL -> the text, B = bytes from it (>= 1); the bytes before it are
+	; consumed by .commit whatever this line turns out to be
+	LD	(IX+ET_N1),L
+	LD	(IX+ET_N1+1),H		; the line start
+	LD	(IX+ET_N2),B
+	CP	'>'
+	JP	Z,.prompt
+	CP	'+'
+	JP	Z,.plus
+	LD	C,A
+	LD	A,(IX+ET_JOB)
+	CP	EJ_SEND
+	JP	NZ,.scan
+	LD	A,(IX+ET_CST)
+	CP	ECS_WAIT
+	JP	NZ,.scan
+	; the answers of the CIPSEND in flight, in place
+	LD	A,C
+	LD	DE,S_SENDOK
+	LD	C,7
+	CP	'S'
+	JR	Z,.hot
+	LD	DE,S_OK
+	LD	C,2
+	CP	'O'
+	JR	Z,.hot
+	LD	DE,S_RECV
+	LD	C,5
+	CP	'R'
+	JP	NZ,.scan
+.hot
+	; C text bytes at DE, then (but for "Recv ") the CR: all here?
+	LD	A,B
+	CP	C
+	JR	C,.hot_part
+	JR	Z,.hot_part
+	PUSH	BC
+	LD	B,C
+.hc
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,.hot_miss
+	INC	DE
+	INC	HL
+	DJNZ	.hc
+	POP	BC
+	LD	A,B
+	SUB	C
+	LD	B,A			; bytes after the text (>= 1)
+	LD	A,C
+	CP	5
+	JR	Z,.recv
+	LD	A,(HL)
+	CP	13
+	JR	NZ,.rescan		; "OKAY", "SEND OK?": a line like any other
+	PUSH	BC
+	PUSH	HL
+	LD	HL,COST_LEAN_HOT
+	CALL	TAKE
+	JR	C,.hot_poor
+	POP	HL
+	POP	BC
+	INC	HL
+	DEC	B			; past the CR
+	LD	A,C
+	CP	7
+	JP	NZ,.line		; "OK": nothing
+	LD	(IX+ET_TERM),TK_SENDOK
+	LD	(IX+ET_CST),ECS_DONE
+	; its LF with it, when it is here (no pass of its own later)
+	LD	A,B
+	OR	A
+	JP	Z,.all
+	LD	A,(HL)
+	CP	10
+	JP	NZ,.all
+	INC	HL
+	JP	.all			; its result first
+.recv
+	; "Recv <n> bytes": up to its CR
+	PUSH	BC
+	PUSH	HL
+	LD	HL,COST_LEAN_HOT
+	CALL	TAKE
+	JR	C,.hot_poor
+	POP	HL
+	POP	BC
+	LD	C,B
+	LD	B,0
+	LD	A,13
+	CPIR
+	LD	B,C
+	JP	Z,.line
+	JR	.back_part		; its CR has not arrived
+.hot_poor
+	; no budget for it in this STEP: what was consumed stays consumed
+	POP	HL
+	POP	BC
+	CALL	.back
+	CALL	.commit
+	JP	.wait
+.hot_miss
+	POP	BC
+.rescan
+	CALL	.back
+	JR	.scan
+.hot_part
+	; fewer bytes than the answer: its start may still be another line
+.back_part
+	LD	A,(IX+ET_N2)
+	CP	ES_LINE_MAX + 1
+	JP	NC,.to_generic		; no line is that long: counted there
+	CALL	.back
+	JP	.partial
+; .back: HL = the line start, B = bytes from it.
+.back
+	LD	L,(IX+ET_N1)
+	LD	H,(IX+ET_N1+1)
+	LD	B,(IX+ET_N2)
+	RET
+.scan
+	; a text line: its CR within min(B, ES_LINE_MAX + 1) bytes
+	LD	A,B
+	CP	ES_LINE_MAX + 2
+	JR	C,.lim
+	LD	A,ES_LINE_MAX + 1
+.lim
+	LD	C,A
+	LD	B,0
+	LD	E,A			; bytes searched
+	LD	A,13
+	CPIR
+	JR	NZ,.no_cr
+	LD	A,E
+	SUB	C
+	DEC	A			; text length (1..ES_LINE_MAX)
+	LD	E,A
+	IFDEF	UGB_RX_RING
+	; a '+' line with a ':' would be a payload header: never a plain line
+	CALL	.back
+	LD	A,(HL)
+	CP	'+'
+	JR	NZ,.plain
+	LD	C,E
+	LD	B,0
+	LD	A,':'
+	CPIR
+	JP	Z,.to_generic
+.plain
+	ENDIF
+	CALL	.back_hl
+	LD	A,(HL)
+	CP	':'			; a digit first: a link prefix to strip
+	LD	A,E
+	JR	NC,.cheap
+	ADD	A,COST_LEAN_PREFIX
+.cheap
+	ADD	A,COST_LEAN_LINE
+	LD	L,A
+	LD	H,0
+	PUSH	DE			; E = text length
+	CALL	TAKE
+	JR	NC,.line_ok
+	POP	DE
+	JP	.poor
+.line_ok
+	XOR	A
+	CALL	LINE_AT			; HL = line buffer
+	EX	DE,HL
+	POP	BC
+	LD	B,0			; BC = text length
+	CALL	.back_hl
+	LD	(IX+ET_LLEN),C
+	LD	A,C
+	LDIR				; HL -> the CR
+	INC	HL
+	LD	C,A
+	LD	A,(IX+ET_N2)
+	SUB	C
+	DEC	A			; bytes after the CR
+	JR	Z,.no_lf
+	LD	A,(HL)
+	CP	10
+	JR	NZ,.no_lf
+	INC	HL			; its LF is here too
+.no_lf
+	CALL	.commit
+	CALL	ESP_PROGRESS
+	ET_IX
+	CALL	ESP_LINE
+	ET_IX
+	LD	(IX+ET_LLEN),0
+	XOR	A
+	RET
+; .back_hl: HL = the line start.
+.back_hl
+	LD	L,(IX+ET_N1)
+	LD	H,(IX+ET_N1+1)
+	RET
+.no_cr
+	LD	A,(IX+ET_N2)
+	CP	ES_LINE_MAX + 1
+	JR	NC,.to_generic		; too long for the buffer: counted there
+.partial
+	; the rest of this line has not arrived: one byte more at least
+	LD	A,(IX+ET_N2)
+	INC	A
+.partial_a
+	; A = the bytes this line needs to be looked at again -- unless the
+	; ring wraps right after what is here (then the rest may be waiting
+	; at the ring start)
+	LD	(IX+ET_LNEED),A
+	CALL	.back
+	LD	C,B
+	LD	B,0
+	PUSH	HL
+	ADD	HL,BC			; the end of what is here
+	LD	E,(IY+CX_HW_RING_PTR)
+	LD	D,(IY+CX_HW_RING_PTR+1)
+	OR	A
+	SBC	HL,DE			; its ring offset
+	LD	A,H
+	POP	HL
+	CP	HIGH ER_SIZE
+	JR	Z,.to_generic_hl
+	CALL	.commit
+	SET	ESF_LWAIT,(IY+EX_FLAGS)	; until that many bytes wait
+.wait
+	LD	A,2
+	RET
+.poor
+	; no budget for the action in this STEP
+	CALL	.back_hl
+	CALL	.commit
+	JR	.wait
+.to_generic
+	CALL	.back_hl
+.to_generic_hl
+	CALL	.commit
+.generic
+	LD	A,1
+	RET
+.prompt
+	PUSH	HL
+	LD	HL,COST_LEAN_PROMPT
+	CALL	TAKE
+	POP	HL
+	JR	C,.poor
+	INC	HL			; the '>' itself
+	CALL	.commit
+	CALL	ESP_PROMPT
+	XOR	A
+	RET
+; .commit: everything before HL is consumed: the ring tail moves there.
+; In: HL -> the first byte not consumed, the stack holds [tail][first]
+; under the return address; both are dropped.  Clobbers A, BC, DE, HL.
+.commit
+	POP	BC			; return address
+	POP	DE			; first
+	OR	A
+	SBC	HL,DE			; bytes consumed (0..255)
+	POP	DE			; tail
+	PUSH	BC
+	LD	A,L
+	OR	A
+	RET	Z
+	ADD	HL,DE
+	LD	A,H
+	AND	HIGH ER_MASK
+	LD	H,A
+	JP	ER_SET_TAIL
+.plus
+	IFDEF	UGB_RX_RING
+	; "+IPD,<link>,<len>" is a notice here (passive receive): the bytes
+	; the module holds.  "+IPD,0,<len>" CR in place (ESP_TOKEN's TK_IPD);
+	; another link's is a line like any other; anything else that starts
+	; with '+' ("+CIPRECVDATA:" and its payload) is the generic parser's.
+	LD	A,B
+	CP	9
+	JP	C,.back_part
+	LD	DE,STR_IPD0
+	LD	B,7
+.pc
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,.plus_other
+	INC	DE
+	INC	HL
+	DJNZ	.pc
+	LD	A,(IX+ET_N2)
+	SUB	7
+	LD	B,A			; bytes after "+IPD,0," (>= 2)
+	LD	DE,0
+.dig
+	LD	A,(HL)
+	INC	HL
+	DEC	B
+	CP	13
+	JR	Z,.notice
+	SUB	'0'
+	CP	10
+	JP	NC,.to_generic		; a ':' or text: not a notice
+	LD	C,A
+	PUSH	HL
+	LD	H,D
+	LD	L,E
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE
+	ADD	HL,HL
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL			; length * 10 + digit
+	POP	HL
+	LD	A,B
+	OR	A
+	JR	NZ,.dig
+	JP	.back_part		; its CR has not arrived
+.notice
+	PUSH	HL
+	PUSH	DE
+	LD	HL,COST_LEAN_NOTICE
+	CALL	TAKE
+	POP	DE
+	POP	HL
+	JP	C,.poor
+	LD	(IX+ET_AVAIL),E
+	LD	(IX+ET_AVAIL+1),D
+	JP	.all			; the sequencer may ask for them at once
+.plus_other
+	; "+IPD," of another link: a line; else the generic parser
+	CALL	.back
+	LD	DE,STR_IPD
+	LD	C,5
+.po
+	LD	A,(DE)
+	CP	(HL)
+	JP	NZ,.to_generic
+	INC	DE
+	INC	HL
+	DEC	C
+	JR	NZ,.po
+	CALL	.back
+	JP	.scan
+	ELSE
+	; UDP: "+IPD,0,<n>:" and its n bytes
+	LD	A,B
+	CP	9
+	JP	C,.partial
+	LD	DE,STR_IPD0
+	LD	B,7
+.pc
+	LD	A,(DE)
+	CP	(HL)
+	JP	NZ,.to_generic		; another link, another '+' line
+	INC	DE
+	INC	HL
+	DJNZ	.pc
+	LD	A,(IX+ET_N2)
+	SUB	7
+	LD	B,A			; bytes after "+IPD,0," (>= 2)
+	LD	DE,0
+.dig
+	LD	A,(HL)
+	INC	HL
+	DEC	B
+	CP	':'
+	JR	Z,.colon
+	SUB	'0'
+	CP	10
+	JP	NC,.to_generic
+	LD	C,A
+	LD	A,D
+	OR	A
+	JP	NZ,.to_generic		; 256 bytes and more: as it comes
+	PUSH	HL
+	LD	H,D
+	LD	L,E
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE
+	ADD	HL,HL
+	LD	E,C
+	LD	D,0
+	ADD	HL,DE
+	EX	DE,HL			; length * 10 + digit
+	POP	HL
+	LD	A,B
+	OR	A
+	JR	NZ,.dig
+	JP	.partial		; the header is not all here
+.colon
+	; DE = length, B = bytes here after the ':', HL -> the payload
+	LD	A,D
+	OR	A
+	JP	NZ,.to_generic
+	OR	E
+	JP	Z,.to_generic		; an empty datagram
+	LD	A,E
+	CP	LEAN_IPD_MAX + 1
+	JP	NC,.to_generic		; a long one is parsed as it comes
+	LD	A,B
+	CP	E
+	JR	NC,.whole
+	LD	A,E
+	CP	LEAN_IPD_WAIT + 1
+	JP	NC,.to_generic
+	; all of it is waited for: the header (HL - line start) and E bytes
+	LD	A,L
+	SUB	(IX+ET_N1)
+	ADD	A,E
+	JP	.partial_a
+.whole
+	LD	A,(IY+CX_CHAN)
+	CP	UCH_OPEN
+	JP	NZ,.to_generic
+	LD	A,(IY+CX_RX_SLOT_SIZE+1)
+	OR	A
+	JR	NZ,.slot_ok
+	LD	A,(IY+CX_RX_SLOT_SIZE)
+	CP	E
+	JP	C,.to_generic		; longer than a slot: lost whole, counted there
+.slot_ok
+	LD	(IX+ET_GOT),E
+	LD	(IX+ET_GOT+1),0
+	PUSH	HL			; [tail][first][payload]
+	LD	A,E
+	SRL	A
+	SRL	A
+	ADD	A,E			; 1.25 units per byte (the length is <= LEAN_IPD_MAX)
+	LD	L,A
+	LD	H,0
+	LD	BC,COST_LEAN_IPD
+	ADD	HL,BC
+	CALL	UNITS_FIT
+	JR	C,.ipd_poor
+	PUSH	HL
+	PUSH	IX
+	CALL	RXD_TAKE		; HL = buffer
+	POP	IX
+	EX	DE,HL
+	POP	HL			; the cost
+	JR	C,.ipd_none		; no free slot: the loss is counted there
+	PUSH	DE
+	CALL	TAKE
+	POP	DE
+	POP	HL			; payload
+	LD	C,(IX+ET_GOT)
+	LD	B,0
+	LDIR				; HL -> past the datagram
+	CALL	.commit
+	ET_IX
+	LD	C,(IX+ET_GOT)
+	LD	B,0
+	CALL	RXD_PUBLISH
+	STAT_INC UNETG_STATS_RX_FRAMES
+	ET_IX
+	LD	E,(IX+ET_GOT)
+	LD	D,0
+	STAT_ADD32 UNETG_STATS_RX_BYTES
+	SET	1,(IY+CX_WORK)		; UWK_PROTO
+	XOR	A
+	RET
+.ipd_poor
+	POP	HL
+	JP	.poor
+.ipd_none
+	POP	HL
+	JP	.to_generic
+	ENDIF
+	ENDIF
 
 ; LINE_AT: HL = line buffer + A.  Clobbers DE.
 LINE_AT
@@ -932,3 +1575,6 @@ S_READY		DB	"ready"
 S_WIFIOFF	DB	"WIFI DISCONNECT"
 S_ALREADY	DB	"ALREADY CONNECTED"
 STR_RECVDATA	DB	"+CIPRECVDATA:"
+	IFDEF	UGB_FAT
+STR_IPD0	DB	"+IPD,0,"
+	ENDIF

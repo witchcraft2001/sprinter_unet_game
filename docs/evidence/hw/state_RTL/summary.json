@@ -1,0 +1,36 @@
+{
+  "stand": "Ж",
+  "prog": "ugstate",
+  "card": "RTL",
+  "scenario": "R",
+  "file": "STATAR.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "hw": {
+    "scen": "R"
+  },
+  "state": {
+    "card_regs": [
+      "23"
+    ],
+    "env": {
+      "BOOTDSK": "C:",
+      "NET": "RTL",
+      "NET_HW": null,
+      "NET_IDPORT": null,
+      "NET_MAC": "<set 7e2b>",
+      "NET_IP_SRC": "DHCP",
+      "NET_IP": "<set f1bb>",
+      "NET_MASK": "<set f9e2>",
+      "NET_GW": "<set c5eb>",
+      "NET_LEASE_SEC": "<set ddf4>"
+    }
+  },
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true
+  }
+}

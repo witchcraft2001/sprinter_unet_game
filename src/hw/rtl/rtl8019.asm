@@ -85,6 +85,15 @@ RF_TXFAIL	EQU	2		; the frame being sent will not be started
 RF_TXSTUCK	EQU	3		; TXP outlived the engine timeout
 RF_MORE		EQU	4		; the ring may hold a frame the main poll
 					; has not seen: STEP_ISR answers WORK
+RF_TXPRI	EQU	5		; UGB_TXFIRST (eth/engine.asm ETH_SCHED): TX went
+					; in front of a busy RX in the last STEP (main only)
+; UGB_TXFIRST (eth/engine.asm ETH_FIRST): HS_CNT, the table runner's
+; counter, holds the next page of the frame being received minus CURR at
+; its poll -- non-zero: another frame waited behind it.  The tables run
+; only with RX idle (bring-up, stop, recovery), where nobody reads it.
+HS_BEHIND	EQU	HS_CNT
+EX_BEHIND	EQU	UCTX_HWSM + HS_BEHIND - CTX_BIAS
+	ASSERT	EX_BEHIND <= 127
 
 ; HS_PHASE: bit 0 = waiting for the table deadline, bit 7 = stop table.
 
@@ -462,7 +471,11 @@ NIC_RX_STATUS
 	BIT	RF_RECOVER,(IX+HS_RFLAGS)
 	JP	NZ,.recover
 	BIT	RF_TXSTUCK,(IX+HS_RFLAGS)
+	IFDEF	UGB_TXFIRST
+	JP	NZ,.reset		; (HS_BEHIND below: out of JR range)
+	ELSE
 	JR	NZ,.reset
+	ENDIF
 	LD	A,RTL_ISR		; page 0: every portion ends there
 	CALL	RTL_REG
 	LD	(HL),ISR_PRX | ISR_RXE
@@ -474,6 +487,9 @@ NIC_RX_STATUS
 	CP	(IX+HS_NEXT)
 	JR	Z,.empty
 	SET	RF_MORE,(IX+HS_RFLAGS)
+	IFDEF	UGB_TXFIRST
+	LD	(IX+HS_BEHIND),A	; CURR
+	ENDIF
 	; receive header: status, next page, count (header included)
 	LD	D,(IX+HS_NEXT)
 	LD	E,0
@@ -492,6 +508,12 @@ NIC_RX_STATUS
 	CP	RTL_RX_STOP
 	JR	NC,.reset
 	LD	(IX+HS_NEXTPG),A
+	IFDEF	UGB_TXFIRST
+	; RX is behind when the card wrote past this frame already
+	SUB	(IX+HS_BEHIND)		; next page - CURR: 0 nothing behind it
+	LD	(IX+HS_BEHIND),A
+	LD	A,C
+	ENDIF
 	EX	DE,HL
 	LD	DE,-(4 + ETH_HDR)
 	ADD	HL,DE

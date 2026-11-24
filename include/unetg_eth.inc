@@ -83,7 +83,7 @@ HS_MAC		EQU	10	; u8[6] station address
 HS_RXS		EQU	16	; u8  RX pipeline state (ERX_*)
 HS_TXS		EQU	17	; u8  TX pipeline state (ETX_*)
 HS_TXKIND	EQU	18	; u8  ETK_*: who asked for the frame
-HS_RXLEN	EQU	19	; u16 frame length reported by the card
+HS_RXLEN	EQU	19	; u16 frame length reported by the card; short path: bit 15 the card dropped it already, bit 14 UDP_RX_FAST gave it up
 HS_RXSKIP	EQU	21	; u16 card bytes summed but not stored (header tail)
 HS_RXLIM	EQU	23	; u16 card bytes summed and stored
 HS_RXREM	EQU	25	; u16 card bytes of the segment still to read
@@ -108,14 +108,16 @@ HS_SIZE		EQU	56
 EX_RXS		EQU	UCTX_HWSM + HS_RXS - CTX_BIAS
 EX_TXS		EQU	UCTX_HWSM + HS_TXS - CTX_BIAS
 EX_TXKIND	EQU	UCTX_HWSM + HS_TXKIND - CTX_BIAS
-	ASSERT	EX_RXS <= 127 && EX_TXS <= 127 && EX_TXKIND <= 127
+EX_RXLEN	EQU	UCTX_HWSM + HS_RXLEN - CTX_BIAS
+EX_RXREM	EQU	UCTX_HWSM + HS_RXREM - CTX_BIAS
+	ASSERT	EX_RXS <= 127 && EX_TXS <= 127 && EX_TXKIND <= 127 && EX_RXLEN + 1 <= 127 && EX_RXREM + 1 <= 127
 
 ERX_IDLE	EQU	0
 ERX_HDR		EQU	1	; header in scratch, not classified
 ERX_COPY	EQU	2
 ERX_FINISH	EQU	3
 ERX_DISCARD	EQU	4
-ERX_DISC_WAIT	EQU	5
+ERX_DISC_WAIT	EQU	5	; (not entered with the short path, UGB_SHORT: the poll waits for the card)
 ERX_HDR_READ	EQU	6	; frame waiting, header not read yet
 ERX_ACCEPT	EQU	7	; IPv4 checks passed, transport not asked yet
 ERX_STORE	EQU	8	; transport accepted, payload placement not set up

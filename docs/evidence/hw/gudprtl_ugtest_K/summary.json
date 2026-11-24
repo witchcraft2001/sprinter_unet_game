@@ -1,0 +1,108 @@
+{
+  "stand": "Ж",
+  "prog": "ugtest",
+  "dll": "gudprtl",
+  "scenario": "K",
+  "file": "URTLUK.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "info": {
+    "min_useful_budget_us": 1047,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 8249,
+    "polls_useful": 9459,
+    "steps_total": 1981,
+    "steps_useful": 1981,
+    "budget_yields": 1876,
+    "bus_busy": 16,
+    "max_step_gap_ms": 20,
+    "drop_foreign": 201,
+    "arp_requests": 1,
+    "tx_frames": 6785,
+    "rx_frames": 9459,
+    "tx_bytes": 3460608,
+    "rx_bytes": 3460608
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": null,
+  "step": {
+    "max_us": 1329,
+    "mean_us": 187710,
+    "steps": 1965,
+    "over_budget": 16
+  },
+  "trivial_call_us": 190,
+  "hw": {
+    "scen": "K",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 59606,
+    "bring": {
+      "ms": 20,
+      "scratch": 0
+    },
+    "lat": {
+      "txdone": {
+        "n": 0,
+        "max_counts": 0,
+        "max_us": 0.0
+      },
+      "echo": {
+        "n": 0,
+        "max_counts": 0,
+        "max_us": 0.0
+      },
+      "saturated": 0,
+      "saturated_max_frames": 0
+    },
+    "costs16": {
+      "isr": {
+        "counts": 5460,
+        "per_call_us": 260.0
+      },
+      "busy": {
+        "counts": 4299,
+        "per_call_us": 204.7
+      },
+      "empty_step": {
+        "counts": 15028,
+        "per_call_us": 715.6
+      }
+    },
+    "soak": {
+      "frames": 30000,
+      "net_max_us": 49933.3,
+      "net_mean_us": 12292.7,
+      "bytes": 3462656,
+      "rx_bad": 0
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "step": true,
+    "soak": false,
+    "isr": true,
+    "bus_busy": true,
+    "card_found": true
+  }
+}

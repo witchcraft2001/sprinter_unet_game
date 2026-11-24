@@ -118,6 +118,9 @@ IMG_CTX_PTR
 	INCLUDE	"core/esp/esp_parse.asm"
 	INCLUDE	"core/esp/esp_seq.asm"
 	INCLUDE	"core/esp/tp_esp.asm"
+	IFDEF	UGB_XMODE
+	INCLUDE	"core/esp/esp_x.asm"
+	ENDIF
 	ENDIF
 
 IMG_END

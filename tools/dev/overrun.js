@@ -3,16 +3,18 @@
 // for every STEP above the budget, print the budget calls with the units
 // left and the time between them (PROFILE=1: per-label time of that STEP;
 // ITEMS=1: worst real time of every successful budget item, caller:units).
-// AT=n: budget calls and profile of STEP n.  SCEN=stream: 8 KiB echo at a 2 ms STEP period (DT=ms) instead of the short run.
+// AT=n: budget calls and profile of STEP n.  SCEN=stream: 8 KiB echo at a 2 ms STEP period (DT=ms) instead of the short run
+// (PIECE=n TOTAL=n: the stream in pieces of n bytes -- the short path).
 // Usage: node tools/dev/overrun.js gtcprtl [budget]
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { ethStand } = require('../harness/ethnet.js');
 const { budgetTracker } = require('./budget_calls.js');
 const dll = process.argv[2] || 'gtcprtl';
 const budget = +(process.argv[3] || 500);
 const s = ethStand({ dll });
 s.call('INIT');
-s.initConfig(s.defaultConfig({ step_budget_us: budget }));
+s.initConfig(s.defaultConfig({ step_budget_us: US(budget) }));
 const tr = budgetTracker(s);
 let n = 0, over = 0, baseMax = 0, baseAt = -1, needMax = 0, needAt = -1;
 const itemMax = {};                     // caller:reserved -> max real us
@@ -20,7 +22,7 @@ const run = (k) => { for (let i = 0; i < k; i++) {
   s.pump(); s.t += 10;
   const prof = (process.env.PROFILE || (process.env.AT && +process.env.AT === n)) ? s.profileHook() : null;
   tr.reset();
-  const r = s.step(s.t, budget, 0, { onStep: (m, st) => { if (prof) prof.hook(m, st); tr.onStep(m, st); } });
+  const r = s.step(s.t, US(budget), 0, { onStep: (m, st) => { if (prof) prof.hook(m, st); tr.onStep(m, st); } });
   s.pump();
   // base path = the whole call minus the work bought by successful budget
   // calls, after refunds (budget_calls.js)
@@ -53,10 +55,10 @@ const run = (k) => { for (let i = 0; i < k; i++) {
 } };
 if (process.env.SCEN === 'stream') {
   // 8 KiB echoed in 536/512-byte pieces at a 2 ms STEP period
-  const dt = +(process.env.DT || 2), piece = dll.startsWith('gudp') ? 512 : 536;
+  const dt = +(process.env.DT || 2), piece = +(process.env.PIECE || (dll.startsWith('gudp') ? 512 : 536));
   const runDt = (k) => { for (let i = 0; i < k; i++) { s.t -= 10 - dt; run(1); } };
   runDt(400); s.open(); runDt(400); s.events();
-  const d = Array.from({ length: 8192 }, (_, i) => (i * 31 + 3) & 255);
+  const d = Array.from({ length: +(process.env.TOTAL || 8192) }, (_, i) => (i * 31 + 3) & 255);
   let off = 0, tag = 1, got = 0;
   for (let i = 0; i < 20000 && got < d.length; i++) {
     if (off < d.length) {

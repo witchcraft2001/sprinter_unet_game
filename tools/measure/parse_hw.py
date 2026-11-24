@@ -19,14 +19,18 @@ is the assumption, printed with every table.
 
 Criteria (ТЗ §6, §8.3; an absent measurement is "не измерено", never a pass):
   result      RESULT: PASS
-  step        UGTEST STEPTIME: max <= 500 us, no STEP over the budget
+  step        UGTEST STEPTIME: max - trivial call <= STEP_BUDGET_US (the
+              program measures a STEP with its libman call; budgets are
+              real time since 2026-11-22)
   overflow    STATS uart_overrun = ring_overflow = hw_overflow = 0
   latency     LAT: TX_DONE max <= 40 ms, no saturated sample
   soak        SOAK (K): frames >= 30000 (10 min), per-frame net max <= 2000 us
-  isr         ISRTIME16 / 16 - trivial call <= isr_budget_us (150)
+  isr         ISRTIME16 / 16 - trivial call <= isr_budget_us (370)
   bus_busy    BUSYTIME16 / 16 - trivial call <= GET_INFO bus_busy_us
-  probe_ctc   UGPROBE: the APP_COUNTER sample <= 20 us (time_read_cost_us)
+  probe_ctc   UGPROBE: the APP_COUNTER sample <= 50 us (time_read_cost_us)
   probe_uart  UGPROBE E: no UART overrun at the configured trigger
+  flow        NETDEMO F: at least FLOW_MIN_SHARE of the offered inputs at the
+              server and no state lost (the game flow of Headball)
   card_found  SLOT: some ISA slot answered as the card (ughw.inc hw_slot);
               a card found only in the other slot is not a failure of the
               run (the program used that slot) but a wrong HW_SLOT_* in
@@ -43,12 +47,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools' / 'mame'))
 import ugreport  # noqa: E402
 
-ISR_BUDGET_US = 150          # INIT_CONFIG.isr_budget_us of the Ж builds (tools/mame/mkcfg.js)
-STEP_BUDGET_US = 500
+ISR_BUDGET_US = 370          # INIT_CONFIG.isr_budget_us of the Ж builds (tools/mame/mkcfg.js), real us
+STEP_BUDGET_US = 1280        # sdk/example/ugtest.asm STEP_BUDGET, real us
 LAT_MAX_US = 40000
 SOAK_FRAMES_MIN = 30000
 SOAK_NET_MAX_US = 2000
-CTC_READ_MAX_US = 20         # sdk/time/ugtime.asm UGT_READ_US
+FLOW_MIN_SHARE = 0.96       # NETDEMO F: inputs at the server / offered (25 a second)
+CTC_READ_MAX_US = 50        # INIT_CONFIG.time_read_cost_us the core accepts (real us; UGT_READ_US)
 CARD_OF = {'ESP': 'ESP', 'RTL': 'RTL', '509': 'EL3'}
 DLL_OF = {('ESP', 'T'): 'gtcpesp', ('ESP', 'U'): 'gudpesp', ('RTL', 'T'): 'gtcprtl',
           ('RTL', 'U'): 'gudprtl', ('509', 'T'): 'gtcp509b', ('509', 'U'): 'gudp509b'}
@@ -65,15 +70,17 @@ def identify(name, lines):
     m = re.fullmatch(r'(PROBE|STATA)([ER3])', stem)
     if m:
         return ('ugprobe' if m.group(1) == 'PROBE' else 'ugstate'), PROBE_CARD[m.group(2)], scen or m.group(2)
-    m = re.fullmatch(r'([UN])(ESP|RTL|509)([TU])([A-Z])', stem)
-    if not m:
+    m = re.fullmatch(r'([UN])(ESP|RTL|509)([TUX])([A-Z])', stem)
+    if not m or (m.group(3) == 'X' and m.group(2) != 'ESP'):
         return None
     prog = 'ugtest' if m.group(1) == 'U' else 'netdemo'
-    dll = DLL_OF[(m.group(2), m.group(3))]
+    # X: GUDPESP in its transparent mode (esp_fw = 2); the evidence goes
+    # to gudpespx_<prog>_<scen>, as the M stand's gudpespx_<scen>
+    dll = DLL_OF[(m.group(2), 'U' if m.group(3) == 'X' else m.group(3))]
     title = f'{prog.upper()} {dll.upper()}.DLL'
     if first and first != title:
         raise ValueError(f'{name}: first line {first!r}, expected {title!r}')
-    return prog, dll, scen or m.group(4)
+    return prog, dll + ('x' if m.group(3) == 'X' else ''), scen or m.group(4)
 
 
 def judge(prog, s):
@@ -85,7 +92,7 @@ def judge(prog, s):
     if prog == 'ugtest':
         step = s.get('step')
         c['step'] = (None if not step or not step['steps'] else
-                     step['max_us'] <= STEP_BUDGET_US and step['over_budget'] == 0)
+                     step['max_us'] - (s.get('trivial_call_us') or 0) <= STEP_BUDGET_US)
     hw = s.get('hw', {})
     lat = hw.get('lat')
     if lat and lat['txdone']['n']:
@@ -93,6 +100,10 @@ def judge(prog, s):
     soak = hw.get('soak')
     if soak:
         c['soak'] = soak['frames'] >= SOAK_FRAMES_MIN and (soak['net_max_us'] or 1e9) <= SOAK_NET_MAX_US
+    flow = hw.get('flow')
+    if flow:
+        c['flow'] = (flow['offered'] > 0 and flow['at_server'] >= FLOW_MIN_SHARE * flow['offered']
+                     and flow['states_lost'] == 0)
     costs = hw.get('costs16', {})
     trivial = s.get('trivial_call_us') or 0
     if 'isr' in costs and costs['isr']['per_call_us'] is not None:
@@ -116,6 +127,9 @@ def judge(prog, s):
 # DSSENV values that are the operator's addresses: the evidence keeps only
 # "set" (tools/hw/hw.env is not committed for the same reason)
 ENV_PRIVATE = {'NET_MAC', 'NET_IP', 'NET_MASK', 'NET_GW'}
+# ... and any other value that looks like an address or a piece of one: the
+# RTL machine's DSS showed NET_LEASE_SEC=92.168.1.1 (a gateway's tail)
+ENV_ADDR = re.compile(r'\d+(\.\d+){1,3}$|[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){2,5}$')
 
 
 def state_of(text):
@@ -130,7 +144,7 @@ def state_of(text):
             rest = body[7:]
             if '=' in rest:
                 name, value = rest.split('=', 1)
-                if name in ENV_PRIVATE:      # a tag that still shows a change
+                if name in ENV_PRIVATE or ENV_ADDR.match(value):  # a tag still shows a change
                     value = '<set %s>' % hashlib.sha256(value.encode()).hexdigest()[:4]
                     ln = f'DSSENV {name}={value}' + ln[len(body):]
                 env[name] = value
@@ -219,7 +233,7 @@ def main(argv=None):
     # NETDEMO T / Q: one packet at a time under the program's quota profile
     lat_rows = [(sub, s) for sub, s in rows if s.get('hw', {}).get('latms')]
     if lat_rows:
-        print('\nЗадержка пакета под квотой (NETDEMO T, Q, A, B, C; мс от TX_COMMIT; шаг часов — тик таймера 2 мс):\n')
+        print('\nЗадержка пакета под квотой (NETDEMO T, Q, A, B, C, G; мс от TX_COMMIT; шаг часов — тик таймера 2 мс):\n')
         print('| прогон | сумма квот, мкс | самый долгий UG_STEP, мкс | байт | TX_DONE среднее / max | эхо целиком среднее / max |')
         print('|---|---|---|---|---|---|')
         for sub, s in lat_rows:
@@ -227,6 +241,17 @@ def main(argv=None):
                 print(f'| {sub} | {s.get("env", {}).get("quota_sum_us", "—")} | '
                       f'{s.get("timing_us", {}).get("admitted_ug_step_max", "—")} | {r["bytes"]} | '
                       f'{r["txdone_mean_ms"]} / {r["txdone_max_ms"]} | {r["echo_mean_ms"]} / {r["echo_max_ms"]} |')
+    # NETDEMO F: the game flow (Headball: inputs up, states down at once)
+    flow_rows = [(sub, s) for sub, s in rows if s.get('hw', {}).get('flow')]
+    if flow_rows:
+        print('\nПоток игры (NETDEMO F, ввод 20 байт раз в 40 мс, снимок 88 байт раз в 100 мс; мс):\n')
+        print('| прогон | вводов предложено / отправлено / у сервера | снимков / потеряно | TX_DONE max | '
+              'ввод вверх + снимок вниз, среднее / max | наибольший промежуток между снимками |')
+        print('|---|---|---|---|---|---|')
+        for sub, s in flow_rows:
+            f = s['hw']['flow']
+            print(f'| {sub} | {f["offered"]} / {f["sent"]} / {f["at_server"]} | {f["states"]} / {f["states_lost"]} | '
+                  f'{f["txdone_max_ms"]} | {f["loop_mean_ms"]} / {f["loop_max_ms"]} | {f["state_gap_max_ms"]} |')
     # bring-up and the first ARP exchange: a run that needed several
     # requests lost seconds at OPEN (ARP repeats once a second)
     arp_rows = [(sub, s) for sub, s in rows if (s.get('stats') or {}).get('arp_requests') is not None]

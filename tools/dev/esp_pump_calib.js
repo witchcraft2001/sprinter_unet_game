@@ -7,13 +7,14 @@
 // reserve can be set from real numbers instead of a guess.
 // Usage: node tools/dev/esp_pump_calib.js [gtcpesp|gudpesp]
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { ethStand } = require('../harness/ethnet.js');
 
 const dll = process.argv[2] || 'gtcpesp';
 const s = ethStand({ dll });
 s.call('INIT');
 s.initConfig(s.defaultConfig({}));
-for (let i = 0; i < 2000 && s.ctx('hw_state') !== 2; i++) s.tick(2, 500);
+for (let i = 0; i < 2000 && s.ctx('hw_state') !== 2; i++) s.tick(2, US(500));
 
 const L = s.layout();
 const hwsm = L.ctx + s.syms.UCTX_HWSM;

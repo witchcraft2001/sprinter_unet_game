@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "P peer closes",
-  "wall_s": 23.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 44629",
+  "wall_s": 23.0,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 20130",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,32 +17,32 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3400
+    "quota_sum_us": 8390
   },
   "info": {
-    "min_useful_budget_us": 420,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1076,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 2350,
+      "main": 5980,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 470,
+    "cost_poll_us": 231,
+    "cost_step_us": 1196,
     "periods": 231,
-    "largest_period_debit_us": 3300,
+    "largest_period_debit_us": 8290,
     "now_ms": 4620,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1146,
-      "early": 2405,
-      "frames": 182,
+      "step": 1145,
+      "early": 2407,
+      "frames": 177,
       "ticks": 2311,
       "unknown": 0,
       "mask": 0,
@@ -58,11 +58,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2226,
+    "polls_total": 2225,
     "polls_useful": 6,
-    "steps_total": 1146,
-    "steps_useful": 1146,
-    "budget_yields": 156,
+    "steps_total": 1145,
+    "steps_useful": 1145,
+    "budget_yields": 155,
     "max_step_gap_ms": 6,
     "arp_requests": 4,
     "tx_frames": 8,
@@ -72,9 +72,9 @@
   },
   "timing_us": {
     "tick_isr_max": 309,
-    "admitted_ug_step_max": 990,
-    "largest_tick_gap": 2027,
+    "admitted_ug_step_max": 989,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 4.1 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 4.1 s)"
 }

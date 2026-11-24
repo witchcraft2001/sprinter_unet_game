@@ -1,0 +1,98 @@
+{
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "scenario": "R G with 1 STEP of 3000 us (the STEP limit) and one poll per period",
+  "wall_s": 5.9,
+  "steps_per_period": 1,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 233,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3631
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 411,
+      "card": 0,
+      "main": 3120,
+      "service": 100
+    },
+    "cost_poll_us": 411,
+    "cost_step_us": 3120,
+    "periods": 411,
+    "largest_period_debit_us": 3531,
+    "now_ms": 8228,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 412,
+      "early": 4009,
+      "frames": 356,
+      "ticks": 4116,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 886,
+    "polls_useful": 215,
+    "steps_total": 412,
+    "steps_useful": 412,
+    "budget_yields": 133,
+    "max_step_gap_ms": 22,
+    "tx_frames": 32,
+    "rx_frames": 32,
+    "tx_bytes": 1280,
+    "rx_bytes": 1280
+  },
+  "timing_us": {
+    "tick_isr_max": 475,
+    "admitted_ug_step_max": 2591,
+    "largest_tick_gap": 2261,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 7.7 s)",
+  "hw": {
+    "latms": [
+      {
+        "bytes": 16,
+        "n": 16,
+        "txdone_max_ms": 82,
+        "txdone_mean_ms": 79.8,
+        "echo_max_ms": 182,
+        "echo_mean_ms": 179.8
+      },
+      {
+        "bytes": 64,
+        "n": 16,
+        "txdone_max_ms": 158,
+        "txdone_mean_ms": 139.2,
+        "echo_max_ms": 298,
+        "echo_mean_ms": 280.6
+      }
+    ]
+  }
+}

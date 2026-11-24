@@ -2,12 +2,13 @@
 // di_find.js -- report the STEPs whose longest DI section exceeds a limit,
 // with the card/RX/TX states before the call.  Usage: node tools/dev/di_find.js gtcprtl [limit_us]
 'use strict';
+const { US, UNITS } = require('./units.js');   // budgets below are units
 const { ethStand } = require('../harness/ethnet.js');
 const dll = process.argv[2] || 'gtcprtl';
 const lim = +(process.argv[3] || 150);
 const s = ethStand({ dll });
 s.call('INIT');
-s.initConfig(s.defaultConfig({ step_budget_us: 500 }));
+s.initConfig(s.defaultConfig({ step_budget_us: US(500) }));
 const hs = (o) => s.m.peek(s.layout().ctx + require('../harness/stand.js').ABI.ctx.fields.hwsm.offset + o);
 let n = 0;
 const go = (k) => { for (let i = 0; i < k; i++) {

@@ -1,7 +1,7 @@
 // ethnet.js -- wire a Stand, a card model (3C509B or RTL8019AS, chosen by
 // the DLL name) and a Peer together.
 'use strict';
-const { Stand, C } = require('./stand.js');
+const { Stand, C, US } = require('./stand.js');
 const { EL3 } = require('./devices/el3.js');
 const { Rtl8019 } = require('./devices/rtl8019.js');
 const { EspCard } = require('./devices/esp.js');
@@ -15,13 +15,19 @@ const isEsp = (dll) => /esp$/.test(dll);
 // rest of dt passes, then the normal STEP) -- models a network IRQ
 // landing between two STEPs, with the card's own ISR-side byte pump
 // (WP4) getting a chance to drain the UART before the main STEP does.
+// isr.n: that many calls spread evenly over dt instead of one.
 function injectIsr(s, card, dt, isr) {
-  const half = dt >> 1;
-  s.t = (s.t + half) >>> 0;
-  if (card) card.advance(s.t);
-  const ir = s.stepIsr(isr.src ?? C.src.TIMER, isr.budget);
-  s.t = (s.t + (dt - half)) >>> 0;
-  return ir.problems;
+  const n = isr.n || 1, problems = [];
+  let done = 0;
+  for (let k = 1; k <= n; k++) {
+    const at = n === 1 ? dt >> 1 : Math.floor((dt * k) / (n + 1));
+    s.t = (s.t + (at - done)) >>> 0;
+    done = at;
+    if (card) card.advance(s.t);
+    problems.push(...s.stepIsr(isr.src ?? C.src.TIMER, isr.budget).problems);
+  }
+  s.t = (s.t + (dt - done)) >>> 0;
+  return problems;
 }
 
 // ESP builds: the UART + ESP-AT model with its payload-level peer.  The
@@ -29,7 +35,7 @@ function injectIsr(s, card, dt, isr) {
 // idle(ms) moves it without a STEP (time between calls).
 function espStand(opts) {
   const dll = opts.dll;
-  const s = new Stand({ dll, mhz: opts.mhz });
+  const s = new Stand({ dll, mhz: opts.mhz, waits: opts.waits });
   const card = new EspCard(opts.card || {});
   card.attach(s.m);
   s.card = card; s.peer = card.peer; s.esp = card.esp; s.isEsp = true;
@@ -37,7 +43,7 @@ function espStand(opts) {
   card.advance(s.t);
   s.pump = () => card.advance(s.t);
   s.idle = (ms) => { s.t = (s.t + ms) >>> 0; card.advance(s.t); };
-  s.tick = (dt = 10, budget = opts.budget ?? 400, stepOpts = {}) => {
+  s.tick = (dt = 10, budget = opts.budget ?? US(400), stepOpts = {}) => {
     const { isr, ...callOpts } = stepOpts;    // isr is ours, not Stand.call's (opts.isr marks an ISR call there)
     let isrProblems = [];
     if (isr) isrProblems = injectIsr(s, card, dt, isr);
@@ -59,7 +65,7 @@ function espStand(opts) {
 function ethStand(opts = {}) {
   const dll = opts.dll || 'gtcp509b';
   if (isEsp(dll)) return espStand(opts);
-  const s = new Stand({ dll, mhz: opts.mhz });
+  const s = new Stand({ dll, mhz: opts.mhz, waits: opts.waits });
   const card = isRtl(dll) ? new Rtl8019(opts.card || {}) : new EL3(opts.card || {});
   card.attach(s.m);
   card.clock = () => s.t;
@@ -72,7 +78,7 @@ function ethStand(opts = {}) {
   s.nowMs = () => (opts.clockMs ? (s.t - (((s.t - t0) >>> 0) % opts.clockMs)) >>> 0 : s.t);
   s.pump = () => { peer.tick(s.t); for (const f of peer.out.splice(0)) card.deliver(f); };
   s.idle = (ms) => { s.t = (s.t + ms) >>> 0; };
-  s.tick = (dt = 10, budget = opts.budget ?? 500, stepOpts = {}) => {
+  s.tick = (dt = 10, budget = opts.budget ?? US(500), stepOpts = {}) => {
     s.pump();
     const { isr, ...callOpts } = stepOpts;
     let isrProblems = [];
@@ -85,4 +91,4 @@ function ethStand(opts = {}) {
   };
   return s;
 }
-module.exports = { ethStand, isRtl, isEsp, C };
+module.exports = { ethStand, isRtl, isEsp, C, US };

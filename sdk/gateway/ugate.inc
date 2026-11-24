@@ -147,14 +147,15 @@ UG_ST_EARLY	EQU	0x80	; UG_STEP: before the spacing, nothing debited
 UG_ST_REFUSED	EQU	0x81	; UG_STEP: main quota exhausted (service paid)
 UG_ST_OFF	EQU	0x82	; UG_STEP: gateway not running
 
-; ---- gateway costs (us at 21 MHz) -------------------------------------------
+; ---- gateway costs (real us at 21 MHz, turbo) ---------------------------------
 ; Upper bounds of the gateway's own path around a core call, measured on the
-; Z application stand (tests/z/sdk, docs/MEASUREMENTS.md).  The full debit of
+; Z application stand in the real time of the board (memory waits:
+; tools/harness/dramwait.js; tests/z/sdk, docs/MEASUREMENTS.md).  The full debit of
 ; an admitted entry is body budget + overhead; refusals before the core pay
 ; their own path.
-UG_OVH_ISR_US	EQU	30	; UG_ISR_NET around STEP_ISR (lock, admission, SP, page); stand 26.7 (tools/dev/gw_costs.js)
-UG_OVH_STEP_US	EQU	50	; UG_STEP around STEP (admission, clock, page); stand 47.6
-UG_BUSY_PATH_US	EQU	22	; UG_ISR_NET refused by a held ISA lock; stand 19.6
+UG_OVH_ISR_US	EQU	70	; UG_ISR_NET around STEP_ISR (lock, admission, SP, page); stand 63.8 (tools/dev/gw_costs.js)
+UG_OVH_STEP_US	EQU	120	; UG_STEP around STEP (admission, clock, page); stand 112.3
+UG_BUSY_PATH_US	EQU	45	; UG_ISR_NET refused by a held ISA lock; stand 37.7
 UG_REFUSE_US	EQU	15	; admission refused for lack of quota
 UG_FLAG_US	EQU	5	; processing a CBL pending flag
-UG_DI_MARGIN_US	EQU	200	; ТЗ §5.1: longest DI section of the network
+UG_DI_MARGIN_US	EQU	500	; longest DI section of the network (real us; GET_INFO.max_atomic_us 444)

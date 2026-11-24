@@ -18,6 +18,18 @@
 COST_PICK	EQU	85	; choice of the next job (TX slot, RX space, ring cursor; 72 us)
 COST_PIECE	EQU	160	; one literal run (<= 16 bytes) + one substitution of a command (142 us)
 COST_RESULT	EQU	195	; a finished command: slot outcome, RX commit (stand 174 us: a 1024-byte answer over 3 RX slots)
+	IFDEF	UGB_FAT
+; Fat STEP (profile.inc): two costs by kind instead of the worst case.
+; Stand (tools/dev/items_fat.sh): 95 / 72 / 164 units with the way back
+; through TP_FAT; a job start 78 (COST_PICK 85 in a plain STEP), the
+; result of a CIPRECVDATA over several RX slots 208 (COST_RESULT 195).
+COST_RESULT_SEND EQU	125	; the result of a CIPSEND: slot outcome and counters
+COST_PIECE_END	EQU	90	; the last piece of a command: CR LF, hand-over to the pump, deadline
+COST_SENDCMD	EQU	180	; a CIPSEND started and its whole text built (ESP_PICK + ESP_BUILD.send)
+COST_PICK_FAT	EQU	95
+COST_RESULT_FAT	EQU	235
+T_SEND_LIT	EQU	13	; "AT+CIPSEND=0,"
+	ENDIF
 
 ESP_AT_TRIES	EQU	5	; "AT" until the module answers (boot <= 2 s)
 ESP_AT_MS	EQU	500
@@ -175,6 +187,13 @@ ESP_TOKEN
 	LD	A,(IX+ET_JOB)
 	CP	EJ_SEND
 	RET	Z			; CIPSEND: OK comes before the prompt
+	IFDEF	UGB_XMODE
+	CP	EJ_OPEN
+	JR	NZ,.term
+	LD	A,(IX+ET_IDX)
+	CP	EXO_SEND
+	RET	Z			; ... the CIPSEND of a transparent OPEN too
+	ENDIF
 .term
 	LD	(IX+ET_TERM),C
 	LD	(IX+ET_CST),ECS_DONE
@@ -218,6 +237,9 @@ ESP_TOKEN
 	LD	A,(IX+ET_FL)
 	AND	~((1 << EF_READY) | (1 << EF_CONN) | (1 << EF_REQOPEN)) & 0xFF
 	LD	(IX+ET_FL),A
+	IFDEF	UGB_XMODE
+	LD	(IY+EX_XFL),0		; a restarted module is in command mode
+	ENDIF
 	CALL	ES_TX_STOP
 	CALL	ESP_JOB_END
 	XOR	A
@@ -262,6 +284,26 @@ ESP_TOKEN
 ; ----------------------------------------------------------------------
 ESP_PROMPT
 	ET_IX
+	IFDEF	UGB_XMODE
+	; the prompt of a transparent OPEN: the data mode starts right behind
+	; it (the record parser takes the bytes that follow)
+	LD	A,(IX+ET_JOB)
+	CP	EJ_OPEN
+	JR	NZ,.cmd
+	LD	A,(IX+ET_CST)
+	CP	ECS_WAIT
+	RET	NZ
+	LD	(IX+ET_TERM),TK_OK
+	LD	(IX+ET_CST),ECS_DONE
+	XOR	A
+	LD	(IX+ET_PST),A
+	LD	(IX+ET_PKIND),A
+	LD	(IX+ET_LLEN),A
+	SET	EXF_DATA,(IY+EX_XFL)
+	RES	EXF_PKT,(IY+EX_XFL)	; no packet is being gathered yet
+	RET
+.cmd
+	ENDIF
 	LD	A,(IX+ET_JOB)
 	CP	EJ_SEND
 	RET	NZ
@@ -279,6 +321,32 @@ ESP_PROMPT
 	PUSH	DE
 	CALL	TX_BUF			; HL = payload
 	POP	DE
+	IFDEF	UGB_FAT
+	; fat STEP: the answer to this payload is "Recv <n> bytes" and
+	; "SEND OK", 25 bytes and the digits of n: ESP_LEAN waits for all of
+	; it instead of looking at every FIFO load (esp_parse.asm)
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JR	Z,.stream
+	ET_IX
+	LD	A,D
+	OR	A
+	LD	A,25 + 3
+	JR	NZ,.need
+	LD	A,E
+	CP	100
+	LD	A,25 + 3
+	JR	NC,.need
+	LD	A,E
+	CP	10
+	LD	A,25 + 2
+	JR	NC,.need
+	DEC	A
+.need
+	LD	(IX+ET_LNEED),A
+	SET	ESF_LWAIT,(IY+EX_FLAGS)
+	SET	ESF_LANS,(IY+EX_FLAGS)
+.stream
+	ENDIF
 	HWSM_IX
 	LD	(IX+ES_TXP),L
 	LD	(IX+ES_TXP+1),H
@@ -295,6 +363,20 @@ ESP_SEQ
 	LD	A,(IX+ET_PFAIL)
 	OR	A
 	JR	Z,.state
+	; A read that completed before the failure line keeps its result: the
+	; stream order is the order of events.  A CIPRECVDATA answer right
+	; before "0,CLOSED" is the peer's last data (the module reports the
+	; close only after the held bytes are read), and one parse turn can
+	; bring both lines before the sequencer runs.  Only the read: with
+	; every completed command taken first, GUDPESP lost a CIPSEND in the
+	; 8 KiB stream in MAME (3 runs of 4; never on Z) -- not understood.
+	LD	A,(IX+ET_CST)
+	CP	ECS_DONE
+	JR	NZ,.fail
+	LD	A,(IX+ET_JOB)
+	CP	EJ_RECV
+	JP	Z,ESP_DONE
+.fail
 	; a channel failure found by the parser or a deadline
 	LD	HL,COST_RESULT
 	CALL	TAKE
@@ -324,6 +406,14 @@ ESP_SEQ
 	JP	Z,ESP_PICK
 	JP	ESP_ISSUE
 .wait
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IY+EX_XFL)
+	JR	Z,.w_cmd
+	LD	A,(IX+ET_JOB)
+	CP	EJ_SEND
+	JP	Z,ESP_XWAIT		; a record being streamed
+.w_cmd
+	ENDIF
 	CALL	ET_CDL_DUE
 	RET	NC
 	JP	ESP_TIMEOUT
@@ -397,7 +487,16 @@ ESP_PICK
 .afford
 	ET_IX				; before TAKE: ET_IX ends in ADD IX,DE (CF)
 	LD	HL,COST_PICK
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JR	NZ,.afford_fat
+	ENDIF
 	JP	TAKE			; TAKE keeps IX
+	IFDEF	UGB_FAT
+.afford_fat
+	LD	HL,COST_PICK_FAT
+	JP	TAKE
+	ENDIF
 
 ; .try_tx: CF=1 when there is nothing to send (CF=0: a job started, or
 ; the budget refused it: stop either way).
@@ -411,7 +510,16 @@ ESP_PICK
 	CP	UTX_COMMITTED
 	SCF
 	RET	NZ
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IY+EX_XFL)
+	JP	NZ,ESP_XSEND		; data mode: the slot is a record
+	ENDIF
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JR	NZ,.tx_fat
+	ENDIF
 	CALL	.afford
+.tx_took
 	CCF
 	RET	NC			; refused: next STEP
 	LD	C,(IY+CX_TX_SEND)
@@ -435,9 +543,26 @@ ESP_PICK
 .tx_go
 	LD	A,EJ_SEND
 	CALL	ESP_JOB
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JR	Z,.tx_issue
+	CALL	ESP_BUILD.send
+	OR	A
+	RET
+.tx_issue
+	ENDIF
 	CALL	ESP_ISSUE
 	OR	A
 	RET
+
+	IFDEF	UGB_FAT
+; fat STEP: the choice, the job and the whole command text are one item
+.tx_fat
+	ET_IX
+	LD	HL,COST_SENDCMD
+	CALL	TAKE
+	JR	.tx_took
+	ENDIF
 
 ; .try_rx: CF=1 when there is nothing to fetch.
 .try_rx
@@ -512,6 +637,12 @@ ESP_ISSUE
 	LD	E,A
 	LD	D,0
 	LD	HL,ESP_SETUP_TAB
+	IFDEF	UGB_XMODE
+	CALL	ESP_XCFG
+	JR	NZ,.tab
+	LD	HL,ESP_SETUP_XTAB
+.tab
+	ENDIF
 	ADD	HL,DE
 	LD	E,(HL)
 	INC	HL
@@ -524,6 +655,14 @@ ESP_ISSUE
 	LD	DE,ESP_AT_MS
 	JR	.go
 .job
+	IFDEF	UGB_XMODE
+	CALL	ESP_XJOB		; OPEN / CLOSE of the transparent mode
+	DEC	A
+	JR	Z,.go
+	DEC	A
+	RET	Z			; the silence before "+++"
+	LD	A,(IX+ET_JOB)
+	ENDIF
 	CP	EJ_OPEN
 	JR	NZ,.j_send
 	LD	HL,T_CLOSE0
@@ -568,6 +707,11 @@ ESP_ISSUE
 ; ----------------------------------------------------------------------
 ESP_BUILD
 	LD	HL,COST_PIECE
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JP	NZ,.cost_fat
+.cost
+	ENDIF
 	CALL	TAKE
 	RET	C
 	ET_IX
@@ -601,6 +745,10 @@ ESP_BUILD
 .sub
 	CP	15
 	JR	Z,.brk
+	IFDEF	UGB_XMODE
+	CP	14
+	JR	Z,.raw			; "+++": no CR LF
+	ENDIF
 	PUSH	HL
 	CALL	ESP_SUBST		; DE advanced
 	POP	HL
@@ -614,6 +762,7 @@ ESP_BUILD
 	INC	HL
 	EX	DE,HL
 	CALL	.save
+.hand
 	; the pump sends it (main only, no race with STEP_ISR)
 	LD	HL,ES_CMD_OFS - CTX_BIAS
 	PUSH	IY
@@ -632,6 +781,51 @@ ESP_BUILD
 	LD	E,(IX+ET_CTMO)
 	LD	D,(IX+ET_CTMO+1)
 	JP	ET_ARM_CDL
+	IFDEF	UGB_XMODE
+.raw
+	CALL	.save
+	JR	.hand
+	ENDIF
+	IFDEF	UGB_FAT
+; .cost_fat: nothing but the end of the template left: the cheap last
+; piece.
+.cost_fat
+	LD	E,(IX+ET_BPOS)
+	LD	D,0
+	LD	L,(IX+ET_TPL)
+	LD	H,(IX+ET_TPL+1)
+	ADD	HL,DE
+	LD	A,(HL)
+	OR	A
+	LD	HL,COST_PIECE
+	JP	NZ,.cost
+	LD	HL,COST_PIECE_END
+	JP	.cost
+; .send: the whole text of the CIPSEND of slot ET_TXSLOT at once (ESP_PICK
+; in a fat STEP, inside its COST_SENDCMD): what ESP_ISSUE and two pieces
+; do.  The pump is idle (ESP_PICK checked).  IX = tp.
+.send
+	LD	HL,T_SEND
+	LD	(IX+ET_TPL),L
+	LD	(IX+ET_TPL+1),H
+	LD	E,(IY+CX_SEND_STALL_TIMEOUT_MS)
+	LD	D,(IY+CX_SEND_STALL_TIMEOUT_MS+1)
+	LD	(IX+ET_CTMO),E
+	LD	(IX+ET_CTMO+1),D
+	INC	(IX+ET_TRY)
+	LD	HL,ES_CMD_OFS - CTX_BIAS
+	PUSH	IY
+	POP	DE
+	ADD	HL,DE
+	EX	DE,HL			; DE = command buffer
+	LD	HL,T_SEND
+	LD	BC,T_SEND_LIT
+	LDIR
+	LD	A,3			; the slot length in decimal
+	CALL	ESP_SUBST		; DE advanced
+	LD	HL,T_SEND + T_SEND_LIT + 2
+	JP	.end
+	ENDIF
 ; .save: ET_BPOS / ET_BLEN from HL (template) and DE (buffer).  Both are
 ; short (< 64), so low-byte differences suffice.  Clobbers A, BC.
 .save
@@ -749,6 +943,11 @@ DEC16
 ; ----------------------------------------------------------------------
 ESP_DONE
 	LD	HL,COST_RESULT
+	IFDEF	UGB_FAT
+	BIT	USCH_FAT,(IY+CX_SCHED_FLAGS)
+	JP	NZ,.cost_fat
+.cost
+	ENDIF
 	CALL	TAKE
 	RET	C
 	ET_IX
@@ -757,7 +956,11 @@ ESP_DONE
 	CP	EJ_SETUP
 	JR	Z,.setup
 	CP	EJ_OPEN
+	IFDEF	UGB_XMODE
+	JP	Z,.open
+	ELSE
 	JR	Z,.open
+	ENDIF
 	CP	EJ_SEND
 	JP	Z,.send
 	CP	EJ_RECV
@@ -776,6 +979,12 @@ ESP_DONE
 	LD	E,A
 	LD	D,0
 	LD	HL,ESP_SETUP_TAB + 2
+	IFDEF	UGB_XMODE
+	CALL	ESP_XCFG
+	JR	NZ,.s_tab
+	LD	HL,ESP_SETUP_XTAB + 2
+.s_tab
+	ENDIF
 	ADD	HL,DE
 	BIT	0,(HL)			; ERROR acceptable for this entry
 	JR	NZ,.s_next
@@ -792,9 +1001,20 @@ ESP_DONE
 .s_next
 	LD	(IX+ET_TRY),0
 	INC	(IX+ET_IDX)
+	IFDEF	UGB_XMODE
+	CALL	ESP_XCFG
 	LD	A,(IX+ET_IDX)
+	JR	NZ,.s_n
+	CP	ESP_SETUP_XN
+	RET	C
+	JR	.s_end
+.s_n
+	ELSE
+	LD	A,(IX+ET_IDX)
+	ENDIF
 	CP	ESP_SETUP_N
 	RET	C
+.s_end
 	SET	EF_READY,(IX+ET_FL)
 	HWSM_IX
 	SET	ESF_SETUP_OK,(IX+ES_FLAGS)
@@ -803,6 +1023,34 @@ ESP_DONE
 .open
 	BIT	EF_DISCARD,(IX+ET_FL)
 	JP	NZ,ESP_JOB_END		; the link may stay up: the next OPEN closes it
+	IFDEF	UGB_XMODE
+	CALL	ESP_XCFG
+	JR	NZ,.o_cmd
+	; transparent: "+++" and CIPCLOSE take any answer; CIPSTART, CIPMODE
+	; and CIPSEND (its prompt) need OK with the link up
+	LD	A,(IX+ET_IDX)
+	CP	EXO_START
+	JR	C,.o_next
+	LD	A,(IX+ET_TERM)
+	CP	TK_OK
+	JR	NZ,.refused
+	BIT	EF_CONN,(IX+ET_FL)
+	JR	Z,.refused
+	LD	A,(IX+ET_IDX)
+	CP	EXO_SEND
+	JR	NC,.connected
+.o_next
+	CP	EXO_START - 1
+	JR	NZ,.o_inc
+	LD	A,(IX+ET_FL)		; the link is closed: CIPSTART decides
+	AND	~((1 << EF_CONN) | (1 << EF_CFAIL)) & 0xFF
+	LD	(IX+ET_FL),A
+.o_inc
+	INC	(IX+ET_IDX)
+	LD	(IX+ET_TRY),0
+	RET
+.o_cmd
+	ENDIF
 	LD	A,(IX+ET_IDX)
 	OR	A
 	JR	NZ,.started
@@ -819,6 +1067,7 @@ ESP_DONE
 	JR	NZ,.refused
 	BIT	EF_CONN,(IX+ET_FL)
 	JR	Z,.refused
+.connected
 	LD	(IY+CX_CHAN),UCH_OPEN
 	SET	0,(IY+CX_EV_FLAGS)	; UEVF_CONNECTED
 	RES	3,(IY+CX_CLK_FLAGS)	; the connect deadline is met
@@ -899,6 +1148,19 @@ ESP_DONE
 	ENDIF
 	JP	ESP_JOB_END
 .close
+	IFDEF	UGB_XMODE
+	CALL	ESP_XCFG
+	JR	NZ,.c_cmd
+	LD	A,(IX+ET_IDX)
+	CP	EXC_CLOSE
+	JR	NC,.c_cmd		; the last step: AT+CIPCLOSE
+	BIT	EF_DISCARD,(IX+ET_FL)
+	JP	NZ,ESP_JOB_END
+	INC	(IX+ET_IDX)		; "+++", CIPMODE=0: any answer
+	LD	(IX+ET_TRY),0
+	RET
+.c_cmd
+	ENDIF
 	RES	EF_CONN,(IX+ET_FL)
 	BIT	EF_DISCARD,(IX+ET_FL)
 	JP	NZ,ESP_JOB_END
@@ -910,6 +1172,16 @@ ESP_DONE
 	RET	NZ
 	LD	A,UTX_DONE_FAILED
 	JP	CH_TERMINATE
+
+	IFDEF	UGB_FAT
+.cost_fat
+	LD	HL,COST_RESULT_FAT
+	LD	A,(IX+ET_JOB)
+	CP	EJ_SEND
+	JP	NZ,.cost
+	LD	HL,COST_RESULT_SEND
+	JP	.cost
+	ENDIF
 
 ; ESP_SETUP_FAIL: the module did not take the set-up (absent, wrong
 ; firmware: no passive TCP).  The bring-up ends in FAULT; a running card
@@ -928,6 +1200,19 @@ ESP_SETUP_FAIL
 ; ESP_TIMEOUT: the command in flight got no terminal line in time.
 ; ----------------------------------------------------------------------
 ESP_TIMEOUT
+	IFDEF	UGB_XMODE
+	; "+++" has no answer: its deadline is the pause behind it
+	LD	L,(IX+ET_TPL)
+	LD	H,(IX+ET_TPL+1)
+	LD	DE,T_PPP
+	OR	A
+	SBC	HL,DE
+	JR	NZ,.not_ppp
+	LD	(IX+ET_TERM),TK_OK
+	LD	(IX+ET_CST),ECS_DONE
+	RET
+.not_ppp
+	ENDIF
 	LD	A,(IX+ET_JOB)
 	CP	EJ_SETUP
 	JR	NZ,.chan
@@ -948,6 +1233,12 @@ ESP_TIMEOUT
 	LD	A,UNETG_EV_TIMEOUT
 	LD	DE,UNETG_TIMEOUT_TX
 	CALL	ESP_FAIL_LIVE
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IY+EX_XFL)
+	JR	Z,.resync
+	CALL	ES_TX_STOP		; data mode: the module is still set up
+	JP	ESP_JOB_END
+	ENDIF
 	JR	.resync
 .lost
 	; the reply boundary is lost: the channel cannot trust the stream

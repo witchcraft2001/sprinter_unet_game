@@ -1,0 +1,42 @@
+{
+  "prog": "ugtest",
+  "dll": "gudpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "esp_fw": 2,
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 4.8,
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 764,
+    "steps_total": 2383,
+    "steps_useful": 2383,
+    "budget_yields": 1299,
+    "max_step_gap_ms": 20,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 100,
+    "rx_bytes": 100
+  },
+  "clock": "CLOCK_RATE 0.650 now_ms per emulated ms, TICK_MS 30.609, FRAME_MS 20.480, STEP_CALLS_PER_S 600 (over 5.6 s)",
+  "cpu_mhz": 20.93,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": 0.331,
+  "step": {
+    "max_us": 1082,
+    "mean_us": 701,
+    "steps": 2383,
+    "over_budget": 0
+  },
+  "trivial_call_us": 175
+}

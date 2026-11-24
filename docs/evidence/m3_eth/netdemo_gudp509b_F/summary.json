@@ -1,0 +1,96 @@
+{
+  "prog": "netdemo",
+  "dll": "gudp509b",
+  "card": "EL3",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
+  "scenario": "F game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile",
+  "wall_s": 32.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 21679",
+  "steps_per_period": 1,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 233,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 3451
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 231,
+      "card": 0,
+      "main": 3120,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 3120,
+    "periods": 720,
+    "largest_period_debit_us": 3351,
+    "now_ms": 14396,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 721,
+      "early": 6853,
+      "frames": 623,
+      "ticks": 7201,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 875,
+    "polls_useful": 101,
+    "steps_total": 721,
+    "steps_useful": 721,
+    "budget_yields": 356,
+    "max_step_gap_ms": 20,
+    "arp_requests": 4,
+    "tx_frames": 254,
+    "rx_frames": 101,
+    "tx_bytes": 5000,
+    "rx_bytes": 8800
+  },
+  "timing_us": {
+    "tick_isr_max": 312,
+    "admitted_ug_step_max": 2971,
+    "largest_tick_gap": 2327,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 13.8 s)",
+  "hw": {
+    "flow": {
+      "seconds": 10,
+      "offered": 250,
+      "sent": 250,
+      "skipped": 0,
+      "at_server": 247,
+      "inputs_per_s": 24.7,
+      "states": 100,
+      "states_lost": 0,
+      "txdone_max_ms": 40,
+      "loop_max_ms": 100,
+      "loop_mean_ms": 50.7,
+      "state_gap_max_ms": 140
+    }
+  }
+}

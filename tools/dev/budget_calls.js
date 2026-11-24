@@ -13,8 +13,16 @@
 'use strict';
 const A = require('../harness/abi.json');
 
-const BOUNDS = ['EV_FLUSH', 'DEADLINES', 'TP_IF_RUNNING', 'ETH_AFFORD', 'ETH_AFFORD_E', 'ETH_RX_CONT', 'ETH_TX_CONT',
-  'ETH_STEP_ODD', 'UNITS_REFUND', 'ESP_SEQ', 'ESP_PARSE', 'HW_STEP'];
+const BOUNDS = ['EV_FLUSH', 'DEADLINES', 'TP_IF_RUNNING', 'ETH_AFFORD', 'ETH_AFFORD_E', 'ETH_RX_CONT', 'ETH_TX_CONT', 'ETH_FIRST', 'ETH_TX_FIRST',
+  'ETH_STEP_ODD', 'UNITS_REFUND', 'ESP_SEQ', 'ESP_PARSE', 'HW_STEP', 'HW_FAT', 'TP_FAT_VISIT'];
+// Short path (engine.asm, udp.asm): its items are sized with nothing to
+// spare, so the dispatch around them is NOT made base time here: what
+// TX_FUSE / UDP_RX_FAST check before their TAKE stays the tail of the
+// item before (the short path's own costs are measured that way).
+// FOLD: a TAKE made inside the portion of the item before it belongs to
+// that item (3C509B: RXP_POLL takes the header's cost once NIC_RX_STATUS
+// has found a frame; poll + header are one portion and one item).
+const FOLD = { RXP_POLL: 'ETH_RX_STEP.poll', UART_PUMP_FAT: 'HW_RUN_FAT', ESP_LEAN: 'ESP_LEAN' };
 // ESP_SEQ: always entered once per TP_STEP call (WP2's multiple parse/pend
 // visits can leave it, or the first visit after it, idle with no TAKE of
 // its own -- without this bound that idle dispatch time bleeds into the
@@ -62,6 +70,7 @@ function budgetTracker(s, { bounds = BOUNDS } = {}) {
         const call = { t, u: m.peek16(ua), who, kind, ret, sp: st.sp, taken: 0, refund: 0, cost: (st.h << 8) | st.l, bc: (st.b << 8) | st.c, de: (st.d << 8) | st.e };
         const prev = calls[calls.length - 1];
         if (kind === '' && prev && prev.kind === '/round' && prev.who === who && !marks.some((x) => x > prev.t)) call.into = prev;
+        else if (kind === '' && prev && FOLD[who] === prev.who && !marks.some((x) => x > prev.t)) call.into = prev;
         else calls.push(call);
         pending.push(call);
       } else if (st.pc === refundPc) {

@@ -90,7 +90,7 @@ class ParseHwTests(unittest.TestCase):
         self.assertEqual(pr["CTC"]["sample_us"], 37.5)         # 20000 x (1/400 - 1/1600)
         self.assertEqual(pr["RTS08"]["resume"], "below_trigger")
         self.assertEqual(pr["UART08"]["hist_1_16plus"][8], 19)
-        self.assertEqual(s["criteria"], {"result": True, "probe_ctc": False, "probe_uart": True})
+        self.assertEqual(s["criteria"], {"result": True, "probe_ctc": True, "probe_uart": True})
 
     def test_slot(self) -> None:
         # hw.env said slot 0, the card answered only in slot 1 and ran there
@@ -118,7 +118,8 @@ class ParseHwTests(unittest.TestCase):
         # UGPROBE 3 1 after a series: what is left to the system stack;
         # addresses stay out of the evidence but a change is still seen
         head = ["UGPROBE 3", "SCEN 3", "CARD 00 00 50 6D 00 00 10 00", "DSSENV BOOTDSK=C:",
-                "DSSENV NET=509B", "DSSENV NET_IP=192.168.1.148", "DSSENV NET_GW -"]
+                "DSSENV NET=509B", "DSSENV NET_IP=192.168.1.148", "DSSENV NET_GW -",
+                "DSSENV NET_LEASE_SEC=92.168.1.1", "DSSENV NET_DNS=10.0.0.1"]
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "STATA3.TXT"
             p.write_text("\r\n".join(head + ["RESULT: PASS", ""]))
@@ -128,12 +129,43 @@ class ParseHwTests(unittest.TestCase):
         self.assertEqual(s["state"]["env"]["NET"], "509B")
         self.assertIsNone(s["state"]["env"]["NET_GW"])
         self.assertNotIn("192.168", text + json.dumps(s))
+        # an address under any other name too (RTL series: NET_LEASE_SEC)
+        self.assertNotIn("92.168", text + json.dumps(s))
+        self.assertNotIn("10.0.0", text + json.dumps(s))
+        self.assertEqual(parse_hw.state_of("DSSENV NET_LEASE_SEC=25200\r\n")[1]["env"]["NET_LEASE_SEC"], "25200")
         other = parse_hw.state_of("DSSENV NET_IP=192.168.1.149\r\n")[1]["env"]["NET_IP"]
         self.assertNotEqual(s["state"]["env"]["NET_IP"], other)
         # the probe carries the same head: the "before" side
         s = self.parse("PROBE3.TXT", "\r\n".join(head + ["SLOT 0 01 0", "CAL 6400 1000", "RESULT: PASS", ""]))
         self.assertEqual(s["prog"], "ugprobe")
         self.assertEqual(s["state"]["env"]["BOOTDSK"], "C:")
+
+    def test_transparent_name(self) -> None:
+        # X: GUDPESP in its transparent mode (tools/hw/build_hw.sh UGTESPX)
+        rep = ugtest_report().replace("UGTEST GTCPRTL.DLL", "UGTEST GUDPESP.DLL").replace("SCEN K", "SCEN E")
+        s = self.parse("UESPXE.TXT", rep)
+        self.assertEqual((s["prog"], s["dll"], s["scenario"]), ("ugtest", "gudpespx", "E"))
+        self.assertIsNone(parse_hw.identify("URTLXE.TXT", []))
+
+    def test_flow(self) -> None:
+        # NETDEMO F: offered, sent, at the server, states, first / last state
+        # seq, TX_DONE max, loop max, loop sum, max gap (sdk/example/netdemo.asm)
+        def rep(flow):
+            return "\r\n".join(["NETDEMO GUDPRTL.DLL", "SCEN F", "SLOT 0 01 0", "OPEN", "EV 01/00",
+                                  "FLOW " + flow, "EV 09/00", "SHUTDOWN 00", "RESULT: PASS", ""])
+        s = self.parse("NRTLUF.TXT", rep("00FB 00FB 00F8 0064 0000 0063 0028 0075 239B 0078"))
+        f = s["hw"]["flow"]
+        self.assertEqual((f["offered"], f["skipped"], f["at_server"], f["states"], f["states_lost"]), (251, 0, 248, 100, 0))
+        self.assertEqual((f["txdone_max_ms"], f["loop_max_ms"], f["loop_mean_ms"], f["state_gap_max_ms"]), (40, 117, 91.2, 120))
+        self.assertEqual(f["inputs_per_s"], 24.8)
+        self.assertTrue(s["criteria"]["flow"])
+        # a lost state (seq 0..100 seen as 100 states) or too few inputs fail it
+        self.assertEqual(self.parse("NRTLUF.TXT", rep("00FB 00FB 00F8 0064 0000 0064 0028 0075 239B 00C8"))["hw"]["flow"]["states_lost"], 1)
+        self.assertFalse(self.parse("NRTLUF.TXT", rep("00FB 00FB 00F8 0064 0000 0064 0028 0075 239B 00C8"))["criteria"]["flow"])
+        self.assertFalse(self.parse("NESPUF.TXT", rep("00FB 0033 0032 0064 0000 0063 00DC 00EB 4D62 0078")
+                                    .replace("GUDPRTL", "GUDPESP"))["criteria"]["flow"])
+        # seq wraps at 16 bits
+        self.assertEqual(self.parse("NRTLUF.TXT", rep("00FB 00FB 00F8 0064 FFF0 0053 0028 0075 239B 0078"))["hw"]["flow"]["states_lost"], 0)
 
     def test_name_mismatch(self) -> None:
         with self.assertRaises(ValueError):

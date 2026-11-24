@@ -1,0 +1,126 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudprtl",
+  "scenario": "Q",
+  "file": "NRTLUQ.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 4744
+  },
+  "info": {
+    "min_useful_budget_us": 1047,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 2334,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1167,
+    "periods": 532,
+    "largest_period_debit_us": 4649,
+    "now_ms": 10647,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 1066,
+      "early": 5394,
+      "frames": 414,
+      "ticks": 5326,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 414,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 5410,
+    "polls_useful": 73,
+    "steps_total": 1066,
+    "steps_useful": 1066,
+    "budget_yields": 1054,
+    "max_step_gap_ms": 10,
+    "drop_foreign": 2,
+    "arp_requests": 1,
+    "tx_frames": 33,
+    "rx_frames": 73,
+    "tx_bytes": 5824,
+    "rx_bytes": 5824
+  },
+  "timing_us": {
+    "tick_isr_max": 390,
+    "admitted_ug_step_max": 1389,
+    "largest_tick_gap": 2072,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "Q",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "local_port": 62733,
+    "bring": {
+      "ms": 59,
+      "scratch": 0
+    },
+    "latms": [
+      {
+        "bytes": 64,
+        "n": 16,
+        "txdone_max_ms": 316,
+        "txdone_mean_ms": 142.3,
+        "echo_max_ms": 298,
+        "echo_mean_ms": 192.4
+      },
+      {
+        "bytes": 300,
+        "n": 16,
+        "txdone_max_ms": 514,
+        "txdone_mean_ms": 317.1,
+        "echo_max_ms": 596,
+        "echo_mean_ms": 423.0
+      }
+    ],
+    "cbl": {
+      "n": 414,
+      "max_us": 1916,
+      "mean_us": 1098
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

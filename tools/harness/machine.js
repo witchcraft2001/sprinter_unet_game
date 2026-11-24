@@ -14,6 +14,7 @@
 // z80core.js checks `this === window` (browser heritage); give Node a dummy.
 if (typeof global.window === 'undefined') global.window = {};
 const Z80 = require('./z80core.js');
+const { realTime } = require('./dramwait.js');
 
 const PAGE_PORTS = { 0x82: 0, 0xa2: 1, 0xc2: 2, 0xe2: 3 };
 const FORBIDDEN_OPCODES = {
@@ -24,7 +25,14 @@ const FORBIDDEN_OPCODES = {
 class Machine {
   constructor(opts = {}) {
     this.mhz = opts.mhz || 21;
-    this.isaWaitT = opts.isaWaitT ?? 8;     // extra T-states per ISA access (calibrated in M0)
+    // waits: real time of the board in turbo (memory cycles on the 3.5 MHz
+    // grid, dramwait.js); an ISA access then costs what a RAM access does.
+    // Without it: plain T-states plus isaWaitT per ISA access.
+    this.waits = !!opts.waits;
+    this.isaWaitT = opts.isaWaitT ?? (this.waits ? 0 : 8);
+    this.acc = [];                          // accesses of the current instruction (0 memory, 1 I/O)
+    this.accPre = 0;                        // ... of them made by an interrupt acceptance
+    this.phase = 0;
     this.mem = new Uint8Array(0x100000);
     this.mem.fill(opts.poison ?? 0xaa);
     this.win = [0, 1, 2, 3];
@@ -36,6 +44,8 @@ class Machine {
     this.violations = [];
     this.trace = { io: [] };
     this.cycles = 0;
+    this.plainCycles = 0;                   // the time of the mode without `waits`, whatever the mode
+    this.isaN = 0;
     this.extraCycles = 0;
     this.cpu = new Z80({
       mem_read: (a) => this.read(a),
@@ -72,11 +82,13 @@ class Machine {
   }
   isaAccess(address) {
     this.extraCycles += this.isaWaitT;
+    this.isaN++;
     if (this.cpu.getState().iff1) this.violation('isa-with-interrupts', `access 0x${address.toString(16)} with IFF1=1`);
     if ((this.port9fbd & 0xc0) !== 0) this.violation('isa-aen', `#9FBD=0x${this.port9fbd.toString(16)} during card access`);
   }
   read(a) {
     a &= 0xffff;
+    if (this.waits) this.acc.push(0);
     if (a >= 0xc000 && this.isaOpen()) {
       this.isaAccess(a);
       const t = this.cardAt(a);
@@ -87,6 +99,7 @@ class Machine {
   }
   write(a, v) {
     a &= 0xffff; v &= 0xff;
+    if (this.waits) this.acc.push(0);
     if (a >= 0xc000 && this.isaOpen()) {
       this.isaAccess(a);
       const t = this.cardAt(a);
@@ -110,6 +123,7 @@ class Machine {
   ioRead(port) {
     port &= 0xffff;
     const low = port & 0xff;
+    if (this.waits) this.acc.push(1);
     const fromImage = this.pcInImage();
     this.trace.io.push({ dir: 'in', port, fromImage });
     if (low in PAGE_PORTS) return this.win[PAGE_PORTS[low]] & 0xff;
@@ -120,6 +134,7 @@ class Machine {
   ioWrite(port, v) {
     port &= 0xffff; v &= 0xff;
     const low = port & 0xff;
+    if (this.waits) this.acc.push(1);
     const fromImage = this.pcInImage();
     this.trace.io.push({ dir: 'out', port, value: v, fromImage });
     if (port === 0x1ffd) {
@@ -149,10 +164,36 @@ class Machine {
   setRegs(patch) { const s = this.cpu.getState(); Object.assign(s, patch); this.cpu.setState(s); }
   get us() { return this.cycles / this.mhz; }
 
+  // One instruction: returns the T-states it took on this machine (plain
+  // T-states plus ISA waits, or the real time of the board with `waits`)
+  // and adds them to `cycles`.  Accesses recorded before the call belong
+  // to an interrupt acceptance (cpu.interrupt()).
+  exec() {
+    if (!this.waits) {
+      this.extraCycles = 0;
+      const t = this.cpu.run_instruction() + this.extraCycles;
+      this.cycles += t;
+      this.plainCycles += t;
+      return t;
+    }
+    const pc = this.cpu.getState().pc;
+    const b0 = this.peek(pc), b1 = this.peek(pc + 1);
+    const pre = this.acc.length;
+    this.isaN = 0;
+    const t = this.cpu.run_instruction();
+    this.plainCycles += t + 8 * this.isaN;
+    const next = realTime(this.phase, t, this.acc, pre, b0, b1);
+    const real = next - this.phase;
+    this.phase = next % 6;
+    this.acc.length = 0;
+    this.cycles += real;
+    return real;
+  }
+
   // Run from the current state until PC == stop.  Returns per-run metrics.
   runUntil(stop, opts = {}) {
     const limit = opts.maxCycles ?? 20_000_000;
-    const start = this.cycles;
+    const start = this.cycles, plain0 = this.plainCycles;
     let minSp = this.regs().sp, diStart = null, maxDi = 0;
     const isr = !!opts.isr;
     for (;;) {
@@ -165,9 +206,7 @@ class Machine {
         if (op === 0xfb && isr) this.violation('ei-in-isr', 'EI inside STEP_ISR');
       }
       if (opts.onStep) opts.onStep(this, s);
-      this.extraCycles = 0;
-      const t = this.cpu.run_instruction();
-      this.cycles += t + this.extraCycles;
+      const t = this.exec();
       const n = this.cpu.getState();
       if (n.sp < minSp) minSp = n.sp;
       if (!n.iff1 && diStart === null) diStart = this.cycles - t;
@@ -175,7 +214,7 @@ class Machine {
     }
     if (diStart !== null && !opts.isr) maxDi = Math.max(maxDi, this.cycles - diStart);
     const cyc = this.cycles - start;
-    return { cycles: cyc, us: cyc / this.mhz, minSp, maxDiUs: maxDi / this.mhz };
+    return { cycles: cyc, us: cyc / this.mhz, plainUs: (this.plainCycles - plain0) / this.mhz, minSp, maxDiUs: maxDi / this.mhz };
   }
 }
 

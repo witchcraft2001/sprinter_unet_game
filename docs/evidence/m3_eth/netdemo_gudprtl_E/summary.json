@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 20.0,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 20011",
+  "wall_s": 18.2,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 24968",
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -17,33 +17,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3350
+    "quota_sum_us": 8245
   },
   "info": {
-    "min_useful_budget_us": 410,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1047,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 2300,
+      "main": 5835,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 460,
-    "periods": 15,
-    "largest_period_debit_us": 3250,
-    "now_ms": 305,
+    "cost_poll_us": 231,
+    "cost_step_us": 1167,
+    "periods": 14,
+    "largest_period_debit_us": 8145,
+    "now_ms": 295,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 76,
-      "early": 148,
-      "frames": 12,
-      "ticks": 153,
+      "step": 72,
+      "early": 145,
+      "frames": 11,
+      "ticks": 148,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,12 +58,12 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 151,
+    "polls_total": 146,
     "polls_useful": 2,
-    "steps_total": 76,
-    "steps_useful": 76,
-    "budget_yields": 65,
-    "max_step_gap_ms": 6,
+    "steps_total": 72,
+    "steps_useful": 72,
+    "budget_yields": 64,
+    "max_step_gap_ms": 8,
     "arp_requests": 1,
     "tx_frames": 2,
     "rx_frames": 2,
@@ -72,8 +72,8 @@
   },
   "timing_us": {
     "tick_isr_max": 305,
-    "admitted_ug_step_max": 1009,
-    "largest_tick_gap": 2024,
+    "admitted_ug_step_max": 1042,
+    "largest_tick_gap": 2018,
     "late_ticks": 0
   }
 }

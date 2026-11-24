@@ -11,8 +11,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { ethStand, C } = require('../../../tools/harness/ethnet.js');
+const { ethStand, C, US } = require('../../../tools/harness/ethnet.js');
 const A = require('../../../tools/harness/abi.json');
+// Budgets are real microseconds; US(n) buys n units (tools/harness/stand.js).
+const ISR_BUDGET = A.consts.limits.ISR_BODY_MAX_US;
 
 const S = C.status;
 const UHW_RUN = 2;
@@ -25,13 +27,13 @@ const DT = 2;
 const DT_DEFAULT = DT;
 
 // Boot a build to the running card.  over: INIT_CONFIG fields; opts.card /
-// opts.peer: model options; opts.budget: STEP budget (default 500);
+// opts.peer: model options; opts.budget: STEP budget (default US(500): 500 units);
 // opts.clockMs: now_ms moves in ticks of this length (ethnet.js);
 // opts.dt: real ms between STEPs (default DT).
 function boot(dll, over = {}, opts = {}) {
   const s = ethStand({ dll, card: opts.card, peer: opts.peer, clockMs: opts.clockMs });
   const DT = opts.dt ?? DT_DEFAULT;
-  const budget = opts.budget ?? 500;
+  const budget = opts.budget ?? US(500);
   assert.equal(s.call('INIT').a, 0);
   const cfg = s.defaultConfig({ step_budget_us: budget, ...over });
   assert.equal(s.initConfig(cfg).a, S.OK);
@@ -48,7 +50,9 @@ function boot(dll, over = {}, opts = {}) {
     throw new Error(`condition not met; events ${ev.map((e) => e.name)}`);
   };
   if (opts.noBoot) return s;
-  for (let i = 0; i < 1000 && s.ctx('hw_state') !== UHW_RUN; i++) s.probs.push(...s.tick(DT, budget).problems);
+  // (3000 ticks: the transparent profile of GUDPESP starts with "+++" and
+  // its pauses, about 2.3 s)
+  for (let i = 0; i < 3000 && s.ctx('hw_state') !== UHW_RUN; i++) s.probs.push(...s.tick(DT, budget).problems);
   assert.equal(s.ctx('hw_state'), UHW_RUN, 'card running');
   return s;
 }
@@ -102,7 +106,7 @@ function nestedIsr(s, seed = 12345) {
     0xed, 0x73, ISR_SAVE & 255, ISR_SAVE >> 8,     // LD (save),SP
     0x31, top & 255, top >> 8,                      // LD SP,top
     0xf5, 0xc5, 0xd5, 0xe5,                         // PUSH AF/BC/DE/HL
-    0x3e, C.src.TIMER, 0x11, 150, 0,                // LD A,TIMER : LD DE,150
+    0x3e, C.src.TIMER, 0x11, ISR_BUDGET & 255, ISR_BUDGET >> 8,   // LD A,TIMER : LD DE,budget
     0xcd, e & 255, e >> 8,                          // CALL STEP_ISR
     0x32, ISR_LOG & 255, ISR_LOG >> 8,              // LD (log),A
     0xe1, 0xd1, 0xc1, 0xf1,                         // POP HL/DE/BC/AF
@@ -115,7 +119,7 @@ function nestedIsr(s, seed = 12345) {
   const callFields = ['call_flags', 'work', 'units', 'flags_out'].map((k) => [k, L.ctx + A.ctx.fields[k].offset, A.ctx.fields[k].size]);
   const snap = () => callFields.map(([, a, n]) => m.peekBytes(a, n).join(','));
   s.stepOpts = {
-    slackUs: 200,                                   // the ISR runs inside the measured STEP
+    slackUs: ISR_BUDGET + 120,                      // the ISR and its stub run inside the measured STEP
     onStep: (mm, cpu) => {
       if (cpu.pc === ISR_STUB) { insideIsr = true; saved = snap(); }
       if (insideIsr && cpu.pc === e) c0 = mm.cycles;
@@ -136,8 +140,16 @@ function nestedIsr(s, seed = 12345) {
   return st;
 }
 
-function transportScenarios(dll) {
-  test(`${dll}: connect, echo 300 bytes both ways, close`, () => {
+// o.budget / o.label: the same scenarios at another STEP budget (the fat
+// STEP of the SprinterESP builds), with the label in every test name;
+// o.over: INIT_CONFIG fields of every boot (GUDPESP's transparent mode,
+// esp_fw = 2).
+const bootAt = (...a) => boot(...a);
+function transportScenarios(dll, o = {}) {
+  // eslint-disable-next-line no-shadow
+  const boot = (d, over = {}, opts = {}) => bootAt(d, { ...o.over, ...over }, o.budget ? { budget: o.budget, ...opts } : opts);
+  const L = o.label || '';
+  test(`${dll}${L}: connect, echo 300 bytes both ways, close`, () => {
     const s = boot(dll);
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -162,10 +174,10 @@ function transportScenarios(dll) {
     clean(s);
   });
 
-  test(`${dll}: the minimum useful budget from GET_INFO still moves data`, () => {
+  test(`${dll}${L}: the minimum useful budget from GET_INFO still moves data`, () => {
     const probe = boot(dll, {}, { noBoot: true });
     const min = probe.getInfo().info.min_useful_budget_us;
-    assert.ok(min <= 425, `min_useful_budget_us ${min}`);   // the 2000 us quota of the SDK profile
+    assert.ok(min <= US(437), `min_useful_budget_us ${min}`);   // 437 units (GTCP509B: base 212 + item 215 + return 10)
     const s = boot(dll, {}, { budget: min });
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -178,7 +190,7 @@ function transportScenarios(dll) {
     clean(s);
   });
 
-  test(`${dll}: at the minimum budget STEP itself publishes the TX_DONE of a lone send`, () => {
+  test(`${dll}${L}: at the minimum budget STEP itself publishes the TX_DONE of a lone send`, () => {
     // A full card poll and the TX scan left less than one publication in a
     // minimum STEP: TX_DONE was refused in every STEP (and the scan paid
     // again) until the game read its events -- NEXT_EVENT flushes without a
@@ -198,7 +210,7 @@ function transportScenarios(dll) {
     clean(s);
   });
 
-  test(`${dll}: an 8 KiB stream both ways stays intact`, () => {
+  test(`${dll}${L}: an 8 KiB stream both ways stays intact`, () => {
     const s = boot(dll);
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -213,20 +225,20 @@ function transportScenarios(dll) {
   });
 
   // ТЗ §6.1/§8.2 "базовая нагрузка": 2048 B/s useful payload each way, at
-  // the default STEP period (2 ms) and budget (500).  Ethernet already
+  // the default STEP period (2 ms) and budget (500 units).  Ethernet already
   // clears this with the SDK's default ISR budget; SprinterESP needs a
   // game to raise UGP_ISR_BUDGET (docs/SDK.md) so STEP_ISR's leftover
   // budget can run a second UART drain (WP4, ES_ISRCAP) -- modelled here
-  // by injecting STEP_ISR at budget 150 between STEPs, same as
-  // `profile_step.js --isr 150` (docs/MEASUREMENTS.md, "Этап ESP 2
+  // by injecting STEP_ISR at the largest budget between STEPs, same as
+  // `profile_step.js --isr` (docs/MEASUREMENTS.md, "Этап ESP 2
   // КиБ/с").  GUDPESP clears the target this way; GTCPESP does not --
   // CIPRECVDATA's main-STEP-only round trip still caps it, so it stays a
   // `todo` test, never a weakened assert, until closed or accepted as the
   // Ж (real hardware) outcome.
-  test(`${dll}: an 8 KiB stream both ways reaches >= 2048 B/s (ТЗ §6.1/§8.2)`,
+  test(`${dll}${L}: an 8 KiB stream both ways reaches >= 2048 B/s (ТЗ §6.1/§8.2)`,
     { todo: dll === 'gtcpesp' ? 'GTCPESP: CIPRECVDATA round trip caps it below 2048 B/s even with the STEP_ISR RX pump' : false }, () => {
     const s = boot(dll);
-    if (s.isEsp) s.stepOpts = { isr: { budget: 150 } };
+    if (s.isEsp) s.stepOpts = { isr: { budget: ISR_BUDGET } };
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
     const d = bytes(8192, 3);
@@ -245,7 +257,7 @@ function transportScenarios(dll) {
   // STEP admission order of ETH_SCHED, ESP since its CIPRECVDATA deadline
   // counts from the last received byte (ESP_PROGRESS).
   for (const gap of [10, 20]) {
-    test(`${dll}: an 8 KiB stream with a STEP every ${gap} ms stays within budget`, () => {
+    test(`${dll}${L}: an 8 KiB stream with a STEP every ${gap} ms stays within budget`, () => {
         const s = boot(dll);
         assert.equal(s.open().a, S.OK);
         s.until(has('CONNECTED'));
@@ -256,7 +268,7 @@ function transportScenarios(dll) {
       });
   }
 
-  test(`${dll}: STEP_ISR interrupting a STEP leaves the STEP state intact`, () => {
+  test(`${dll}${L}: STEP_ISR interrupting a STEP leaves the STEP state intact`, () => {
     const s = boot(dll);
     const st = nestedIsr(s);
     const tick = s.tick;
@@ -268,7 +280,7 @@ function transportScenarios(dll) {
     assert.deepEqual(rx, d);
     assert.deepEqual(peerGot(s, dll), d);
     assert.ok(st.taken > 100, `interrupts taken ${st.taken}`);
-    assert.ok(st.maxUs <= 150, `nested STEP_ISR took ${st.maxUs.toFixed(1)} us, budget 150`);
+    assert.ok(st.maxUs <= ISR_BUDGET, `nested STEP_ISR took ${st.maxUs.toFixed(1)} us, budget ${ISR_BUDGET}`);
     assert.equal(s.m.peek(s.layout().lock), 0, 'ISA lock free');
     assert.equal(s.ctx('call_flags'), 0);
     assert.deepEqual([...st.touched], [], 'per-call fields written by STEP_ISR');
@@ -276,7 +288,7 @@ function transportScenarios(dll) {
     clean(s);
   });
 
-  test(`${dll}: SHUTDOWN at any point of a send finishes, the slot outcome is published`, () => {
+  test(`${dll}${L}: SHUTDOWN at any point of a send finishes, the slot outcome is published`, () => {
     // a frame needs tens of STEPs at the minimum budget (MEASUREMENTS.md):
     // SHUTDOWN lands before, inside and after its TX pipeline
     for (const k of [0, 4, 8, 10, 12, 16, 20, 26, 32, 40]) {
@@ -301,7 +313,7 @@ function transportScenarios(dll) {
     }
   });
 
-  test(`${dll}: STEP_ISR polls within any budget, GET_INFO covers the measured costs`, () => {
+  test(`${dll}${L}: STEP_ISR polls within any budget, GET_INFO covers the measured costs`, () => {
     const s = boot(dll);
     assert.equal(s.open().a, S.OK);
     s.until(has('CONNECTED'));
@@ -309,7 +321,7 @@ function transportScenarios(dll) {
     s.events();
     const info = s.getInfo().info;
     let empty = 0;
-    for (const b of [40, 60, 64, 65, 70, 100, 135, 150]) {   // around PROF_ISR_MIN_US
+    for (const b of [40, 60, 64, 65, 70, 100, 135, 150].map(US)) {   // units around PROF_ISR_MIN_US
       const r = s.stepIsr(C.src.TIMER, b);
       assert.deepEqual(r.problems, [], `budget ${b}`);
       assert.ok(r.a === S.IDLE || r.a === S.YIELD, `status ${r.a} on a quiet channel`);
@@ -319,7 +331,7 @@ function transportScenarios(dll) {
     // data found by the ISR poll is served by the next STEP
     inject(s, dll, bytes(32, 8));
     s.idle(s.isEsp ? 8 : 0);                       // ESP: the notice crosses the network and the UART line
-    const r = s.stepIsr(C.src.TIMER, 150);
+    const r = s.stepIsr(C.src.TIMER);
     assert.deepEqual(r.problems, []);
     assert.equal(r.a, S.WORK, 'data waiting');
     s.until(has('RX_READY'));
@@ -330,7 +342,7 @@ function transportScenarios(dll) {
     // published bound
     const before = s.getStats().stats.bus_busy;
     s.m.poke(s.layout().lock, C.lock.SOUND);
-    const b = s.stepIsr(C.src.TIMER, 150);
+    const b = s.stepIsr(C.src.TIMER);
     s.m.poke(s.layout().lock, C.lock.FREE);
     assert.equal(b.a, S.BUS_BUSY);
     assert.ok(b.us <= info.bus_busy_us, `BUS_BUSY ${b.us.toFixed(0)} <= published ${info.bus_busy_us}`);
@@ -414,6 +426,237 @@ function ethScenarios(dll) {
     assert.ok(s.getStats().stats.drop_foreign > 10);
     clean(s);
   });
+
+  // ---- small packets and the short path (docs/MEASUREMENTS.md "Короткий путь") --
+  // GUDP509B at a budget of about 1800 us and more: the card portions of a
+  // small frame fused (BEGIN + header, payload + END, poll + header), a
+  // frame dropped by the card in the portion that reads its last byte, a
+  // small datagram as one software item each way.  The other builds keep
+  // the plain items; the outcomes below are the same for all.
+  const BIG = A.consts.limits.STEP_BODY_MAX_US;
+  const SHORT = dll === 'gudp509b';
+  const sentFrames = (s) => s.card.transmitted.length;
+  const minBudget = () => boot(dll).getInfo().info.min_useful_budget_us;
+
+  test(`${dll}: streams in small pieces stay intact (padding, the short path) at the largest and the smallest budget`, () => {
+    for (const budget of [BIG, minBudget()]) {
+      for (const piece of [1, 17, 18, 22, 23, 40, 41, 57, 64]) {
+        const s = boot(dll, {}, { budget });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'), 20000);
+        const d = bytes(piece * 12, piece);
+        assert.deepEqual(stream(s, d, piece), d, `piece ${piece} budget ${budget}`);
+        assert.deepEqual(peerGot(s, dll), d);
+        clean(s);
+      }
+    }
+  });
+
+  if (isUdp(dll)) {
+    // What a game gets at the largest budget, one STEP per frame: the
+    // datagram on the wire and the echo readable after so many STEPs.
+    // GUDP509B (short path): 2 and 3 STEPs up to 16 bytes; the plain items
+    // need 3 and 5.  These numbers are the reason for the short path --
+    // a change that loses them is a regression.
+    test(`${dll}: a small datagram at the largest budget: STEPs to the wire and to the echo`, () => {
+      for (const n of [1, 8, 16]) {
+        const s = boot(dll, {}, { budget: BIG });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        s.run(50); s.events(); s.drain();
+        for (let k = 0; k < 4; k++) {
+          const d = bytes(n, 9 + k), f0 = sentFrames(s);
+          assert.equal(s.send(d, k + 1).commit.a, S.OK);
+          let wire = 0, echo = 0;
+          const rx = [];
+          for (let i = 1; i <= 12 && !echo; i++) {
+            s.run(1);
+            s.events();
+            if (!wire && sentFrames(s) > f0) wire = i;
+            rx.push(...s.drain().bytes);
+            if (rx.length >= n) echo = i;
+          }
+          assert.deepEqual(rx, d);
+          assert.ok(wire <= (SHORT ? 2 : 3), `${n} bytes: on the wire after ${wire} STEPs`);
+          assert.ok(echo <= (SHORT ? 3 : 5), `${n} bytes: echo after ${echo} STEPs`);
+          s.run(20); s.events(); s.drain();
+        }
+        clean(s);
+      }
+    });
+
+    test(`${dll}: a received datagram of up to 22 bytes is readable ${SHORT ? 'after the one STEP that polls it' : 'within three STEPs'} at the largest budget`, () => {
+      for (const n of [0, 1, 16, 22]) {
+        const s = boot(dll, {}, { budget: BIG });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        s.run(50); s.events();
+        const d = bytes(n, 40 + n);
+        const before = s.getStats().stats;
+        inject(s, dll, d);
+        let steps = 0;
+        for (; steps < 6 && s.getStats().stats.rx_bytes - before.rx_bytes < n; steps++) s.run(1);
+        if (n === 0) { s.run(SHORT ? 1 : 3); steps = SHORT ? 1 : 3; }
+        assert.ok(steps <= (SHORT ? 1 : 3), `${n} bytes after ${steps} STEPs`);
+        assert.deepEqual(s.drain().bytes, d);
+        s.until(has('RX_READY'), 4);
+        clean(s);
+      }
+    });
+
+    // Datagrams of 23..96 bytes: GUDP509B checks, accepts and reads them
+    // from the card in the item that finds them (UDP_RX_MID) and publishes
+    // them in the STEP that polls them -- up to 88 bytes: the item of 96
+    // (673 units) does not fit beside the poll and the header (668 left at
+    // 3000 us), it takes two; the other builds take the plain items (the
+    // plain numbers are what they measure today).
+    test(`${dll}: a received datagram of 23..96 bytes is readable ${SHORT ? 'after the one STEP that polls it (88 bytes and less)' : 'within four STEPs'} at the largest budget`, () => {
+      for (const n of [23, 40, 41, 62, 63, 64, 88, 96]) {
+        const s = boot(dll, {}, { budget: BIG });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        s.run(50); s.events();
+        const d = bytes(n, 60 + n);
+        const before = s.getStats().stats;
+        inject(s, dll, d);
+        let steps = 0;
+        for (; steps < 8 && s.getStats().stats.rx_bytes - before.rx_bytes < n; steps++) s.run(1);
+        assert.ok(steps <= (SHORT ? (n <= 88 ? 1 : 2) : 4), `${n} bytes after ${steps} STEPs`);
+        assert.deepEqual(s.drain().bytes, d);
+        s.until(has('RX_READY'), 4);
+        clean(s);
+      }
+    });
+
+    // A card portion of a mid datagram refused for the bus (the sound
+    // owner takes the try-lock between the accept and the copy): the
+    // generic states read the rest, nothing is lost or duplicated.
+    if (SHORT) {
+      test(`${dll}: a busy bus in the middle of a datagram of 88 bytes leaves the rest to the generic states`, () => {
+        const s = boot(dll, {}, { budget: BIG });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        s.run(50); s.events();
+        const at = s.sym('UDP_RX_MID.portion'), lock = s.layout().lock;
+        let held = 0;
+        s.stepOpts = { onStep: (m, st) => { if (st.pc === at && !held) { held = 1; m.poke(lock, 3); } } };
+        const d = bytes(88, 7), before = s.getStats().stats;
+        inject(s, dll, d);
+        s.run(1);
+        assert.equal(held, 1, 'the mid path reached its first card portion');
+        s.m.poke(lock, 0);
+        s.stepOpts = {};
+        for (let i = 0; i < 8 && s.getStats().stats.rx_bytes - before.rx_bytes < 88; i++) s.run(1);
+        assert.deepEqual(s.drain().bytes, d);
+        assert.ok(s.getStats().stats.bus_busy > before.bus_busy, 'the refusal is counted');
+        inject(s, dll, bytes(40, 3));
+        s.run(10);
+        assert.deepEqual(s.drain().bytes, bytes(40, 3), 'the next datagram');
+        clean(s);
+      });
+    }
+
+    // Everything the short path is not sure about goes to the generic
+    // states: the outcome and the statistics are the same with it (largest
+    // budget) and without it (smallest budget: its items never fit).
+    test(`${dll}: doubtful datagrams (12, 60, 88 bytes) are dropped and counted the same at any budget`, () => {
+     for (const size of [12, 60, 88]) {
+      const dg = (s, over = {}, data = bytes(size, 9)) => {
+        const f = s.peer.ipFrame(s.cardMac(), [192, 168, 0, 10], 17, [0x1b, 0x58, 0x1b, 0x59, 0, 8 + data.length, 0, 0, ...data]);
+        for (const [o, v] of Object.entries(over)) f[+o] = v;
+        return f;
+      };
+      const fixIp = (f) => { f[24] = 0; f[25] = 0; let c = 0; for (let i = 14; i < 34; i += 2) c += (f[i] << 8) | f[i + 1];
+        while (c > 0xffff) c = (c & 0xffff) + (c >>> 16); c = (~c) & 0xffff; f[24] = c >> 8; f[25] = c & 255; return f; };
+      const cases = [
+        ['another destination port', (s) => dg(s, { 37: 0x5a }), 'drop_foreign', 0],
+        ['another source port', (s) => dg(s, { 35: 0x5a }), 'drop_foreign', 0],
+        ['another source address', (s) => fixIp(dg(s, { 29: 77 })), 'drop_foreign', 0],
+        ['a bad UDP checksum', (s) => dg(s, { 45: 0xee }), 'drop_checksum', 0],
+        ['a bad IPv4 header checksum', (s) => dg(s, { 24: 0x12, 25: 0x34 }), 'drop_checksum', 0],
+        ['a fragment', (s) => fixIp(dg(s, { 20: 0x20 })), 'drop_fragment', 0],
+        ['no checksum (0)', (s) => dg(s, { 40: 0, 41: 0 }), null, size],
+        ['a UDP length below the IPv4 payload, no checksum', (s) => dg(s, { 39: 8 + size - 2, 40: 0, 41: 0 }), null, size - 2],
+      ];
+      for (const budget of [BIG, minBudget()]) {
+        for (const [name, make, stat, len] of cases) {
+          const s = boot(dll, {}, { budget });
+          assert.equal(s.open().a, S.OK);
+          s.until(has('CONNECTED'), 20000);
+          s.run(10); s.events();
+          const before = s.getStats().stats;
+          s.card.deliver(make(s));
+          s.run(60);
+          const after = s.getStats().stats, got = s.drain().bytes;
+          assert.equal(got.length, len, `${name}, ${size} bytes, budget ${budget}: delivered bytes`);
+          for (const k of ['drop_foreign', 'drop_checksum', 'drop_fragment', 'drop_size', 'ring_overflow']) {
+            assert.equal(after[k] - before[k], k === stat ? 1 : 0, `${name}, ${size} bytes, budget ${budget}: ${k}`);
+          }
+          inject(s, dll, bytes(8, 3));          // the channel still works
+          s.run(60);
+          assert.deepEqual(s.drain().bytes, bytes(8, 3), `${name}: the next datagram`);
+          clean(s);
+        }
+      }
+     }
+    });
+
+    test(`${dll}: a full RX queue drops and counts a datagram (3 and 60 bytes), the stored ones stay whole`, () => {
+      for (const len of [3, 60]) {
+        const s = boot(dll, {}, { budget: BIG });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'));
+        let n = 0;
+        for (; n < 40 && s.getStats().stats.ring_overflow === 0; n++) { inject(s, dll, new Array(len).fill(n)); s.run(4); }
+        assert.ok(s.getStats().stats.ring_overflow >= 1, `overflow counted after ${n} unread datagrams`);
+        const all = [];
+        for (let i = 0; i < 40; i++) { const g = s.drain().bytes; if (!g.length) break; all.push(...g); }
+        assert.ok(all.length >= len && all.length % len === 0);
+        for (let i = 0; i < all.length; i += len) assert.deepEqual(all.slice(i, i + len), new Array(len).fill(i / len), 'whole and in order');
+        clean(s);
+      }
+    });
+
+    // A real-time game's flow (games/headball/specs.md §15.4: an input of
+    // 20 bytes 25 times a second up and a state of 88 bytes 10 times a
+    // second down, at once) at one STEP of the largest budget per 20 ms
+    // frame (tools/dev/game_load.js; docs/MEASUREMENTS.md).  Both carry
+    // all of it with one input in flight: GUDP509B by its short path and
+    // further passes, GUDPRTL by the TX-first order and the portions
+    // priced by their bytes (UGB_TXFIRST / UGB_BYTECOST, 2026-11-23) --
+    // the numbers of today, a regression guard.
+    test(`${dll}: a real-time game's flow at one STEP of ${BIG} us per frame`, () => {
+      const { run } = require('../../../tools/dev/game_load.js');
+      const x = run(dll, { budget: BIG, frames: 250 });
+      assert.ok(!x.err, x.err);
+      const inputs = x.wire / x.sec, states = x.got / x.sec;
+      assert.ok(inputs >= 24.5, `inputs ${inputs}/s`);
+      assert.ok(states >= 9.5 && x.pushed - x.got <= 1, `states ${states}/s, lost ${x.pushed - x.got}`);
+      assert.equal(x.over, 0, 'no STEP over its budget');
+      assert.equal(x.bad, 0, 'nothing unexpected arrived');
+      assert.deepEqual(x.prob, []);
+      assert.ok(Math.max(...x.inLat) <= 40, `input latency ${Math.max(...x.inLat)} ms`);
+      assert.ok(Math.max(...x.stLat) <= (SHORT ? 60 : 80), `state latency ${Math.max(...x.stLat)} ms`);
+    });
+
+    // More than one STEP carries (a state every 3 frames, or of 200 bytes,
+    // or inputs of 64 bytes): inputs may be skipped, states may come late,
+    // but none is lost on the card -- GUDPRTL's TX first yields to a ring
+    // that holds more than the frame being read (HS_BEHIND); without it
+    // these flows overflowed the ring (17..43 states lost).
+    for (const [name, o] of [['a state every 3 frames', { rxEvery: 3 }], ['states of 200 bytes', { rxSize: 200 }], ['inputs of 64 bytes', { txSize: 64 }]]) {
+      test(`${dll}: an overloaded game flow at ${BIG} us loses no state on the card: ${name}`, () => {
+        const { run } = require('../../../tools/dev/game_load.js');
+        const x = run(dll, { budget: BIG, frames: 250, ...o });
+        assert.ok(!x.err, x.err);
+        assert.equal(x.hwo, 0, 'no card ring overflow');
+        assert.ok(x.pushed - x.got <= 2, `states lost ${x.pushed - x.got} (the last ones may still be on the way)`);
+        assert.equal(x.over, 0, 'no STEP over its budget');
+        assert.equal(x.bad, 0);
+        assert.deepEqual(x.prob, []);
+      });
+    }
+  }
 
   if (!isUdp(dll)) {
     test(`${dll}: a segment with a bad TCP checksum is not delivered`, () => {

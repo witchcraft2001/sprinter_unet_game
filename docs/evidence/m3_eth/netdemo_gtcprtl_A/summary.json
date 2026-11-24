@@ -3,9 +3,9 @@
   "dll": "gtcprtl",
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
-  "scenario": "A T with 2 STEPs of 1000 us per period",
-  "wall_s": 23.1,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 45948",
+  "scenario": "A T with 2 STEPs of 1500 us per period",
+  "wall_s": 27.8,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 46278",
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -17,33 +17,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3150
+    "quota_sum_us": 5650
   },
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1071,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 2100,
+      "main": 3240,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 1050,
-    "periods": 207,
-    "largest_period_debit_us": 3050,
-    "now_ms": 4154,
+    "cost_poll_us": 231,
+    "cost_step_us": 1620,
+    "periods": 415,
+    "largest_period_debit_us": 5550,
+    "now_ms": 8300,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 416,
-      "early": 1717,
-      "frames": 164,
-      "ticks": 2078,
+      "step": 831,
+      "early": 3989,
+      "frames": 326,
+      "ticks": 4152,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,43 +58,42 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2180,
-    "polls_useful": 69,
-    "steps_total": 416,
-    "steps_useful": 416,
-    "budget_yields": 294,
+    "polls_total": 4246,
+    "polls_useful": 68,
+    "steps_total": 831,
+    "steps_useful": 831,
+    "budget_yields": 773,
     "max_step_gap_ms": 12,
-    "drop_foreign": 1,
     "arp_requests": 1,
-    "tx_frames": 66,
-    "rx_frames": 69,
+    "tx_frames": 36,
+    "rx_frames": 68,
     "tx_bytes": 5824,
     "rx_bytes": 5824
   },
   "timing_us": {
-    "tick_isr_max": 308,
-    "admitted_ug_step_max": 2469,
-    "largest_tick_gap": 2296,
+    "tick_isr_max": 309,
+    "admitted_ug_step_max": 1608,
+    "largest_tick_gap": 2027,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 3.6 s)",
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 7.7 s)",
   "hw": {
     "latms": [
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 88,
-        "txdone_mean_ms": 71.9,
-        "echo_max_ms": 118,
-        "echo_mean_ms": 102.2
+        "txdone_max_ms": 128,
+        "txdone_mean_ms": 118.8,
+        "echo_max_ms": 188,
+        "echo_mean_ms": 180.1
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 102,
-        "txdone_mean_ms": 82.2,
-        "echo_max_ms": 158,
-        "echo_mean_ms": 138.8
+        "txdone_max_ms": 182,
+        "txdone_mean_ms": 163.4,
+        "echo_max_ms": 326,
+        "echo_mean_ms": 308.5
       }
     ]
   }

@@ -3,8 +3,8 @@
   "dll": "gudpesp",
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
-  "scenario": "A T with 2 STEPs of 1000 us per period",
-  "wall_s": 6.3,
+  "scenario": "A T with 2 STEPs of 1500 us per period",
+  "wall_s": 6.0,
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -16,33 +16,33 @@
   "env": {
     "init_config": 0,
     "env": 1,
-    "quota_sum_us": 3150
+    "quota_sum_us": 5650
   },
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 2100,
+      "main": 3240,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 1050,
-    "periods": 690,
-    "largest_period_debit_us": 3050,
-    "now_ms": 13796,
+    "cost_poll_us": 231,
+    "cost_step_us": 1620,
+    "periods": 859,
+    "largest_period_debit_us": 5550,
+    "now_ms": 17179,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1380,
-      "early": 6485,
-      "frames": 520,
-      "ticks": 6901,
+      "step": 1718,
+      "early": 8261,
+      "frames": 673,
+      "ticks": 8593,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 8133,
-    "steps_total": 1380,
-    "steps_useful": 1380,
-    "budget_yields": 65,
+    "polls_total": 9786,
+    "steps_total": 1718,
+    "steps_useful": 1718,
+    "budget_yields": 500,
     "max_step_gap_ms": 12,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -69,28 +69,28 @@
   },
   "timing_us": {
     "tick_isr_max": 317,
-    "admitted_ug_step_max": 2389,
-    "largest_tick_gap": 2050,
+    "admitted_ug_step_max": 1344,
+    "largest_tick_gap": 2040,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.999 now_ms per emulated ms, TICK_MS 2.002, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 13.3 s)",
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 16.4 s)",
   "hw": {
     "latms": [
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 140,
-        "txdone_mean_ms": 128.8,
-        "echo_max_ms": 218,
-        "echo_mean_ms": 202.4
+        "txdone_max_ms": 216,
+        "txdone_mean_ms": 206.1,
+        "echo_max_ms": 318,
+        "echo_mean_ms": 301.8
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 286,
-        "txdone_mean_ms": 279.7,
-        "echo_max_ms": 640,
-        "echo_mean_ms": 624.8
+        "txdone_max_ms": 390,
+        "txdone_mean_ms": 337.6,
+        "echo_max_ms": 736,
+        "echo_mean_ms": 714.8
       }
     ]
   }

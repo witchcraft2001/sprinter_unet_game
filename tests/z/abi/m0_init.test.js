@@ -70,8 +70,8 @@ for (const dll of DLLS) {
     assert.ok(i.poll_gap_us <= i.auto_fallback_gap_us && i.auto_fallback_gap_us <= i.max_service_gap_us,
       'poll_gap <= auto_fallback_gap <= max_service_gap (ТЗ §4.2)');
     assert.ok(i.empty_poll_us <= i.isr_body_max_us && i.bus_busy_us <= i.isr_body_max_us);
-    assert.equal(i.step_body_max_us, 2000);
-    assert.equal(i.isr_body_max_us, 150);
+    assert.equal(i.step_body_max_us, ABI.consts.limits.STEP_BODY_MAX_US);
+    assert.equal(i.isr_body_max_us, 370);                  // real us (ABI limits)
     assert.equal(i.caps & C.cap.IRQ_ROUTE_QUALIFIED, 0, 'v1: no qualified IRQ route');
     assert.equal(i.caps & C.cap.PROBE, 0, 'v1: no IRQ probe (AUTO is served through POLL)');
     assert.ok(i.caps & C.cap.POLL);
@@ -197,7 +197,9 @@ for (const dll of DLLS) {
   }
   if (hw === 'EL3') bad.push(['ID port 0x210', (c) => { c.id_port = 0x210; }], ['ID port 0x118', (c) => { c.id_port = 0x118; }]);
   if (hw === 'ESP') {
-    bad.push(['UART divisor 0', (c) => { c.uart_divisor = 0; }], ['ESP-AT 2.2.1 profile', (c) => { c.esp_fw = 2; }],
+    bad.push(['UART divisor 0', (c) => { c.uart_divisor = 0; }],
+      // esp_fw 2 is GUDPESP's transparent UDP (refused elsewhere, m4_esp)
+      [`esp_fw ${dll === 'gudpesp' ? 3 : 2}`, (c) => { c.esp_fw = dll === 'gudpesp' ? 3 : 2; }],
       ['FIFO trigger 5', (c) => { c.uart_rx_trigger = 5; }], ['ring 511 bytes', (c) => { c.hw_ring_len = 511; }],
       ['no UART ring (pointer 0)', (c) => { c.hw_ring_ptr = 0; }]);
   }
@@ -227,8 +229,8 @@ for (const dll of DLLS) {
     ['STEP gap 21 ms', (c) => { c.worst_step_gap_ms = 21; }],
     ['STEP budget below min_useful', (c, i) => { c.step_budget_us = i.min_useful_budget_us - 1; }],
     ['STEP budget above the limit', (c, i) => { c.step_budget_us = i.step_body_max_us + 1; }],
-    ['STEP_ISR budget above 150', (c) => { c.isr_budget_us = 151; }],
-    ['APP_COUNTER read cost 21 us', (c) => { c.timing_mode = C.timing.APP_COUNTER; c.time_read_cost_us = 21; }],
+    ['STEP_ISR budget above the limit', (c, i) => { c.isr_budget_us = i.isr_body_max_us + 1; }],
+    ['APP_COUNTER read cost 51 us', (c) => { c.timing_mode = C.timing.APP_COUNTER; c.time_read_cost_us = 51; }],
   ];
   if (hw === 'ESP') {
     timing.push(['no verified flow control', (c) => { c.flags = 0; }],
@@ -277,15 +279,24 @@ for (const dll of DLLS) {
     assert.equal(s.initConfig(cfg).a, S.OK);
   });
 
-  test(`${dll}: 7 MHz is UNSUPPORTED_TIMING in v1 (min_useful_budget_us is for 21 MHz)`, () => {
+  // A budget at 7 MHz buys a third of the units: the largest budget is
+  // refused unless the tripled 21 MHz minimum still fits under the STEP
+  // limit (GLOOP since the limit is 3000 us: 3 x 936 = 2808).
+  test(`${dll}: 7 MHz is accepted only when the tripled minimum fits the STEP limit`, () => {
     const s = new Stand({ dll, mhz: 7 });
     clean(s.call('INIT'), 'INIT');
     const info = s.getInfo().info;
     assert.equal(info.profile_cpu_khz, 21000);
-    assert.ok(info.min_useful_budget_us * 21 / 7 > 500, 'the 21 MHz minimum tripled exceeds the STEP limit');
-    const r = s.initConfig(s.defaultConfig({ cpu_khz: 7000, step_budget_us: 500, isr_budget_us: 150 }));
+    const fits = info.min_useful_budget_us * 21 / 7 <= info.step_body_max_us;
+    const r = s.initConfig(s.defaultConfig({ cpu_khz: 7000, step_budget_us: info.step_body_max_us, isr_budget_us: info.isr_body_max_us }));
     clean(r, 'INIT_CONFIG');
-    assert.equal(r.a, S.UNSUPPORTED_TIMING);
+    assert.equal(r.a, fits ? S.OK : S.UNSUPPORTED_TIMING);
+    if (fits) {
+      const t = new Stand({ dll, mhz: 7 });
+      t.call('INIT');
+      const low = t.initConfig(s.defaultConfig({ cpu_khz: 7000, step_budget_us: Math.floor(info.min_useful_budget_us * 21 / 7) - 10, isr_budget_us: info.isr_body_max_us }));
+      assert.equal(low.a, S.UNSUPPORTED_TIMING, 'a budget under the tripled minimum');
+    }
   });
 }
 

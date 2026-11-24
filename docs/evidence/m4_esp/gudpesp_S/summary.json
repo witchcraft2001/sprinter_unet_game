@@ -6,9 +6,9 @@
   "scenario": "S 8 KiB stream",
   "wall_s": 5.1,
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "stats": {
     "abi_version": 256,
@@ -17,25 +17,25 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 1839,
-    "steps_total": 2984,
-    "steps_useful": 2984,
-    "budget_yields": 2635,
+    "polls_total": 1821,
+    "steps_total": 2964,
+    "steps_useful": 2964,
+    "budget_yields": 2623,
     "max_step_gap_ms": 20,
     "tx_frames": 16,
     "rx_frames": 16,
     "tx_bytes": 8192,
     "rx_bytes": 8192
   },
-  "clock": "CLOCK_RATE 0.700 now_ms per emulated ms, TICK_MS 28.444, FRAME_MS 20.480, STEP_CALLS_PER_S 506 (over 5.6 s)",
+  "clock": "CLOCK_RATE 0.671 now_ms per emulated ms, TICK_MS 29.825, FRAME_MS 20.480, STEP_CALLS_PER_S 472 (over 6.1 s)",
   "cpu_mhz": 20.93,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.28,
+  "ticks_missed_ratio": 0.313,
   "step": {
-    "max_us": 1202,
-    "mean_us": 850,
-    "steps": 2984,
-    "over_budget": 2984
+    "max_us": 1226,
+    "mean_us": 879,
+    "steps": 2964,
+    "over_budget": 0
   },
-  "trivial_call_us": 175
+  "trivial_call_us": 181
 }

@@ -29,16 +29,39 @@
 ; previous one is in and its TX_DONE has come.  Line
 ;   LATMS <bytes> <n> <max TX_DONE> <sum> <max echo> <sum>  (twice on it)
 ; in ms of now_ms from TX_COMMIT (UG_NOW: one timer tick of resolution).
-; Q is T at the quota of the SDK default profile: the builder passes
-; -DUG_STEPS=2 (the quota sum fits 2000 us; T runs at the program's own
-; UG_STEPS, 5 by default).  A, B and C are T with a larger STEP budget
-; (-DUG_STEP_BUDGET: a game that can spare a longer call): A = 2 STEPs of
-; 1000 us per period, B = 2 of 1500, C = 1 of 1000 (about Q's quota).
+; Q is T at the SDK default profile: the builder passes -DUG_STEPS=2 (T
+; runs at the program's own UG_STEPS, 5 by default).  A, B and C are T
+; with a larger STEP budget (-DUG_STEP_BUDGET, real microseconds: a game
+; that can spare a longer call): A = 2 STEPs of 1500 us per period, B = 2
+; of 2000 (the largest budget), C = 1 of 2000.  G is the game profile: C
+; with one guaranteed poll per period instead of one per tick
+; (-DUG_POLL_TICKS=10; an Ethernet card keeps the frames itself, the UART
+; of SprinterESP stops the module by auto-RTS), about 2.45 ms of network
+; per 20 ms; on the ESP builds the poll moves UART bytes
+; (-DUG_ISR_BUDGET=341: up to 12 bytes; 2.63 ms).  R is G with one STEP
+; of 3000 us (the STEP limit since 2026-11-22).
+; F is the flow of a real-time game (Headball, games/headball/specs.md
+; §15.4) on a UDP build against echo_server.py --game: for FLOW_MS an
+; input of FLOW_IN bytes is offered every FLOW_IN_MS (25 a second), at most
+; one in flight (an offer meeting the previous input before its TX_DONE is
+; skipped: a game merges it into the next), while the server sends a state
+; of FLOW_ST bytes every 100 ms on its own.  Every FLOW_PH_N inputs the
+; next one comes FLOW_PH_MS later: the 10 s sweep the inputs over 40 ms of
+; phase against the STEPs (a run in MAME meets them at one phase only;
+; GUDPRTL passed at some phases and skipped a tenth of its inputs at
+; others, as the board did).  Line
+;   FLOW <offered> <sent> <inputs at the server> <states> <first state
+;        seq> <last state seq> <max TX_DONE> <max loop> <loop sum>
+;        <max gap between states>
+; in ms of now_ms; "loop" = input up + state down (now - the commit time
+; of the server's latest input - the ms the server held it), one per state.
+; Its profile is R's (1 STEP of 3000 us and one poll per period; ESP: two
+; polls of 341 us, tools/mame/run_m.py LAT_PROFILE, build_hw.sh).
 ; ESP builds play NETUP first (AT, AT+UART_CUR=115200,8,1,0,3).
 ; Memory: tools/mame/mkcfg.js --prog netdemo (WIN2, nothing at >= 0xC000).
 
 	DEVICE	NOSLOT64K
-LAT_SCEN	EQU	SCEN == 'T' || SCEN == 'Q' || SCEN == 'A' || SCEN == 'B' || SCEN == 'C'	; the latency scenarios
+LAT_SCEN	EQU	SCEN == 'T' || SCEN == 'Q' || SCEN == 'A' || SCEN == 'B' || SCEN == 'C' || SCEN == 'G' || SCEN == 'R'	; the latency scenarios
 
 	INCLUDE	"UNETGAME.INC"
 	INCLUDE	"unetg_ctx.inc"		; ctx.hw_state during the bring-up (this repository's example)
@@ -584,6 +607,10 @@ scenario
 	CALL	rp_nl
 	CALL	close_wait
 	ENDIF
+	IF	SCEN == 'F'
+	CALL	flow
+	CALL	close_wait
+	ENDIF
 	IF	SCEN == 'D'
 	LD	HL,100
 	LD	(tx_total),HL
@@ -624,8 +651,15 @@ open_wait
 
 	IF	LAT_SCEN
 LAT_N		EQU	16
+	IF	SCEN == 'G' || SCEN == 'R'
+; the game profiles with game-sized datagrams (16 bytes: the short path of
+; GUDP509B; 64: the plain items)
+LAT_SMALL	EQU	16
+LAT_BIG		EQU	64
+	ELSE
 LAT_SMALL	EQU	64
 LAT_BIG		EQU	300
+	ENDIF
 	ASSERT	LAT_BIG <= UG_SLOT	; one packet = one slot = one TX_DONE
 
 	ENDIF
@@ -663,6 +697,9 @@ send_all
 	JP	rp_nl
 	ENDIF
 
+	; not IFUSED: the latency scenarios call it only from further down,
+	; and IFUSED then put libman's CALL l_call 256 bytes off (CLAUDE.md)
+	IF	SCEN != 'F'
 send_one
 	LD	HL,(tx_total)
 	LD	DE,(tx_sent)
@@ -715,6 +752,7 @@ send_one
 	INC	HL
 	LD	(tx_tag),HL
 	RET
+	ENDIF
 
 close_wait
 	LD	B,UNETG_CLOSE
@@ -778,6 +816,9 @@ pump
 	CALL	UG_CALL			; HL = data, DE = length
 	OR	A
 	JR	NZ,.rx_end
+	IF	SCEN == 'F'
+	CALL	fl_state		; a state of the game server
+	ELSE
 	LD	A,(rx_gen)
 	LD	C,A
 .cmp
@@ -804,6 +845,7 @@ pump
 .cmp_end
 	LD	A,C
 	LD	(rx_gen),A
+	ENDIF
 	LD	B,UNETG_RX_RELEASE
 	CALL	UG_CALL
 	POP	BC
@@ -848,7 +890,11 @@ event
 	JP	lat_take		; keeps BC (pump's event counter)
 .txbad
 	ELSE
+	IF	SCEN == 'F'
+	JP	Z,fl_txdone		; keeps BC
+	ELSE
 	RET	Z
+	ENDIF
 	ENDIF
 	CP	UNETG_TXDONE_CANCEL	; ABI §5: CANCEL is the documented outcome
 	JR	Z,.txcancel		; of ABORT/SHUTDOWN on an unfinished TX, not a failure
@@ -1239,16 +1285,22 @@ cbl_n		DW	0
 	IFNDEF	UG_STEP_BUDGET
 	DEFINE	UG_STEP_BUDGET 0	; -DUG_STEP_BUDGET=us: up to GET_INFO.step_body_max_us
 	ENDIF
+	IFNDEF	UG_POLL_TICKS
+	DEFINE	UG_POLL_TICKS 1		; -DUG_POLL_TICKS=n: within GET_INFO.poll_gap_us
+	ENDIF
+	IFNDEF	UG_ISR_BUDGET
+	DEFINE	UG_ISR_BUDGET 0		; -DUG_ISR_BUDGET=us: 0 = empty poll + return
+	ENDIF
 profile
 	DW	1999			; tick, whole us
 	DB	61			; tick, 1/256 us
 	DB	10			; ticks per period
-	DB	1			; ticks between polls
+	DB	UG_POLL_TICKS		; ticks between polls
 	DB	UG_STEPS		; STEPs per period
 	DB	20			; worst STEP gap, ms
 	DB	0			; card IRQ entries (no route in v1)
 	DW	UG_STEP_BUDGET		; STEP budget: 0 = GET_INFO.min_useful
-	DW	0			; STEP_ISR budget: empty poll + return
+	DW	UG_ISR_BUDGET		; STEP_ISR budget: 0 = empty poll + return
 	DW	100			; service quota
 	DW	2000			; target per period
 	DW	0			; longest other handler: none
@@ -1318,6 +1370,121 @@ rp_ptr		DW	0
 evbuf		DS	8, 0
 gstats		DS	80, 0
 gwsnap		DS	UGW_SCRATCH, 0
+
+	IF	SCEN == 'F'
+; the game flow's constants and its state handler (FL_STATE_CODE): on the
+; ESP builds in front of the SDK, in the gap the time adapter's page-aligned
+; tables leave (behind them the UG_HW build is 43 bytes short); on the
+; Ethernet builds that would cross a page, so there it goes behind, with the
+; rest of the scenario (like the latency scenario's code)
+FLOW_MS		EQU	10000		; length of the flow: 250 inputs, 100 states
+FLOW_IN_MS	EQU	40		; an input every 40 ms (Headball: 25 a second)
+FLOW_PH_N	EQU	12		; every 12th interval one timer tick longer:
+FLOW_PH_MS	EQU	2		; 250 inputs sweep 40 ms of phase
+FLOW_IN		EQU	20		; input bytes: seq (BE16), commit now_ms (BE16), 16 more
+FLOW_ST		EQU	88		; state bytes (echo_server.py GAME_STATE)
+	ASSERT	FLOW_IN <= UG_SLOT && FLOW_ST <= UG_SLOT
+	MACRO	FL_STATE_CODE
+; fl_state: HL = a datagram, DE = its length (pump).  Clobbers all but IX, IY.
+fl_state
+	LD	A,D
+	OR	A
+	JR	NZ,.bad
+	LD	A,E
+	CP	FLOW_ST
+	JR	NZ,.bad
+	PUSH	HL
+	INC	HL
+	LD	A,(HL)			; seq low
+	LD	DE,7
+	ADD	HL,DE			; byte 8
+	ADD	A,8
+	LD	B,FLOW_ST - 8
+.chk
+	CP	(HL)			; byte i = seq + i
+	JR	NZ,.badpop
+	INC	A
+	INC	HL
+	DJNZ	.chk
+	POP	HL
+	CALL	.be16
+	LD	(fl_last),DE
+	PUSH	HL
+	LD	HL,(fl_nst)
+	LD	A,H
+	OR	L
+	JR	NZ,.counted
+	LD	(fl_seq0),DE
+.counted
+	INC	HL
+	LD	(fl_nst),HL
+	POP	HL
+	CALL	.be16
+	LD	(fl_srv),DE		; inputs at the server
+	CALL	.be16
+	PUSH	DE			; the commit time of its latest input
+	CALL	.be16
+	PUSH	DE			; the ms it held that input
+	CALL	UG_NOW
+	PUSH	HL
+	LD	DE,(fl_tlast)
+	LD	(fl_tlast),HL
+	OR	A
+	SBC	HL,DE
+	EX	DE,HL			; DE = the gap since the previous state
+	LD	HL,(fl_nst)
+	DEC	HL
+	LD	A,H
+	OR	L
+	LD	HL,fl_gapmax
+	CALL	NZ,fl_max		; not before the first state
+	POP	HL			; now
+	POP	BC			; held
+	POP	DE			; commit time
+	OR	A
+	SBC	HL,DE
+	OR	A
+	SBC	HL,BC
+	EX	DE,HL			; DE = input up + state down
+	LD	HL,fl_loopmax
+	CALL	fl_max
+	LD	HL,(fl_loopsum)
+	ADD	HL,DE
+	LD	(fl_loopsum),HL
+	RET
+.be16
+	LD	D,(HL)
+	INC	HL
+	LD	E,(HL)
+	INC	HL
+	RET
+.badpop
+	POP	HL
+.bad
+	LD	A,1
+	LD	(rx_bad),A
+	RET
+
+; fl_max: the word at HL = max(it, DE).  Preserves DE, BC.  Clobbers AF, HL.
+fl_max
+	LD	A,(HL)
+	INC	HL
+	PUSH	HL
+	LD	H,(HL)
+	LD	L,A
+	OR	A
+	SBC	HL,DE
+	POP	HL
+	RET	NC
+	LD	(HL),D
+	DEC	HL
+	LD	(HL),E
+	RET
+	ENDM
+	IF	UG_ESP
+	FL_STATE_CODE
+	ENDIF
+	ENDIF
 
 	INCLUDE	"gateway/ugate.asm"
 	INCLUDE	"time/ugtime.asm"
@@ -1444,6 +1611,159 @@ lat_bytes	DW	0
 lat_t0		DW	0
 lat_txdone	DB	0
 lat_acc		DS	8, 0		; TX_DONE max, sum; echo max, sum
+	ENDIF
+
+	IF	SCEN == 'F'
+; the game flow (scenario F), behind the SDK's page-aligned tables like the
+; latency scenario's code
+
+; flow: FLOW_MS of the flow, the last TX_DONE, the FLOW line.  Fails E on a
+; lost TX_DONE, B on a wrong state, N when no state came.
+flow
+	CALL	UG_NOW
+	LD	(fl_next),HL
+	LD	HL,FLOW_MS
+	CALL	dl_set
+.loop
+	CALL	pump			; states in fl_state, TX_DONE in fl_txdone
+	CALL	UG_NOW
+	LD	DE,(fl_next)
+	OR	A
+	SBC	HL,DE
+	BIT	7,H
+	CALL	Z,fl_offer		; now >= fl_next
+	CALL	dl_due
+	JR	NC,.loop
+	LD	HL,1000			; the last input's TX_DONE
+	CALL	dl_set
+.tail
+	LD	A,(fl_busy)
+	OR	A
+	JR	Z,.report
+	CALL	pump
+	CALL	dl_due
+	JR	NC,.tail
+	LD	A,'E'
+	JP	fail
+.report
+	LD	A,(rx_bad)
+	OR	A
+	LD	A,'B'
+	JP	NZ,fail
+	LD	HL,(fl_nst)
+	LD	A,H
+	OR	L
+	LD	A,'N'
+	JP	Z,fail
+	LD	HL,s_flow
+	CALL	rp_str
+	LD	HL,fl_rep
+	LD	B,FL_WORDS
+.word
+	LD	A,' '
+	CALL	rp_char
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	INC	HL
+	EX	DE,HL
+	CALL	rp_hex16
+	EX	DE,HL
+	DJNZ	.word
+	JP	rp_nl
+
+; fl_offer: the next input is due: offered + 1; sent when the previous one
+; has had its TX_DONE and a slot is free (otherwise skipped).
+fl_offer
+	LD	HL,(fl_next)
+	LD	DE,FLOW_IN_MS
+	ADD	HL,DE
+	LD	A,(fl_ph)
+	DEC	A
+	JR	NZ,.ph
+	LD	DE,FLOW_PH_MS		; the phase sweep
+	ADD	HL,DE
+	LD	A,FLOW_PH_N
+.ph
+	LD	(fl_ph),A
+	LD	(fl_next),HL
+	LD	HL,(fl_off)
+	INC	HL
+	LD	(fl_off),HL
+	LD	A,(fl_busy)
+	OR	A
+	RET	NZ			; one input in flight at most
+	LD	DE,FLOW_IN
+	LD	B,UNETG_TX_RESERVE
+	CALL	UG_CALL			; HL = slot buffer, E = slot
+	OR	A
+	RET	NZ
+	PUSH	DE
+	LD	DE,(fl_sent)
+	LD	(HL),D			; seq
+	INC	HL
+	LD	(HL),E
+	INC	HL
+	PUSH	HL
+	CALL	UG_NOW
+	LD	(fl_t0),HL
+	EX	DE,HL
+	POP	HL
+	LD	(HL),D			; commit time; the other 16 bytes: as they are
+	INC	HL
+	LD	(HL),E
+	POP	DE
+	LD	A,E
+	LD	DE,FLOW_IN
+	LD	IX,(fl_off)		; tag (1 ..)
+	LD	B,UNETG_TX_COMMIT
+	CALL	UG_CALL
+	OR	A
+	LD	A,'K'
+	JP	NZ,fail
+	INC	A			; A = 'K' + 1, non-zero
+	LD	(fl_busy),A
+	LD	HL,(fl_sent)
+	INC	HL
+	LD	(fl_sent),HL
+	RET
+
+; fl_txdone: the input's TX_DONE (event).  Preserves BC.
+fl_txdone
+	XOR	A
+	LD	(fl_busy),A
+	PUSH	BC
+	CALL	UG_NOW
+	LD	DE,(fl_t0)
+	OR	A
+	SBC	HL,DE
+	EX	DE,HL
+	LD	HL,fl_txmax
+	CALL	fl_max
+	POP	BC
+	RET
+
+	IF	!UG_ESP
+	FL_STATE_CODE
+	ENDIF
+s_flow		DB	"FLOW", 0
+fl_next		DW	0
+fl_t0		DW	0
+fl_tlast	DW	0
+fl_busy		DB	0
+fl_ph		DB	FLOW_PH_N
+fl_rep					; the FLOW line, in this order
+fl_off		DW	0
+fl_sent		DW	0
+fl_srv		DW	0
+fl_nst		DW	0
+fl_seq0		DW	0
+fl_last		DW	0
+fl_txmax	DW	0
+fl_loopmax	DW	0
+fl_loopsum	DW	0
+fl_gapmax	DW	0
+FL_WORDS	EQU	($ - fl_rep) / 2
 	ENDIF
 code_end
 	DISPLAY	"netdemo free: ", /D, UG_CODE_END - code_end

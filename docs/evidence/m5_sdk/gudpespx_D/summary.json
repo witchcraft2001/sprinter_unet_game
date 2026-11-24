@@ -1,0 +1,78 @@
+{
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "esp_fw": 2,
+  "scenario": "D SHUTDOWN while open",
+  "wall_s": 5.0,
+  "steps_per_period": 5,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 233,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 8305
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 5895,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1179,
+    "periods": 143,
+    "largest_period_debit_us": 8205,
+    "now_ms": 2864,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 708,
+      "early": 1489,
+      "frames": 114,
+      "ticks": 1433,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 546,
+    "steps_total": 708,
+    "steps_useful": 708,
+    "budget_yields": 477,
+    "max_step_gap_ms": 6,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 100,
+    "rx_bytes": 100
+  },
+  "timing_us": {
+    "tick_isr_max": 314,
+    "admitted_ug_step_max": 1019,
+    "largest_tick_gap": 2040,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 3.6 s)"
+}

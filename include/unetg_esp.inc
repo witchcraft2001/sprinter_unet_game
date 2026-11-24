@@ -61,7 +61,12 @@ ES_ISRCAP	EQU	13	; u8  STEP_ISR's own RX byte budget: EXP_STEP_ISR
 ES_TXP		EQU	14	; u16 TX stream source (main only)
 ES_TXKIND	EQU	16	; u8  ETXK_*
 ES_RXMAX	EQU	17	; u8  RX bytes the next pump may move
-ES_SIZE		EQU	18
+; transparent UDP (GUDPESP, esp_fw = 2; core/esp/esp_x.asm)
+ES_XFL		EQU	18	; u8  EXF_*
+ES_XSTG		EQU	19	; u8  stage of a blind escape (bring-up, SHUTDOWN)
+ES_XDL		EQU	20	; u32 its deadline (HS_DL is ES_RT / ES_TXN here)
+ES_XLAST	EQU	24	; u16 now_ms of the last TX write into the UART (the pumps)
+ES_SIZE		EQU	26
 	ASSERT	ES_SIZE <= HS_RES
 EX_FLAGS	EQU	UCTX_HWSM + ES_FLAGS - CTX_BIAS
 EX_RT		EQU	UCTX_HWSM + ES_RT - CTX_BIAS
@@ -69,6 +74,9 @@ EX_TXN		EQU	UCTX_HWSM + ES_TXN - CTX_BIAS
 EX_RH		EQU	UCTX_HWSM + ES_RH - CTX_BIAS
 EX_ESFLAGS	EQU	UCTX_HWSM + ES_FLAGS - CTX_BIAS	; STEP_ISR, through IY
 EX_ISRCAP	EQU	UCTX_HWSM + ES_ISRCAP - CTX_BIAS	; STEP_ISR writes, ISRP_POLL reads, both through IY
+EX_XFL		EQU	UCTX_HWSM + ES_XFL - CTX_BIAS
+EX_XLAST	EQU	UCTX_HWSM + ES_XLAST - CTX_BIAS
+	ASSERT	EX_XFL <= 127 && EX_XLAST + 1 <= 127
 	ASSERT	EX_ISRCAP <= 127
 	ASSERT	EX_ESFLAGS <= 127
 	ASSERT	EX_RH + 1 <= 127 && EX_TXN + 1 <= 127 && EX_RT + 1 <= 127
@@ -79,6 +87,12 @@ ESF_GOT		EQU	2	; the last pump moved RX bytes (main)
 ESF_UP		EQU	3	; UART programmed: the pump and the parser may run
 ESF_SETUP_OK	EQU	4	; AT setup finished (bring-up may end)
 ESF_SETUP_BAD	EQU	5	; AT setup failed (module absent / not qualified)
+ESF_LWAIT	EQU	6	; fat STEP: ESP_LEAN waits for ET_LNEED bytes of backlog
+ESF_LANS	EQU	7	; ... as the estimate of a CIPSEND answer (ESP_PROMPT), not a line seen in part
+
+EXF_DATA	EQU	0	; the module is in its data mode (after AT+CIPSEND's '>')
+EXF_GUARD	EQU	1	; the silence before "+++" has been waited for
+EXF_PKT		EQU	2	; a record was sent in data mode: ET_XT0 and ES_XLAST hold
 
 ETXK_NONE	EQU	0
 ETXK_CMD	EQU	1	; AT command from the command buffer
@@ -88,6 +102,7 @@ ETXK_DATA	EQU	2	; payload of an application TX slot
 EUP_PROBE	EQU	0
 EUP_INIT	EQU	1
 EUP_AT		EQU	2
+EUP_XESC	EQU	3	; esp_fw = 2: "+++" before the set-up (esp_x.asm NIC_XESC)
 
 ; ---- ctx.tp (IX = tp) -------------------------------------------------------
 ET_JOB		EQU	0	; u8  EJ_*: what the sequencer is doing
@@ -107,6 +122,8 @@ ET_GOT		EQU	19	; u16 payload length of the current response / datagram
 ET_RXDST	EQU	21	; u16 write pointer of the payload
 ET_RXSPAN	EQU	23	; u16 TCP: bytes before the RX ring wraps
 ET_TXSLOT	EQU	25	; u8  slot of the CIPSEND in flight
+ET_LNEED	EQU	26	; u8  fat STEP: bytes of backlog ESP_LEAN waits for (ESF_LWAIT)
+ET_XHOLD	EQU	27	; u8  transparent UDP: stream bytes of a record held for the module's silence
 ET_N1		EQU	30	; u16 first number of the line
 ET_N2		EQU	32	; u16 second number of the line
 ET_LINK		EQU	34	; u8  link id prefix of the line (0xFF: none)
@@ -117,7 +134,12 @@ ET_CTMO		EQU	39	; u16 deadline of the command being built (ms)
 ET_PFAIL	EQU	41	; u8  channel failure to raise (UNETG_EV_*, 0: none)
 ET_PFDET	EQU	42	; u8  its detail
 ET_PEND		EQU	43	; u8  EPD_*: action left by the parser
-ET_SIZE		EQU	44
+; transparent UDP (esp_x.asm)
+ET_XREST	EQU	44	; u16 slot bytes of the record still to stream
+ET_XSRC		EQU	46	; u16 their address
+ET_XSIL		EQU	48	; u32 a resync ends after this much silence
+ET_XT0		EQU	52	; u16 now_ms when the module's packet being gathered began (EXF_PKT)
+ET_SIZE		EQU	54
 	ASSERT	ET_SIZE <= 96
 
 EJ_IDLE		EQU	0
@@ -150,8 +172,10 @@ EPD_PUBLISH	EQU	5	; a UDP datagram's payload just completed (WP2:
 				; deferred out of ESP_PAY so a payload round's own cost
 				; stays bytes-only, not RXD_PUBLISH's fixed overhead)
 
-EPS_LINE	EQU	0
+EPS_LINE	EQU	0	; (data mode: the first header byte of a record)
 EPS_PAY		EQU	1
+EPS_XH2		EQU	2	; data mode: the second header byte
+EPS_XSKIP	EQU	3	; data mode: bytes dropped up to a silence (resync)
 
 EPK_TCP		EQU	1	; CIPRECVDATA payload into the RX ring (uncommitted)
 EPK_UDP		EQU	2	; +IPD datagram into the RX slot being filled

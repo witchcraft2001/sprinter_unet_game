@@ -79,15 +79,24 @@ def hw_names(dlls):
         files.add(f"UGRUN{code}.BAT")
         files.add(f"UGT{code}{tp}.EXE")
         ug = ["E", "S", "D", "K"]
-        nd = ["L", "E", "S", "D", "W", "T", "Q", "A", "B", "C"] + ([] if d["hw"] == "ESP" else ["H"])
+        nd = ["L", "E", "S", "D", "W", "T", "Q", "A", "B", "C", "G", "R"] + ([] if d["hw"] == "ESP" else ["H"])
         if tp == "T":
             files.add(f"UGT{code}TP.EXE")
             ug.append("P")
             nd.append("P")
+        else:
+            nd.append("F")          # the game flow: datagrams
         reports |= {f"U{code}{tp}{s}.TXT" for s in ug}
         for s in nd:
             files.add(f"N{code}{tp}{s}.EXE")
             reports.add(f"N{code}{tp}{s}.TXT")
+        if d["hw"] == "ESP" and tp == "U":
+            # the transparent mode (esp_fw = 2): transport letter X
+            files.add("UGTESPX.EXE")
+            reports |= {f"UESPX{s}.TXT" for s in ("E", "S", "D")}
+            for s in ("E", "S", "D", "W", "C", "G", "R", "F"):
+                files.add(f"NESPX{s}.EXE")
+                reports.add(f"NESPX{s}.TXT")
     return files, reports
 
 

@@ -21,6 +21,35 @@ UDS_OPEN	EQU	2
 UDP_PREP_NONE	EQU	0
 UDP_PREP_SUM	EQU	1
 UDP_PREP_READY	EQU	2
+UDP_PREP_FAST	EQU	3		; short path: chosen by TP_STEP, TP_TX_PULL does it all in this STEP
+; Short path (taken only when it fits, so not bound by PROF_MAX_ITEM_US):
+; a datagram of at most UDP_FAST_MAX bytes is summed and its header built
+; as ONE item (COST_UDP_FAST + 3/2 per byte: chosen by TP_STEP, taken and
+; done by TP_TX_PULL right behind it) instead of the idle, summing and
+; pull items;
+; a received one whose whole IPv4 packet is in ctx.scratch (payload <= 22)
+; is verified and published as one item (UDP_RX_FAST) instead of classify,
+; sum, accept and finish.
+UDP_FAST_MAX	EQU	64
+; bytes at DE and HL equal, else to .other with NZ (UDP_RX_FAST)
+	MACRO	UDP_SAME2
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,.other
+	INC	DE
+	INC	HL
+	LD	A,(DE)
+	CP	(HL)
+	JR	NZ,.other
+	INC	DE
+	INC	HL
+	ENDM
+	MACRO	UDP_SAME4
+	UDP_SAME2
+	UDP_SAME2
+	ENDM
+COST_UDP_FAST	EQU	190	; (stand: 148 us with 1 byte, 200 with 40, 222 with 64; 25 for the choice in TP_STEP)
+COST_UDP_RX_FAST EQU	280	; (stand: 249 us with 22 bytes; 10 for the checks in front of it)
 UDP_SUM_CHUNK	EQU	96		; bytes summed per item (100 + 96 units)
 COST_UDP_STEP	EQU	115	; ARP timers (96 us)
 COST_UDP_IDLE	EQU	75	; (59 us)
@@ -92,6 +121,15 @@ TP_DEADLINES
 
 TP_STEP
 	TP_IX
+	IFDEF	UGB_SHORT
+	; a short-path choice of an earlier STEP that the pull did not take
+	; (an ARP frame went first): chosen anew
+	LD	A,(IX+UD_PREP)
+	CP	UDP_PREP_FAST
+	JR	NZ,.kept
+	LD	(IX+UD_PREP),UDP_PREP_NONE
+.kept
+	ENDIF
 	LD	A,(IX+UD_ST)
 	OR	A
 	JR	NZ,.active
@@ -128,7 +166,27 @@ TP_STEP
 	CALL	TX_STATE_PTR		; keeps IX
 	LD	A,(HL)
 	CP	UTX_COMMITTED
+	IFDEF	UGB_SHORT
+	JR	NZ,.not_queued
+	; short path: with a free TX pipeline a small datagram is one item of
+	; TP_TX_PULL, in this same STEP (the TX phase follows the transport
+	; step and nothing takes units in between; UDP_FAST_FITS also leaves
+	; the TX phase its entry check) -- no item here
+	BIT	USCH_SHORT,(IY+CX_SCHED_FLAGS)
 	JR	Z,.idle
+	LD	A,(IY+EX_TXS)
+	OR	A
+	JR	NZ,.idle
+	CALL	UDP_FAST_FITS		; DE = length
+	JR	C,.idle
+	LD	(IX+UD_LEN),E
+	LD	(IX+UD_LEN+1),D
+	LD	(IX+UD_PREP),UDP_PREP_FAST
+	RET
+.not_queued
+	ELSE
+	JR	Z,.idle
+	ENDIF
 	CP	UTX_SENDING
 	RET	Z			; in the card
 	LD	A,(IY+CX_CHAN)		; nothing queued: only a closing channel
@@ -277,6 +335,10 @@ TP_STEP
 TP_TX_PULL
 	TP_IX
 	LD	A,(IX+UD_PREP)
+	IFDEF	UGB_SHORT
+	CP	UDP_PREP_FAST
+	JR	Z,.fast
+	ENDIF
 	CP	UDP_PREP_READY
 	SCF
 	RET	NZ
@@ -284,6 +346,34 @@ TP_TX_PULL
 	CALL	TAKE
 	RET	C
 	TP_IX
+	IFDEF	UGB_SHORT
+	JR	.build
+.fast
+	; short path, chosen by TP_STEP in this STEP: commit -> frame
+	LD	E,(IX+UD_LEN)
+	LD	D,(IX+UD_LEN+1)
+	CALL	UDP_FAST_COST
+	CALL	SHORT_TAKE		; (keeps IX)
+	JR	NC,.fast_go
+	LD	(IX+UD_PREP),UDP_PREP_NONE	; chosen anew next STEP
+	RET				; CF=1
+.fast_go
+	LD	C,(IY+CX_TX_SEND)
+	CALL	TX_STATE_PTR
+	LD	(HL),UTX_SENDING
+	CALL	TX_BUF			; HL = payload
+	LD	C,(IX+UD_LEN)
+	LD	B,(IX+UD_LEN+1)
+	LD	(IX+UD_SRC),L
+	LD	(IX+UD_SRC+1),H
+	EX	DE,HL
+	LD	HL,0
+	CALL	CSUM_RAM		; the whole payload (an odd last byte is padded)
+	LD	(IX+UD_SUM),L
+	LD	(IX+UD_SUM+1),H
+	SET	2,(IY+CX_WORK)
+	ENDIF
+.build
 	LD	(IX+UD_PREP),UDP_PREP_NONE
 	LD	L,(IX+UD_LEN)
 	LD	H,(IX+UD_LEN+1)
@@ -338,6 +428,395 @@ TP_TX_PULL
 	CALL	TX_FRAME_SET
 	OR	A
 	RET
+
+	IFDEF	UGB_SHORT
+; UDP_FAST_FITS: the datagram to send next is committed, at most
+; UDP_FAST_MAX bytes, and its short-path cost fits the units together
+; with the entry check of the TX phase (ETH_MIN_ITEM: the pull must follow
+; in this STEP).  Out: CF=0: DE = length; CF=1: no.  Clobbers A, BC, HL.
+UDP_FAST_FITS
+	LD	C,(IY+CX_TX_SEND)
+	CALL	TX_STATE_PTR
+	LD	A,(HL)
+	CP	UTX_COMMITTED
+	SCF
+	RET	NZ
+	CALL	TX_LEN_PTR
+	LD	E,(HL)
+	INC	HL
+	LD	D,(HL)
+	LD	HL,UDP_FAST_MAX
+	OR	A
+	SBC	HL,DE
+	RET	C			; longer
+	CALL	UDP_FAST_COST
+	LD	BC,ETH_MIN_ITEM
+	ADD	HL,BC
+	JP	UNITS_FIT
+; UDP_FAST_COST: HL = COST_UDP_FAST + 3/2 of the length DE (<= UDP_FAST_MAX).
+; Clobbers A.
+UDP_FAST_COST
+	LD	HL,COST_UDP_FAST
+	ADD	HL,DE
+	LD	A,E
+	SRL	A			; length / 2 (<= 32)
+	ADD	A,L
+	LD	L,A
+	RET	NC
+	INC	H
+	RET
+
+; UDP_RX_FAST (short path, RX state ERX_HDR): a datagram of the open
+; channel is verified in ctx.scratch and taken as one item -- published
+; at once when its whole IPv4 packet is in scratch (payload <= 22), or,
+; for a payload of up to UDP_MID_MAX bytes, accepted into its slot with
+; the rest read from the card in the same item (UDP_RX_MID).  The cheap
+; reads come first and take nothing; from the take on every check is made
+; before anything is written: any doubt answers CF=1 and leaves the frame
+; to the generic states, which decide and count the drop.
+; Out: CF=0: an item (published: HS_RXS = ERX_DISCARD; a mid datagram
+; whose card portion met a busy bus: ERX_COPY, the generic states go on).
+; Clobbers A, BC, DE, HL, IX.
+UDP_MID_MAX	EQU	96
+; Cost of a mid datagram: COST_UDP_RX_MID + 2 per card byte, plus
+; COST_UDP_RX_MIDP for every card portion after the first (stand, 3C509B,
+; units, the item's own window with the verdict and publication: 391
+; with 1 card byte, 419 with 18, 445 with 40, 551 with 41, 594 with 66,
+; 597 with 74; tools/dev/profile_step.js --piece 23..96 --items).
+COST_UDP_RX_MID	EQU	430
+COST_UDP_RX_MIDP EQU	95
+UDP_RX_FAST
+	BIT	6,(IY+EX_RXLEN+1)
+	SCF
+	RET	NZ			; one try per frame
+	LD	DE,UCTX_SCRATCH - CTX_BIAS
+	PUSH	IY
+	POP	IX
+	ADD	IX,DE			; IX -> frame
+	; not IPv4 (ARP, anything else): nothing is taken
+	LD	A,(IX+ETH_TYPE)
+	CP	0x08
+	SCF
+	RET	NZ
+	LD	A,(IX+ETH_TYPE+1)
+	OR	A
+	SCF
+	RET	NZ
+	LD	HL,COST_UDP_RX_FAST
+	CALL	SHORT_TAKE		; (keeps IX)
+	RET	C
+	SET	6,(IY+EX_RXLEN+1)
+	; not a frame for these paths (anything but IPv4 without options,
+	; UDP, a packet the short paths take, inside the frame): the units go
+	; back
+	LD	A,(IX+ETH_IP_VIHL)
+	CP	0x45
+	JR	NZ,.refund
+	LD	A,(IX+ETH_IP_PROTO)
+	CP	IP_PROTO_UDP
+	JR	NZ,.refund
+	LD	A,(IX+ETH_IP_LEN)
+	OR	A
+	JR	NZ,.refund
+	LD	A,(IX+ETH_IP_LEN+1)
+	CP	IP_HDR + UDP_HDR
+	JR	C,.refund
+	CP	IP_HDR + UDP_HDR + UDP_MID_MAX + 1
+	JR	NC,.refund
+	ADD	A,ETH_HDR
+	LD	B,A			; frame bytes the packet needs
+	LD	A,(IY+EX_RXLEN+1)
+	AND	0x07
+	JR	NZ,.inside
+	LD	A,(IY+EX_RXLEN)
+	CP	B
+	JR	NC,.inside		; (else the frame is shorter than its packet)
+.refund
+	LD	HL,COST_UDP_RX_FAST
+	CALL	UNITS_REFUND
+	SCF
+	RET
+.inside
+	LD	A,B
+	CP	RX_HDR_BYTES + 1
+	JP	NC,UDP_RX_MID
+	CALL	UDP_RX_CHK		; C = UDP length, DE -> UDP header
+	RET	C
+	; UDP checksum (0: sent without one)
+	LD	A,(IX+UDP_CSUM)
+	OR	(IX+UDP_CSUM+1)
+	JR	Z,.valid
+	; addresses, protocol and ports are the channel's own: their sum is
+	; the template's TPT_L4S0 (a sum does not care which side sent them);
+	; the lengths and everything behind the ports are summed here
+	PUSH	BC
+	PUSH	DE
+	CALL	L4_SUM0			; HL = TPT_L4S0
+	POP	DE
+	INC	DE
+	INC	DE
+	INC	DE
+	INC	DE			; DE -> the UDP length field
+	POP	BC
+	PUSH	BC
+	PUSH	DE
+	LD	E,C
+	LD	D,0
+	CALL	CSUM_ADD_BE		; the pseudo header's length
+	POP	DE
+	LD	A,C
+	SUB	4
+	LD	C,A
+	LD	B,0
+	CALL	CSUM_RAM
+	POP	BC
+	LD	A,H
+	AND	L
+	INC	A
+	SCF
+	RET	NZ
+.valid
+	PUSH	BC
+	CALL	RXD_TAKE		; HL = slot buffer; a full ring: the generic states count it
+	POP	BC
+	RET	C
+	; nothing fails from here: payload, publication
+	EX	DE,HL			; DE = destination
+	PUSH	IX
+	POP	HL
+	LD	A,ETH_L4 + UDP_HDR
+	ADD	A,L
+	LD	L,A
+	JR	NC,.src
+	INC	H
+.src
+	LD	A,C
+	SUB	UDP_HDR
+	LD	C,A
+	LD	B,0
+	PUSH	BC
+	JR	Z,.empty
+	LDIR
+.empty
+	POP	BC
+	PUSH	BC
+	CALL	RXD_PUBLISH
+	POP	DE
+	STAT_ADD32 UNETG_STATS_RX_BYTES
+	SET	1,(IY+CX_WORK)
+	LD	(IY+EX_RXS),ERX_DISCARD
+	OR	A
+	RET
+
+; UDP_RX_CHK: the read-only checks of a datagram in scratch, paid for by
+; the caller's item (a doubt answers CF=1: one try per frame).  In: IX ->
+; frame.  Out: CF=0, C = UDP length, DE -> the UDP header, IX kept.
+; Clobbers A, B, HL.
+UDP_RX_CHK
+	LD	A,(IX+ETH_IP_FRAG)
+	AND	0x3F
+	OR	(IX+ETH_IP_FRAG+1)
+	SCF
+	RET	NZ
+	LD	A,(IX+UDP_LEN)
+	OR	A
+	SCF
+	RET	NZ
+	LD	A,(IX+ETH_IP_LEN+1)
+	SUB	IP_HDR
+	CP	(IX+UDP_LEN+1)
+	SCF
+	RET	NZ			; (a shorter UDP length: the generic states)
+	LD	C,A			; C = UDP length
+	; the channel is open: its header template (ctx.txh) holds both
+	; addresses and both ports -- the frame carries them the other way
+	; round
+	TP_IX_HL
+	LD	A,(HL)			; UD_ST
+	CP	UDS_OPEN
+	SCF
+	RET	NZ
+	PUSH	BC
+	PUSH	IX
+	POP	HL
+	LD	DE,ETH_IP_SRC
+	ADD	HL,DE
+	EX	DE,HL			; DE -> the frame's source address
+	LD	HL,UCTX_TXH + ETH_IP_DST - CTX_BIAS
+	PUSH	IY
+	POP	BC
+	ADD	HL,BC			; HL -> the template's destination
+	; (unrolled: every unit counts on this path)
+	UDP_SAME4			; from the peer
+	LD	BC,-8
+	ADD	HL,BC
+	UDP_SAME4			; to our address
+	LD	BC,6
+	ADD	HL,BC
+	UDP_SAME2			; from the peer's port
+	DEC	HL
+	DEC	HL
+	DEC	HL
+	DEC	HL
+	UDP_SAME2			; to our port
+.other
+	POP	BC
+	SCF
+	RET	NZ
+	; IPv4 header checksum
+	PUSH	BC
+	PUSH	IX
+	POP	HL
+	LD	DE,ETH_IP
+	ADD	HL,DE
+	EX	DE,HL
+	LD	HL,0
+	LD	BC,IP_HDR
+	CALL	CSUM_RAM		; DE -> the UDP header
+	POP	BC
+	LD	A,H
+	AND	L
+	INC	A
+	SCF
+	RET	NZ
+	OR	A			; CF=0 (A = 0)
+	RET
+
+; UDP_RX_MID (from UDP_RX_FAST, COST_UDP_RX_FAST taken, B = frame bytes
+; of the packet, 65..138):
+; a datagram whose packet goes past scratch, payload 23..UDP_MID_MAX.  One
+; item: the checks, the sum of its bytes in scratch, the slot (the accept
+; of the generic path, TP_RX_ACCEPT: HS_RXDST / HS_RXLIM / UD_RXLEN) and
+; card portions of the rest (RXP_COPY, NIC_CHUNK_RX bytes summed each)
+; while the frame lasts; the verdict and publication (ETH_RX_VERDICT, the
+; generic ERX_FINISH) end it.  A portion refused for the bus leaves
+; ERX_COPY to the generic states.  Cost: see COST_UDP_RX_MID (taken only when it fits; the
+; COST_UDP_RX_FAST reserve of the checks in front is given back first;
+; when it does not fit the generic states take the frame).
+UDP_RX_MID
+	LD	A,B
+	SUB	RX_HDR_BYTES		; card bytes (1..74)
+	LD	L,A
+	LD	H,0
+	ADD	HL,HL			; 2 per card byte
+	LD	DE,COST_UDP_RX_MIDP
+.portions
+	SUB	NIC_CHUNK_RX		; a further portion per NIC_CHUNK_RX bytes
+	JR	C,.one
+	JR	Z,.one
+	ADD	HL,DE
+	JR	.portions
+.one
+	LD	DE,COST_UDP_RX_MID
+	ADD	HL,DE
+	; one item of its own: the fast path's reserve goes back first
+	PUSH	HL
+	LD	HL,COST_UDP_RX_FAST
+	CALL	UNITS_REFUND
+	POP	HL
+	CALL	SHORT_TAKE		; (keeps IX)
+	RET	C
+.taken
+	CALL	UDP_RX_CHK		; C = UDP length, DE -> UDP header
+	RET	C
+	PUSH	BC
+	PUSH	DE
+	CALL	RXD_TAKE		; HL = slot buffer; a full ring: the generic states count it
+	POP	DE
+	POP	BC
+	RET	C
+	; nothing fails from here: the slot is filled, the frame goes on
+	PUSH	HL			; [slot]
+	LD	B,0
+	PUSH	BC			; [slot][UDP length]
+	; the sum: template's TPT_L4S0 (addresses, protocol, ports) + the
+	; pseudo header's length + the UDP length field onwards in scratch
+	LD	HL,0
+	LD	A,(IX+UDP_CSUM)
+	OR	(IX+UDP_CSUM+1)
+	JR	Z,.nosum
+	PUSH	DE
+	CALL	L4_SUM0			; HL = TPT_L4S0
+	POP	DE
+	INC	DE
+	INC	DE
+	INC	DE
+	INC	DE			; DE -> the UDP length field
+	POP	BC
+	PUSH	BC
+	PUSH	DE
+	LD	E,C
+	LD	D,0
+	CALL	CSUM_ADD_BE
+	POP	DE
+	LD	BC,L4_IN_SCRATCH - 4
+	CALL	CSUM_RAM
+.nosum
+	POP	BC			; [slot] BC = UDP length
+	EX	(SP),HL			; [sum] HL = slot
+	; the payload bytes in scratch into the slot
+	PUSH	BC
+	EX	DE,HL			; DE = slot
+	PUSH	IX
+	POP	HL
+	LD	BC,ETH_L4 + UDP_HDR
+	ADD	HL,BC
+	LD	BC,L4_IN_SCRATCH - UDP_HDR
+	LDIR				; DE -> the rest's place
+	POP	BC			; BC = UDP length
+	LD	A,(IX+UDP_CSUM)
+	OR	(IX+UDP_CSUM+1)
+	LD	B,1			; checksum 0: sent without one
+	JR	Z,.nochk
+	DEC	B
+.nochk
+	HWSM_IX
+	POP	HL			; sum
+	LD	(IX+HS_SUM),L
+	LD	(IX+HS_SUM+1),H
+	XOR	A
+	LD	(IX+HS_PAR),A		; the card part starts on an even offset
+	LD	(IX+HS_RXSKIP),A
+	LD	(IX+HS_RXSKIP+1),A
+	LD	(IX+HS_RXLIM+1),A
+	LD	(IX+HS_RXREM+1),A
+	LD	(IX+HS_RXDST),E
+	LD	(IX+HS_RXDST+1),D
+	DEC	A
+	LD	(IX+HS_RXSPAN),A	; no wrap inside a datagram slot
+	LD	(IX+HS_RXSPAN+1),A
+	LD	(IX+HS_NOCHK),B
+	LD	A,C
+	SUB	L4_IN_SCRATCH
+	LD	(IX+HS_RXLIM),A		; card bytes, all of them payload
+	LD	(IX+HS_RXREM),A
+	LD	(IX+HS_RXS),ERX_COPY
+	; the transport's record of the stored datagram (TP_RX_COMMIT)
+	LD	A,C
+	SUB	UDP_HDR
+	LD	E,A			; payload
+	TP_IX_HL
+	LD	BC,UD_RXLEN
+	ADD	HL,BC
+	LD	(HL),E
+	INC	HL
+	LD	(HL),0
+	INC	HL
+	LD	(HL),1			; UD_RXSTORE
+	; the card portions of the rest, then the verdict and publication
+.portion
+	LD	HL,RXP_COPY
+	CALL	RUN_PORTION
+	JR	C,.left			; the bus: the generic ERX_COPY goes on
+	SET	2,(IY+CX_WORK)
+	LD	A,(IY+EX_RXS)
+	CP	ERX_COPY
+	JR	Z,.portion
+	CALL	ETH_RX_VERDICT		; ERX_FINISH -> ERX_DISCARD
+.left
+	OR	A
+	RET
+	ENDIF
 
 ; TP_TX_DONE: A = 1 sent, 0 failed.  One datagram = one slot.
 TP_TX_DONE

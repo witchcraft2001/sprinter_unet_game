@@ -1,0 +1,98 @@
+{
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "esp_fw": 2,
+  "scenario": "C T with 1 STEP of 2000 us per period",
+  "wall_s": 7.2,
+  "steps_per_period": 1,
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 233,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 4530
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 2120,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 2120,
+    "periods": 1311,
+    "largest_period_debit_us": 4430,
+    "now_ms": 26226,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 1312,
+      "early": 12562,
+      "frames": 1027,
+      "ticks": 13118,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 13029,
+    "steps_total": 1312,
+    "steps_useful": 1312,
+    "budget_yields": 111,
+    "max_step_gap_ms": 22,
+    "tx_frames": 32,
+    "rx_frames": 32,
+    "tx_bytes": 5824,
+    "rx_bytes": 5824
+  },
+  "timing_us": {
+    "tick_isr_max": 317,
+    "admitted_ug_step_max": 2046,
+    "largest_tick_gap": 2040,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 25.6 s)",
+  "hw": {
+    "latms": [
+      {
+        "bytes": 64,
+        "n": 16,
+        "txdone_max_ms": 100,
+        "txdone_mean_ms": 98.1,
+        "echo_max_ms": 300,
+        "echo_mean_ms": 282.6
+      },
+      {
+        "bytes": 300,
+        "n": 16,
+        "txdone_max_ms": 353,
+        "txdone_mean_ms": 351.9,
+        "echo_max_ms": 1078,
+        "echo_mean_ms": 1067.7
+      }
+    ]
+  }
+}

@@ -141,30 +141,37 @@ DL_MERGE_DE
 
 ; ----------------------------------------------------------------------
 ; Budget.  ctx.units holds the remaining body budget of the running call
-; in microseconds of a 21 MHz CPU (the unit of every cost constant); the
-; caller's budget is converted once by UNITS_FROM_BUDGET.  Costs are
-; qualified upper bounds measured on the stand (docs/MEASUREMENTS.md).
+; in units (microseconds of a 21 MHz CPU without memory waits, the unit of
+; every cost constant; profile.inc); the caller's budget, real
+; microseconds, is converted once by EXP_STEP (MUL_F16 for the clock,
+; US_UNITS for the memory waits).  Costs are qualified upper bounds
+; measured on the stand (docs/MEASUREMENTS.md).
 ; ----------------------------------------------------------------------
 
-; UNITS_FROM_BUDGET: units = (DE * cpu_f16) / 16 - PROF_MIN_RETURN_US,
-; at least 0: the return reserve is set aside once here, so TAKE and
-; BUDGET_BYTES compare against the units directly.  Clobbers A, B, DE, HL.
-UNITS_FROM_BUDGET
-	CALL	UNITS_HL
-	LD	(IY+CX_UNITS),L
-	LD	(IY+CX_UNITS+1),H
+; US_UNITS: HL = the units HL real microseconds (at 21 MHz, turbo) buy:
+; us * 13 / 32 (profile.inc: one unit is 2.46 us on the board).  A product
+; that overflows wraps to fewer units, never more: (13 us mod 65536) / 32
+; <= 2047 < 13 us / 32 for every us above 5041.
+; Clobbers A, DE.  21 bytes, 126 T.
+US_UNITS
+	LD	D,H
+	LD	E,L
+	ADD	HL,HL
+	ADD	HL,DE			; 3 us
+	ADD	HL,HL
+	ADD	HL,HL
+	ADD	HL,DE			; 13 us
+	XOR	A
+	ADD	HL,HL
+	RLA
+	ADD	HL,HL
+	RLA
+	ADD	HL,HL
+	RLA				; A:HL = 104 us
+	LD	L,H
+	LD	H,A			; / 256
 	RET
-
-; UNITS_HL: HL = the units of budget DE (as above), nothing stored.
-; Clobbers A, B, DE.
-UNITS_HL
-	LD	A,(IY+CX_CPU_F16)
-	CALL	MUL_F16
-	LD	DE,-PROF_MIN_RETURN_US
-	ADD	HL,DE
-	RET	C
-	LD	HL,0
-	RET
+	ASSERT	PROF_UNIT_MUL == 13 && PROF_UNIT_DIV == 32
 
 ; MUL_F16: HL = (DE * A) / 16 for 0 <= A <= 31; A == 16 is the fast path.
 ; Clobbers A, B.
@@ -212,6 +219,25 @@ TAKE
 	SET	4,(IY+CX_WORK)		; UWK_YIELD
 	SCF
 	RET
+
+	IFDEF	UGB_FIT
+; UNITS_FIT: CF=1 when HL units are not there.  No refusal flag: for work
+; that has a fallback (the short path's items).  Clobbers A.
+UNITS_FIT
+	LD	A,(IY+CX_UNITS)
+	SUB	L
+	LD	A,(IY+CX_UNITS+1)
+	SBC	A,H
+	RET
+
+; SHORT_TAKE: take the cost HL of a short-path item (eth/engine.asm).
+; CF=1: it does not fit -- nothing taken and no refusal flag: the plain
+; items are the fallback.  Clobbers A, DE, HL; keeps BC, IX.
+SHORT_TAKE
+	CALL	UNITS_FIT
+	RET	C
+	JP	TAKE
+	ENDIF
 
 ; UNITS_REFUND: give HL units back (a reserve taken with BUDGET_BYTES that
 ; the caller spends with its own TAKE).  Preserves BC, DE.  Clobbers A, HL.

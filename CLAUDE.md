@@ -68,11 +68,17 @@ make names        # delivery names: 8.3, unique, not UNET<tag>, defines match
 make test-host    # python: ABI sources vs generated files, block layouts,
                   # relocated L1 == direct assembly at 4 bases, vendored SHA-256
 make test-z       # Node Z80 stand: ABI vectors on all seven builds + hw scenarios
-make profile-check # STEP profile of every build at STEP periods 2/10/20 ms: no overrun
+make profile-check # STEP profile of every build at STEP periods 2/10/20 ms: unit
+                  # rules (500 units, min, 812, 1218) and no overrun in real
+                  # time (up to 3000 us); the Ethernet builds again over
+                  # streams in pieces of 1..88 bytes (tools/dev/profile_small.sh),
+                  # the ESP builds in pieces of 16..64 at the fat budgets,
+                  # GUDPESP's transparent mode, and three scenarios
 make check        # everything above; run before every hand-off
 make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
-make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME
-                  # (not in check; Ethernet needs the feth pair, else M SKIP)
+make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME,
+                  # plus GUDPESP --esp-fw 2 (not in check; Ethernet needs the
+                  # feth pair, else M SKIP)
 make hw-image     # Ж stand file set build/hw/ (+ UGHW.ZIP, .img) from tools/hw/hw.env
 ```
 
@@ -173,10 +179,22 @@ Rules:
 - No busy waits. Every hardware/connection/close wait is a resumable state
   advanced by STEP/STEP_ISR with a byte/visit cap and a `now_ms` deadline.
   "Drain until empty" loops are forbidden; every loop has a fixed maximum.
+- Time is REAL time of the board (the user's decision of 2026-11-22: the
+  consumer measures nothing, picks a budget, and the core keeps it).
+  Every budget and every number of the ABI is a real microsecond in turbo;
+  the core counts in UNITS (a microsecond of a 21 MHz Z80 without memory
+  waits: `COST_*`, `PROF_*_US`, ctx.units) and converts once per STEP:
+  units = us * 13 / 32 (`US_UNITS`, src/core/profile.inc; one unit =
+  2.46 us: the worst measured ratio 2.40 plus the model-to-board 3 %).
+  STEP_ISR converts nothing: its constants are `PROF_*_RT`, real us.
 - Budget: STEP body ≤ the passed budget, which the application chooses
-  between `min_useful_budget_us` and `STEP_BODY_MAX_US` (2000 since
-  2026-11-21, 500 before: the user's decision, ТЗ §5 table); STEP_ISR body ≤ 150 µs;
-  empty poll ≤ 100 µs; BUS_BUSY path ≤ 25 µs; any DI section ≤ 200 µs.
+  between `min_useful_budget_us` (1047..1076; the ESP builds 1059) and `STEP_BODY_MAX_US`
+  (3000 since 2026-11-22, 2000 before); STEP_ISR body ≤ `ISR_BODY_MAX_US` (370).  The ТЗ §5.1 targets
+  (STEP_ISR ≤ 150, empty poll ≤ 100, BUS_BUSY ≤ 25, DI ≤ 200, quota sum ≤
+  2000 per period) were met in model time only; in real time v1 has 161 /
+  136 / 62 / 444 / 4700 and they are `todo` tests
+  (tests/z/abi/perf_targets.test.js, tests/z/sdk), never weakened asserts.
+  The user's target is 2..2.5 ms of network per 20 ms frame.
   Stack: ≤ 256 bytes for main exports, ≤ 96 bytes for STEP_ISR. Do not start
   an indivisible operation that does not fit together with its return cost.
 - Only STEP advances protocol time (`now_ms` u32, wrap-safe comparisons,
@@ -278,18 +296,36 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   that makes the write race-free without an atomic protocol. Every
   main-context read of the ring head goes through ER_HEAD under DI, even
   where it used to be safe to skip (HW_RUN's own tail) before ISRP_POLL
-  could write it too. Its sizing follows the cost rule like any item:
-  65 + ISRP_ENTRY_RESERVE + 4 per byte >= max(real * 1.1, real + 15) for
-  the whole STEP_ISR, and ISRP_RX_MAX keeps the body under 150 / 1.1 at
-  any budget.
+  could write it too. Its sizing is in real microseconds since
+  2026-11-22 (STEP_ISR converts nothing): the whole STEP_ISR with n bytes
+  takes 197.1 + 8.3 n us on the stand, the budget that moves n bytes is
+  PROF_ISR_MIN_RT (161) + ISRP_ENTRY_RESERVE (85) + 8 n (341 for 12), and
+  ISR_BODY_MAX_US (370) bounds the body at any budget.
 - SprinterESP parser: a payload round's cost (COST_PAY) never chains on
   top of a line round's cost (COST_PARSE) -- the old single COST_LINE for
   every deferred line action hid this and other fixed costs; each kind of
   deferred action (end of line, header, prompt, overrun, a completed UDP
   datagram's publish) has its own measured item.
-- The M stand shows MAME's memory waits: a STEP costs ~2x its Z model and
-  every STEP of the ESP builds exceeds 500 us real. Report M timings as
-  measured, never fold them into the Z constants; real costs come from Ж.
+- Memory waits: in turbo every memory cycle (RAM and ISA) starts on the
+  3.5 MHz grid and takes 3 wait T-states, an I/O cycle 2
+  (tools/harness/dramwait.js, the rule of MAME's sprinter.cpp
+  `do_mem_wait`): an opcode fetch costs 12 T, a register-only instruction
+  is 3x slower, a memory read 2x.  The Z stand runs with them by default
+  (`waits`, `UG_WAITS=0` switches them off) and so shows what M and the
+  board show: the 35-T calibration loop is 78.0 T on Z, 78.4 on the board
+  and in MAME; ISRTIME16 - BUSYTIME16 is 58.3 us on Z, 60.2 on the board.
+  The board is not exactly MAME on single loops (UGPROBE: CALL/RET loop
+  +3.6 %, `LD A,(HL)`/`DJNZ` -6 %, an ISA read 3 T cheaper than RAM, the
+  ISA bracket 30.4 against 26.3 us): keep the 3 % in the unit factor and
+  judge by whole paths.
+- Tests pass real budgets; `US(n)` (tools/harness/stand.js) is the real
+  budget that buys n units, for vectors that mean units.  The calibration
+  tools of tools/dev account in units: they `require('./units.js')` first
+  (the stand without waits, where a microsecond is a unit) and pass
+  `US(budget)`; `profile_step.js --real`, pkt_steps.js, pkt_profile.js,
+  real_costs.js, real_ratio.js, gw_costs.js and the tests run in real
+  time.  A new cost is measured in units (cost rule below) and the
+  whole STEP is then checked in real time (`make profile-check`).
 - M stand program: turbo on through the SYS port (`OUT (#3C),3`); time from
   an IM1 frame-tick hook (vector at `#0039`), durations from CTC2 in timer
   mode chained into CTC3 and calibrated per frame. The Worms CTC counter
@@ -338,7 +374,7 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   budget: keep the state and continue next STEP. Cost rule:
   `COST = max(real * 1.1, real + 15)` rounded up to 5, real = the worst
   item time of `tools/dev/profile_step.js --items` (`tools/dev/items_max.sh`)
-  over STEP periods 2/10/20 ms, the budgets 500 and min and both cards of
+  over STEP periods 2/10/20 ms, the budgets 500 units and min and both cards of
   the family; `make profile-check` (part of `check`) fails on any STEP over
   its budget and on any broken publication rule (below).
 - `min_useful_budget_us` = `PROF_STEP_BASE_US` + `PROF_MAX_ITEM_US` +
@@ -348,7 +384,7 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   time, and every action takes exactly its own cost (an "idle step" that
   pays first eats the budget of the item it leads to -- a livelock at the
   minimum budget). `PROF_STEP_BASE_US` covers the "needed base reserve" of
-  the build (profile_step.js `need` <= base at budgets 500 and min); the
+  the build (profile_step.js `need` <= base at budgets 500 units and min); the
   minimum-budget tests and `tools/dev/sweep_loop.js` must keep moving data
   at the published minimum. Refusals cost base time: check the units of a
   known cost before the work that leads to its TAKE (dispatcher tables,
@@ -433,6 +469,75 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
 - The vendored Z80 core applies DI one instruction late (`do_delayed_di`):
   stand code that injects interrupts must skip that state, as a real Z80
   takes none after DI.
+
+- STEP limit 3000 us (2026-11-22; ABI `STEP_BODY_MAX_US`, 1218 units).
+  Every gate runs at 1218 units and at 3000 us real too; NETDEMO
+  profile `R` = 1 STEP of 3000 us + one poll per period (run_m.py
+  LAT_PROFILE, build_hw.sh).  NETDEMO `F` (UDP builds) is Headball's
+  flow at R's profile (ESP: two polls) against `echo_server.py --game`,
+  which sends a state every 100 ms by the host clock: run_m.py throttles
+  MAME for F on ESP too (unthrottled, 10 emulated s took 5 real and 11
+  states came).  Its state handler sits in front of the SDK on ESP and
+  behind it on Ethernet (`FL_STATE_CODE`): the page-aligned tables of
+  ugtime.asm decide which build crosses a page.
+  A MAME run is deterministic, so a flow meets the STEPs at one phase
+  only: GUDPRTL F passed on M (248 of 251) and failed on the board (225);
+  the first input shifted by 18..34 ms gave 221..225 on M too.  F now
+  sweeps the phase itself (every 12th input interval 2 ms longer).  The
+  cause was a stale flag: `RF_TXPRI` ("TX had the front last STEP, RX's
+  turn") was cleared only on the busy-RX path of `ETH_FIRST`, so a STEP
+  with RX idle kept it and the next state, STEPs later, took the front
+  from an input committed before it (TX_DONE three STEPs, the next input
+  skipped).  A "last STEP" flag is cleared on every path of the STEP.
+  Z did not show it with game_load.js (offers right before the STEP); the
+  application stand does (`tools/dev/sdk_flow.js`: the gateway, ticks,
+  offers at any phase; tests/z/sdk), and a per-STEP ring of TXS / RXS /
+  units in NETDEMO (temporary) found the STEP in MAME.
+- `IFUSED` only around a routine whose callers come before it in the
+  text: `IFUSED send_one` (the latency scenarios call it only from
+  further down) assembled a `CALL l_call` of libman 256 bytes off, with
+  a symbol table identical to the good build's and no error.  A plain
+  `IF SCEN != 'F'` fixed it.  Compare the old scenarios' binaries byte
+  for byte after any NETDEMO / UGTEST edit.
+- Further passes (GUDP509B only, `UGB_CONT`, profile.inc, eth/engine.asm
+  `ETH_SCHED`): with `PROF_CONT_MIN_US` (768) units left, up to 4 passes
+  of poll / frames / transport / TX per STEP, each `COST_PASS` taken only
+  when it fits together with `COST_TX_WAIT`; an ETX_WAIT transmitter is
+  checked before the pass polls; the loop sets `PROF_CONT_DEC_US` aside.
+  At 2000 us the passes' share cost the short receive a whole STEP (echo
+  16 B 58 -> 76 ms): hence the threshold.  On GUDPRTL neither the passes
+  nor the short path paid off (a remote-DMA set-up per portion): it stays
+  byte-identical.
+- `UDP_RX_MID` (GUDP509B, eth/udp.asm): a 23..96-byte datagram whose
+  headers lie in scratch is one item (COST_UDP_RX_MID + 2 per byte +
+  COST_UDP_RX_MIDP per extra RX portion): checks (`UDP_RX_CHK`, shared
+  with the fast path), slot, 22 bytes from scratch, the rest by
+  `RXP_COPY` portions with the sum, then `ETH_RX_VERDICT`.  The fast
+  path's TAKE comes first and the checks refund it: checks before a
+  TAKE are base time (the header item's ratio fell to 0.96).
+- Transparent UDP of GUDPESP (`esp_fw` = 2, `UGB_XMODE`, esp/esp_x.asm):
+  records of a 2-byte header (tools/harness/net/xrec.js) through
+  `AT+CIPMODE=1`.  Its hwsm deadline is `ES_XDL`: `HS_DL` aliases
+  `ES_RT` / `ES_TXN` on ESP (a shared "generic" deadline silently
+  clobbered the TX stream).  `ESP_LEAN` is off in data mode (its
+  reserves are sized for AT lines).  "+++" has no answer: its command
+  deadline is the pause behind it (ESP_TIMEOUT).  The module (MAME's
+  esp8266_at, very likely ESP-AT) cuts a packet only after 20 ms of UART
+  silence: a 22-byte record takes two STEPs at one STEP a frame (one TX
+  FIFO load per STEP, THRE = FIFO empty), inputs every 40 ms never left
+  20 ms of silence and one packet grew to 1460 bytes (inputs 2.7 s
+  late).  `ESP_XGATE` holds a record (`ET_XHOLD`) when the packet being
+  gathered is older than `ESP_XAGE_MS`, until `ESP_XCUT_MS` of silence
+  after `ES_XLAST` (stamped by the pumps at every TX write); the hold is
+  decided inside ESP_XSEND's item and released by `ESP_XWAIT` -- a
+  refusal before the TAKE was base time on every visit (need 334).
+  The held STEP has an idle pump and no TX slack: GUDPESP's fat STEP
+  sets 85 units aside (`PROF_FAT_DEC_US`, 65 elsewhere).
+- UART FIFO trigger 14 overruns in MAME (auto-RTS only at the 16th
+  character, the module sends one more): ESP game profiles use trigger
+  8 with two byte-moving polls per period.  A slack in one item's
+  reserve can hide base time: a structural change that removes the
+  slack (a held record: idle pump) shows the real base.
 
 ## Ж stand (real Sprinter)
 
@@ -539,8 +644,9 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   scenario) live behind the SDK includes, right before `code_end`.
 - Every budget check and stand limit comes from the ABI constants
   (`ABI.consts.limits`), never a literal 500 / 150: both stands had the
-  old STEP limit hard-coded. `make profile-check` runs at 500, the
-  minimum, 1000 and 2000: a larger budget reaches paths the small ones
+  old STEP limit hard-coded. `make profile-check` ran at 500, the
+  minimum, 1000 and 2000 model us (since 2026-11-22: 500 units, the
+  minimum and 812 units = 2000 us, plus the real-time runs): a larger budget reaches paths the small ones
   never do (the RX_READY published by the STEP that finished the frame
   cost 95 us against a reserve of 70; COST_EVENT is 110 on every card).
 - Work that cannot succeed takes no budget: EV_FLUSH returns at once on a
@@ -558,6 +664,152 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   1 x 1000 per period -- tools/mame/run_m.py LAT_PROFILE and
   tools/hw/build_hw.sh hold the same table).  Judge a scheduling change
   by both.
+- Short path (2026-11-22, `UGB_SHORT`, GUDP509B only; profile.inc,
+  eth/engine.asm, eth/udp.asm): in a STEP with a budget of about 1800 us
+  or more (`PROF_SHORT_MIN_US` units after the base) that starts with no
+  frame in progress, a small frame's card portions are fused (BEGIN +
+  header, payload <= `TX_FUSE_END` + END, poll + header + drop of a frame
+  whole in scratch), a frame is dropped by the card in the portion that
+  reads its last byte (no DISCARD / DISC_WAIT items: the poll checks CIP),
+  and a small datagram is one software item each way (send <=
+  `UDP_FAST_MAX` 64 bytes: sum + header; receive with the IPv4 packet whole
+  in scratch, payload <= 22: `UDP_RX_FAST` verifies everything before it
+  writes anything and leaves every doubt to the generic states, which
+  count the drop).  Its items are taken only when they fit (`SHORT_TAKE`:
+  no refusal flag, the plain item is the fallback) and are not bound by
+  `PROF_MAX_ITEM_US`; the STEP sets `PROF_SHORT_DEC_US` aside for its
+  decisions.  Result at 2000 us, one STEP per frame: a datagram of up to
+  16 bytes is on the wire after 2 STEPs and its echo readable after 3
+  (plain items: 3 and 5); larger packets and the bulk stream are a little
+  slower (base 210 instead of 190).  The other three Ethernet builds are
+  the plain code, byte for byte: measured with honest accounting the
+  short path gains nothing there within 2000 us (RTL8019AS: a remote DMA
+  set-up per portion, no header in the poll's portion; TCP: the cost is in
+  the transport items).
+- GUDPRTL game flow (2026-11-23, `UGB_TXFIRST` / `UGB_BYTECOST` /
+  `UGB_NODW`; profile.inc, eth/engine.asm `ETH_FIRST`, `RX_BYTECOST`,
+  `TX_BYTECOST`, rtl8019.asm `HS_BEHIND`).  Headball's flow lost inputs
+  on GUDPRTL not to the STEP limit but to order and over-reserved
+  items: an input that met a state waited a STEP behind the RX frame in
+  progress, and items reserved ~1.4x their real time (FINISH at TCP's
+  175 for 64 real, an empty ERX_DISC_WAIT item, every DATA portion at
+  56 bytes).  In a `USCH_BIG` STEP (units after the base >=
+  `PROF_FIRST_MIN_US`, decided in EXP_STEP's `.base` -- on step 2 the
+  units depend on whether RX is busy, no poll reserve: 140 more) TX
+  goes before a short RX frame and card portions are priced by their
+  bytes.  Either rule alone at 2000 / 2500 us gave TX the leftovers RX
+  needed and the card ring overflowed (states lost instead of inputs
+  skipped); and at 3000 us an overloaded flow did the same until TX
+  first yields to a ring that holds more than the frame being read
+  (`HS_BEHIND`, CURR vs the frame's next page at the poll).  Judge a
+  priority change by an overloaded flow too (`hw_overflow` 0), not
+  only by the flow it was made for.  Every flag test in a dispatcher
+  is base time of every STEP: GUDPRTL's base 195 -> 205.
+- A speed-up measured with under-reserved costs is no speed-up.  The fat
+  items of the plain path (discard 100 for 56 real, FINISH 175 for 73,
+  idle + summing + pull) silently paid for the dispatch between items and
+  for part of the fixed path; every lean item that replaced one showed up
+  as "needed base reserve" (140 -> 300 units at the largest budget before
+  the costs were honest).  Before believing STEPs-per-packet numbers:
+  `profile_step.js --piece` (tools/dev/profile_small.sh, part of
+  profile-check) at the minimum, 500, 730 and 812 units must show need <=
+  base and over 0, and the item table ratio >= 1 with the dispatch that
+  follows an item inside its window.  What a decision costs belongs to
+  the item it leads to (COST_UDP_FAST includes TP_STEP's choice); what a
+  refused attempt costs is base time, so refusals check the units first.
+- A cost of 256 or more does not fit `CP n`: sjasmplus truncates it
+  silently and the "does it fit" check passes on anything (the fast
+  receive item ran without budget: STEPs of 2200 us at a budget of 2000,
+  found by the stand).  Units against a 16-bit cost: `UNITS_FIT`.
+- 3C509B: RX_DISCARD takes time; the RX status is valid only after a
+  status read has seen CIP clear -- CIP first, then the RX status (the
+  other order is shorter and passed everything but the model's
+  `cipReads`: the model keeps showing the dropped frame's status until
+  CIP clears and throws on a FIFO read).  A model option that makes a
+  race visible is worth a test on every build that touches the path.
+- ESP (TCP): the sequencer takes a completed command's result before a
+  failure line that came after it -- the stream order is the order of
+  events.  A CIPRECVDATA answer right before "0,CLOSED" (a peer that
+  answers and closes at once) lost the peer's last data when one parse
+  turn brought both lines: M scenario P failed in half of the runs after
+  an unrelated timing change, 54 of 192 phases on Z
+  (tools/dev/esp_close_race.js, tests/z/hw/esp).  A flaky M scenario is a
+  core race until proven otherwise: reproduce it on Z with a phase sweep.
+- `make` 3.81 (macOS) has no `.SHELLFLAGS`: a recipe line `check | tail
+  -1` returns tail's status.  Until 2026-11-22 every piped line of
+  profile-check could not fail; with `set -o pipefail` (Makefile `PF`)
+  the broadcast scenario turned out to need a base of 195 (GUDPRTL) and
+  211 (GTCP509B) against 190 / 200, and small pieces 210 on GTCP509B
+  (bases now 195 and 212).  A gate that prints FAIL and exits 0 is no
+  gate: check the exit status of a new gate with a deliberate failure.
+- A base is not rounded up "to be safe": GTCP509B at 215 instead of 212
+  took one more STEP per small packet at 2000 us (TX_DONE of 64 bytes in
+  the game profile 169 ms against 120; MAME 188 against 120), and five
+  units on COST_FINISH did the same to both TCP builds.  After any change
+  of a base or a shared cost: `pkt_steps.js` and `sdk_lat.js --polls 10`
+  against the numbers of docs/MEASUREMENTS.md, not only the rules.
+- Fat STEP of the SprinterESP builds (2026-11-22, `UGB_FAT`; profile.inc,
+  sched.asm, esp/tp_esp.asm `ESP_FAT` / `TP_FAT`, esp/esp_parse.asm
+  `ESP_LEAN`, hw/esp/uart.asm `HW_RUN_FAT` / `UART_PUMP_FAT`).  The plain
+  ESP STEP is one UART portion and one parser / sequencer visit: sized for
+  many small STEPs, it used half of a 2000 us budget and took 12 STEPs for
+  a 16-byte packet (the game calls STEP once a frame).  A STEP of a
+  running card with `PROF_FAT_MIN_US` units left (about 1800 us) runs the
+  transport first, then rounds of pump -> parser -> sequencer while they
+  bring something; the pump charges inside its portion for what it really
+  moved (`COST_FPUMP*`), whole answers of the module are recognised in the
+  ring in one pass (`ESP_LEAN`: "OK", "Recv n bytes", "SEND OK", the
+  prompt, a whole UDP datagram, the TCP notice; a line or datagram seen in
+  part is waited for, `ESF_LWAIT` / `ET_LNEED`), a CIPSEND command is one
+  item and one portion of 17 bytes (first byte into the idle shift
+  register).  Every fat item has its own entry or copy (`UART_PUMP_FAT` is
+  a copy, not a mode): a mode test on the plain path is time of the plain
+  STEP -- eight `BIT USCH_FAT` cost its base 7 units (GTCPESP 189 -> 196;
+  base 200 now, minimum budget 1059 us).  Result at one 2000 us STEP per
+  frame (Z, frames per 16-byte packet, send / send + echo): 12.0 / 14.1 ->
+  6.1 / 9.9; with one byte-moving STEP_ISR(341) per frame 10.0 / 11.9 ->
+  4.1 / 5.3; with two 3.2 / 4.3.  What is left is the UART itself: 9
+  bytes per portion at trigger 8, about 0.5 ms of budget each, and the AT
+  exchange of one small packet is ~100 bytes.
+- Game profile on every card (2026-11-22): `poll_gap_us` is 25000 on the
+  ESP builds too (2500 before; `auto_fallback_gap_us` /
+  `max_service_gap_us` with it).  The UART FIFO stops the module by
+  auto-RTS and a late poll loses nothing; the user confirmed that the RTS
+  flow stop works on the board (our ESP builds themselves have not run
+  there yet).  A poll every tick was ten polls a frame, about 2.1 ms by
+  themselves.  The ESP game profile is one STEP of 2000 us and one
+  byte-moving poll per period (`UGP_POLL_TICKS` 10, `UGP_ISR_BUDGET` 341;
+  NETDEMO scenario `G`, `-DUG_ISR_BUDGET=341` on ESP): quota sum 2631 us,
+  1.7 ms of network per frame (2.2 at most), GUDPESP 16 bytes 74 ms to
+  TX_DONE and 119 to the echo; two polls (`UGP_POLL_TICKS` 5): 52 / 98 at
+  1.9 ms (2.5 at most).  What a game gets on every card at one STEP per
+  frame is the table of docs/MEASUREMENTS.md («Что получает игра при
+  одном STEP за кадр»): `tools/dev/esp_frames.js` on all six builds,
+  `tools/dev/oneway.js`, `tools/dev/sdk_lat.js --polls 10`.
+- An optimisation is judged after its costs are honest, three times over
+  in this stage: with under-reserved items the same code showed 4.1
+  frames per packet and STEPs of 2400 us at a budget of 2000; the dispatch
+  of every extra round / visit is real time (a round fee, `COST_FAT_ROUND`,
+  and `PROF_FAT_DEC_US`); the TAKEs of one visit are one item for the
+  tools (budget_calls.js `FOLD`: ESP_LEAN, UART_PUMP_FAT), calibrated by
+  `tools/dev/items_fat.sh`.  And when two items must share a STEP to save
+  a frame, 30 units decide: check the pair's sum against the units a STEP
+  has (812 - 10 - base - share), not each item alone.
+- MAME's NS16550 kept 15 characters in its transmit FIFO (a ring of 16
+  with head == tail for "empty"): 16 written while the shift register was
+  busy wrapped it to "empty", the characters were lost and THRE never came
+  back.  That was the "lost CIPSEND" of GUDPESP UGTEST S in MAME, flaky
+  with every timing change for months (the pump refund, the general
+  "result before failure" fix, a 5-unit base change) and each time left
+  as "not understood"; the fat STEP's 17-byte command hit it every time.
+  Fixed in the M stand (tools/mame/patches/ns16550_txfifo.patch,
+  build_holub.sh).  A flaky scenario that depends on nothing but timing
+  can be the model: read the model's code path of the operation that
+  stalled before changing the core around it.
+- A test that waits for CLOSED reads its RX while it waits (ABI: an
+  unread RX holds CLOSED back): the ESP "CLOSE during a CIPSEND" test read
+  events only and passed while the echo came after the close; 5 units
+  less per STEP and it hung -- a test artefact that looked like a livelock.
 - DSS: the command line is IX at entry (load - #80: length, text), not
   APPINFO #47; `#0A` creates or truncates a file. A UG_HW program saves
   its report before the 0xA5 marker and waits out ugstand.lua's grace
@@ -597,7 +849,24 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   `tools/dev/items_max.sh` (worst time per budget item over builds),
   `tools/dev/stream_stats.js` (stream with retransmissions and yields),
   `tools/dev/scenario_budget.js` (budget accounting over foreign broadcast
-  traffic, SHUTDOWN in a send, a lone send; part of profile-check);
+  traffic, SHUTDOWN in a send, a lone send; part of profile-check),
+  `tools/dev/pkt_steps.js` (STEPs from TX_COMMIT to the wire, to TX_DONE
+  and to the echo, by packet size and budget), `tools/dev/pkt_profile.js`
+  (per-label time of one packet), `tools/dev/items_small.sh` and
+  `tools/dev/profile_small.sh` (item costs and publication rules over
+  streams in pieces of 1..64 bytes), `tools/dev/sdk_flow.js` (NETDEMO F
+  through the SDK gateway on the application stand, swept over the input
+  and state phases; `--trace` prints the budget calls of slow inputs),
+  `tools/dev/sdk_lat.js` (latency and
+  time per period through the SDK gateway), `tools/dev/esp_close_race.js`
+  (GTCPESP: echo then close, phase sweep), `tools/dev/esp_frames.js`
+  (frames per packet at one STEP per frame, with STEP_ISR polls, baud and
+  FIFO trigger), `tools/dev/oneway.js` (one-way send / receive rates at
+  one STEP per period), `tools/dev/game_load.js` (a real-time game's
+  traffic on a UDP build: small inputs up and larger states down at once,
+  what arrives and how late; `--phase in,st[,poll]` places the offer, the
+  state and the poll inside the frame), `tools/dev/items_fat.sh` (the fat STEP's items:
+  reserved against worst real time);
   `tools/dev/budget_calls.js` is the shared budget-call accounting. Keep debug scripts in `tools/dev/`, not in the session
   scratchpad.
 - Results are kept separate per stand: Z (model), M (MAME), Ж (real

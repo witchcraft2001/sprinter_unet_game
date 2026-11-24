@@ -1,0 +1,38 @@
+diff --git a/src/devices/machine/ins8250.cpp b/src/devices/machine/ins8250.cpp
+index 1ddd2cde707..49921d1cca3 100644
+--- a/src/devices/machine/ins8250.cpp
++++ b/src/devices/machine/ins8250.cpp
+@@ -289,9 +289,9 @@ void ins8250_uart_device::ins8250_w(offs_t offset, u8 data)
+ 			else
+ 			{
+ 				m_regs.thr = data;
+-				m_regs.lsr &= ~INS8250_LSR_THRE;
+ 				if((m_device_type >= dev_type::NS16550) && (m_regs.fcr & 1))
+ 					push_tx(data);
++				m_regs.lsr &= ~INS8250_LSR_THRE;
+ 				clear_int(COM_INT_PENDING_TRANSMITTER_HOLDING_REGISTER_EMPTY);
+ 				if(m_regs.lsr & INS8250_LSR_TSRE)
+ 					tra_complete();
+@@ -564,7 +564,9 @@ void ns16550_device::tra_complete()
+ 	if(!(m_regs.fcr & 1))
+ 		return ins8250_uart_device::tra_complete();
+ 
+-	if(m_ttail != m_thead)
++	// the FIFO holds 16 characters: head == tail is "empty" while THRE is
++	// set and "full" while it is clear
++	if(!(m_regs.lsr & INS8250_LSR_THRE))
+ 	{
+ 		transmit_register_setup(m_tfifo[m_ttail]);
+ 		++m_ttail &= 0x0f;
+@@ -778,6 +780,11 @@ TIMER_CALLBACK_MEMBER(ns16550_device::timeout_expired)
+ 
+ void ns16550_device::push_tx(u8 data)
+ {
++	// called before THRE is cleared: a full FIFO (16 characters waiting,
++	// one more in the shift register) loses the character, as the chip
++	// does, instead of wrapping around to "empty"
++	if((m_thead == m_ttail) && !(m_regs.lsr & INS8250_LSR_THRE))
++		return;
+ 	m_tfifo[m_thead] = data;
+ 	++m_thead &= 0x0f;
+ }

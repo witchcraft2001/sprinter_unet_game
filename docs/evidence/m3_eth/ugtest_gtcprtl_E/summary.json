@@ -4,12 +4,12 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 19.0,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 41612",
+  "wall_s": 19.2,
+  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 38019",
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1071,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "stats": {
     "abi_version": 256,
@@ -18,11 +18,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 89,
+    "polls_total": 90,
     "polls_useful": 6,
-    "steps_total": 183,
-    "steps_useful": 183,
-    "budget_yields": 115,
+    "steps_total": 221,
+    "steps_useful": 221,
+    "budget_yields": 116,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
     "tx_frames": 6,
@@ -35,10 +35,10 @@
   "frame_ms": 20.48,
   "ticks_missed_ratio": 0.84,
   "step": {
-    "max_us": 1125,
-    "mean_us": 828,
-    "steps": 183,
-    "over_budget": 183
+    "max_us": 1223,
+    "mean_us": 798,
+    "steps": 221,
+    "over_budget": 0
   },
   "trivial_call_us": 163
 }

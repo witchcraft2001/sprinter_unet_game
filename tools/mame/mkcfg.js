@@ -29,6 +29,7 @@ const optSlot = takeOpt('--slot');
 const optIoBase = takeOpt('--io-base');
 const optIdPort = takeOpt('--id-port');
 const optTrigger = takeOpt('--trigger');
+const optEspFw = takeOpt('--esp-fw');           // 2: GUDPESP's transparent UDP (records)
 const optLocalPort = takeOpt('--local-port');
 const optPeer = takeOpt('--peer');
 const optPort = takeOpt('--port');
@@ -100,11 +101,11 @@ const cfg = {
   gateway_ip: optGateway ?? (prof.hw === 'ESP' ? '192.168.0.1' : peerIp),
   peer_ip: peerIp, peer_port: +peerPort, local_port: +localPort,
   uart_divisor: prof.hw === 'ESP' ? 8 : 0, uart_flow: prof.hw === 'ESP' ? 1 : 0,
-  esp_flow: prof.hw === 'ESP' ? 3 : 0, esp_fw: prof.hw === 'ESP' ? 1 : 0,
+  esp_flow: prof.hw === 'ESP' ? 3 : 0, esp_fw: prof.hw === 'ESP' ? (optEspFw !== undefined ? +optEspFw : 1) : 0,
   uart_rx_trigger: optTrigger !== undefined ? parseInt(optTrigger, 0) : (prof.hw === 'ESP' ? 8 : 0),
   connect_timeout_ms: 10000, retry_count: 4, retry_wait_ms: [500, 1000, 2000, 2000, 2000],
   send_stall_timeout_ms: 7500, close_timeout_ms: 3000, arp_ttl_ms: 60000,
-  worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: 500, isr_budget_us: 150,
+  worst_poll_gap_us: 2000, worst_step_gap_ms: 20, step_budget_us: 1280, isr_budget_us: 370,
   time_read_cost_us: 20,
   ctx_ptr: M.CTX, ctx_len: M.CTX_LEN,
   tx_slots_ptr: M.TXS, tx_slot_size: slot, tx_slot_count: M.TX_N,
@@ -130,7 +131,8 @@ for (const [k, v] of Object.entries(M)) lines.push(`UG_${k}\tEQU\t${hex(v)}`);
 // letter (T/U) -- "UESPTS.TXT" for GTCPESP's UGTEST S, 8.3-safe.
 const progLetter = prog === 'netdemo' ? 'N' : 'U';
 const cardCode = { ESP: 'ESP', RTL: 'RTL', EL3: '509' }[prof.hw];
-const transLetter = udp ? 'U' : 'T';
+// (X: GUDPESP in its transparent mode, esp_fw = 2: "NESPXE.TXT")
+const transLetter = cfg.esp_fw === 2 ? 'X' : udp ? 'U' : 'T';
 // the card's ISA slot and I/O base for the program's own ISA accesses
 // (NETUP's UART on ESP builds): the same values INIT_CONFIG carries
 lines.push(`UG_ISA_SLOT\tEQU\t${cfg.isa_slot}`, `UG_IO_BASE\tEQU\t${hex(cfg.io_base)}`,

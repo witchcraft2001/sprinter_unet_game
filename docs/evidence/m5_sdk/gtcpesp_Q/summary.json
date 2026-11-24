@@ -3,8 +3,8 @@
   "dll": "gtcpesp",
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
-  "scenario": "Q T at the SDK default quota (2 STEPs per period, quota sum <= 2000 us)",
-  "wall_s": 9.3,
+  "scenario": "Q T at the SDK default profile (2 STEPs of the minimum budget per period)",
+  "wall_s": 8.7,
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -15,33 +15,33 @@
   },
   "env": {
     "init_config": 0,
-    "env": 0,
-    "quota_sum_us": 2000
+    "env": 1,
+    "quota_sum_us": 4768
   },
   "info": {
-    "min_useful_budget_us": 425,
-    "empty_poll_us": 55,
-    "bus_busy_us": 25
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
   },
   "gateway": {
     "quota_full": {
-      "poll": 950,
+      "poll": 2310,
       "card": 0,
-      "main": 950,
+      "main": 2358,
       "service": 100
     },
-    "cost_poll_us": 95,
-    "cost_step_us": 475,
+    "cost_poll_us": 231,
+    "cost_step_us": 1179,
     "periods": 2158,
-    "largest_period_debit_us": 1900,
+    "largest_period_debit_us": 4668,
     "now_ms": 43143,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 4316,
-      "early": 22351,
-      "frames": 1696,
+      "early": 22390,
+      "frames": 1695,
       "ticks": 21580,
       "unknown": 0,
       "mask": 0,
@@ -69,7 +69,7 @@
   },
   "timing_us": {
     "tick_isr_max": 317,
-    "admitted_ug_step_max": 1214,
+    "admitted_ug_step_max": 1132,
     "largest_tick_gap": 2040,
     "late_ticks": 0
   },

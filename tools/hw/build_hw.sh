@@ -8,6 +8,11 @@
 #   UGT<card>TP.EXE       the same for TCP scenario P, peer port HW_PORT_P
 #                         (the echo server that closes after 64 bytes)
 #   N<card><T|U><s>.EXE   NETDEMO, UG_HW, one per scenario s (-DSCEN)
+#   UGTESPX.EXE, NESPX<s>.EXE  GUDPESP in its transparent mode (esp_fw = 2,
+#                         records), peer HW_HOST_IP:HW_PORT_X (echo_hw.sh
+#                         runs echo_server.py --framed there)
+#   N<card>UF.EXE, NESPXF.EXE  NETDEMO F (game flow, UDP builds), peer
+#                         HW_PORT_G / HW_PORT_GX (echo_server.py --game)
 #   UGPROBE.EXE           platform probe (argument E, R or 3)
 #   G*.DLL                the seven libraries
 #   UGRUN<card>.BAT       the run sequence of one card
@@ -26,7 +31,10 @@ echo "build_hw: configuration $ENV"
 . "$ENV"
 [ -n "${HW_HOST_IP:-}" ] || HW_HOST_IP=$(ipconfig getifaddr en0 2>/dev/null || true)
 [ -n "$HW_HOST_IP" ] || { echo "build_hw: HW_HOST_IP empty and en0 has no address" >&2; exit 1; }
-echo "build_hw: echo server $HW_HOST_IP:$HW_PORT (P: $HW_PORT_P)"
+HW_PORT_X=${HW_PORT_X:-7714}
+HW_PORT_G=${HW_PORT_G:-7716}
+HW_PORT_GX=${HW_PORT_GX:-7718}
+echo "build_hw: echo server $HW_HOST_IP:$HW_PORT (P: $HW_PORT_P, records: $HW_PORT_X, game: $HW_PORT_G / $HW_PORT_GX)"
 # ISA slots are 0 and 1 (#E2 = #D4 / #D6, the `-s` of the old drivers):
 # INIT_CONFIG answers BAD_CONFIG to any other isa_slot (the first Ж runs
 # of the 3C509B failed exactly so with HW_SLOT_EL3=2).
@@ -54,9 +62,9 @@ asm() {	# asm <work dir> <source> <defines...>
 		-I "$LIBMAN" "$@" "$src" >"$w/asm.log" 2>&1) || { cat "$w/asm.log" >&2; exit 1; }
 }
 
-# cfg <prog> <dll> <out.inc> <peer port>: INIT_CONFIG of the board
+# cfg <prog> <dll> <out.inc> <peer port> [mkcfg options]: INIT_CONFIG of the board
 cfg() {
-	prog=$1; dll=$2; inc=$3; port=$4
+	prog=$1; dll=$2; inc=$3; port=$4; shift 4
 	case $dll in
 	*esp) slot=$HW_SLOT_ESP; io=$HW_IO_ESP; extra="--trigger $HW_UART_TRIGGER";;
 	*rtl) slot=$HW_SLOT_RTL; io=$HW_IO_RTL; extra="";;
@@ -67,7 +75,17 @@ cfg() {
 	# shellcheck disable=SC2086
 	node "$ROOT/tools/mame/mkcfg.js" --prog "$prog" --slot "$slot" --io-base "$io" $extra \
 		--local-ip "$HW_SPR_IP" --netmask "$HW_MASK" --gateway "$HW_GW" \
-		--peer "$HW_HOST_IP" --port "$port" --local-port "$lport" "$dll" "$inc"
+		--peer "$HW_HOST_IP" --port "$port" --local-port "$lport" "$@" "$dll" "$inc"
+}
+
+# netdemo_profile <scen> <card code>: the latency scenarios with their own
+# quota (tools/mame/run_m.py LAT_PROFILE): STEPs per period, STEP budget in
+# real us (0 = the minimum), polls and the poll budget
+netdemo_profile() {
+	steps=$HW_STEPS; budget=0; polls=1; isr=0
+	case $1 in Q) steps=2;; A) steps=2; budget=1500;; B) steps=2; budget=2000;; C) steps=1; budget=2000;; G) steps=1; budget=2000; polls=10; [ "$2" = ESP ] && isr=341;; R) steps=1; budget=3000; polls=10; [ "$2" = ESP ] && isr=341;;
+	F) steps=1; budget=3000; polls=10; [ "$2" = ESP ] && { polls=5; isr=341; };; esac
+	return 0	# the last && list fails on the other cards (set -e)
 }
 
 code_of() { case $1 in *esp) echo ESP;; *rtl) echo RTL;; *) echo 509;; esac; }
@@ -89,19 +107,32 @@ for dll in gtcpesp gudpesp gtcprtl gudprtl gtcp509b gudp509b; do
 	# NETDEMO: one EXE per scenario
 	scens="L E S D W T Q A B C"
 	[ "$tp" = T ] && scens="$scens P"
+	scens="$scens G R"
+	[ "$tp" = U ] && scens="$scens F"
 	[ "$code" != ESP ] && scens="H $scens"
 	for s in $scens; do
-		port=$HW_PORT; [ "$s" = P ] && port=$HW_PORT_P
+		port=$HW_PORT; [ "$s" = P ] && port=$HW_PORT_P; [ "$s" = F ] && port=$HW_PORT_G
 		w="$WORK/netdemo_${dll}_$s"; mkdir -p "$w"
 		cfg netdemo $dll "$w/ugcfg.inc" "$port"
 		ord=$(printf '%d' "'$s")
-		# the latency scenarios with their own quota (tools/mame/run_m.py
-		# LAT_PROFILE): STEPs per period, STEP budget in us (0 = the minimum)
-		steps=$HW_STEPS; budget=0
-		case $s in Q) steps=2;; A) steps=2; budget=1000;; B) steps=2; budget=1500;; C) steps=1; budget=1000;; esac
-		asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$ord" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget"
+		netdemo_profile $s $code
+		asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$ord" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget" -DUG_POLL_TICKS="$polls" -DUG_ISR_BUDGET="$isr"
 		cp "$w/netdemo.exe" "$OUT/N$code$tp$s.EXE"
 	done
+done
+
+# GUDPESP in the transparent mode: transport letter X (mkcfg.js UG_HWPFX)
+w="$WORK/ugtest_gudpesp_x"; mkdir -p "$w"
+cfg ugtest gudpesp "$w/ugcfg.inc" "$HW_PORT_X" --esp-fw 2
+asm "$w" "$ROOT/sdk/example/ugtest.asm" -DUG_HW=1 -DSCEN=69
+cp "$w/ugtest.exe" "$OUT/UGTESPX.EXE"
+for s in E S D W C G R F; do
+	w="$WORK/netdemo_gudpesp_x_$s"; mkdir -p "$w"
+	port=$HW_PORT_X; [ "$s" = F ] && port=$HW_PORT_GX
+	cfg netdemo gudpesp "$w/ugcfg.inc" "$port" --esp-fw 2
+	netdemo_profile $s ESP
+	asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$(printf '%d' "'$s")" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget" -DUG_POLL_TICKS="$polls" -DUG_ISR_BUDGET="$isr"
+	cp "$w/netdemo.exe" "$OUT/NESPX$s.EXE"
 done
 
 # UGPROBE
@@ -133,10 +164,15 @@ bat() {	# bat <card code>
 			[ "$tp" = T ] && echo "UGT${code}TP P"
 			echo "UGT$code$tp D"
 			echo "UGT$code$tp K 10"
-			for sc in L H E S P D W T Q A B C; do
+			for sc in L H E S P D W T Q A B C G R F; do
 				[ -f "$OUT/N$code$tp$sc.EXE" ] && echo "N$code$tp$sc"
 			done
 		done
+		if [ "$code" = ESP ]; then
+			# the transparent mode (records): UGTESPX, NESPX<s>
+			for sc in E S D; do echo "UGTESPX $sc"; done
+			for sc in E S D W C G R F; do echo "NESPX$sc"; done
+		fi
 		# what the series left to the system stack (STATA<c>.TXT)
 		case $code in ESP) echo "UGPROBE E 1";; RTL) echo "UGPROBE R 1";; *) echo "UGPROBE 3 1";; esac
 		echo "echo UNET-GAME $code runs done: copy the .TXT files back"
@@ -148,7 +184,8 @@ sed 's/$/\r/' >"$OUT/README.TXT" <<EOT
 UNET-GAME hardware stand (Zh) -- operator checklist
 ===================================================
 Built $(date +%Y-%m-%d) from $(basename "$ENV"); echo server $HW_HOST_IP:$HW_PORT,
-P server $HW_HOST_IP:$HW_PORT_P.  Sprinter (Ethernet): $HW_SPR_IP/$HW_MASK gw $HW_GW.
+P server $HW_HOST_IP:$HW_PORT_P, record echo $HW_HOST_IP:$HW_PORT_X,
+game server $HW_HOST_IP:$HW_PORT_G (records: $HW_PORT_GX).  Sprinter (Ethernet): $HW_SPR_IP/$HW_MASK gw $HW_GW.
 Slots: ESP $HW_SLOT_ESP (I/O $HW_IO_ESP), RTL $HW_SLOT_RTL (I/O $HW_IO_RTL),
 3C509B $HW_SLOT_EL3 (I/O $HW_IO_EL3, ID $HW_ID_PORT).  UART trigger $HW_UART_TRIGGER.
 ISA slots are numbered 0 and 1 (as -s of the old drivers).
@@ -183,12 +220,28 @@ Runs (one card at a time, the others may stay in their slots)
                            shows "soak: ..." and then only a dot a minute
                            until it ends (it counts video frames: allow
                            up to 15 minutes); Esc stops it early
-    N<card><T|U><s>        NETDEMO scenario s: L H E S P D W T Q A B C
+    N<card><T|U><s>        NETDEMO scenario s: L H E S P D W T Q A B C G R F
                            (T: packet latency under the quota, line
                            LATMS; Q: the same at 2 STEPs per period;
-                           A, B, C: with a STEP budget of 1000 / 1500 us:
-                           2 x 1000, 2 x 1500, 1 x 1000 per period)
+                           A, B, C: with a larger STEP budget, real
+                           us: 2 x 1500, 2 x 2000, 1 x 2000 per period;
+                           G: 1 x 2000 with one card poll per period,
+                           the game profile; on ESP the poll moves
+                           UART bytes; R: the same with 1 x 3000;
+                           F: UDP builds only, the flow of a real-time
+                           game for 10 s with R's profile (ESP: two
+                           polls): an input of 20 bytes every 40 ms up,
+                           a state of 88 bytes every 100 ms down from
+                           the game server; line FLOW)
   card = ESP, RTL or 509; T = TCP build, U = UDP build.
+    UGTESPX E|S|D, NESPX<s> (s = E S D W C G R F)
+                           GUDPESP in the transparent UDP mode of ESP-AT
+                           (AT+CIPMODE=1, every datagram a record with a
+                           2-byte header; the record echo server).  If a
+                           run is cut off, the module may stay in that
+                           mode: the next program leaves it with "+++"
+                           (bring-up about 2 s longer); NETUP / the system
+                           stack then sees a module that answers AT.
 
 After the runs
  Every program prints the head of its report at once (name, SCEN, SLOT),

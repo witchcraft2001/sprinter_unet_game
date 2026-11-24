@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ethScenarios, boot, clean, bytes, stream, has, UHW_RUN } = require('../eth_scenarios.js');
 const { C } = require('../../../../tools/harness/ethnet.js');
+const A = require('../../../../tools/harness/abi.json');
 
 const S = C.status;
 const UHW_FAULT = 5;
@@ -52,6 +53,23 @@ for (const dll of ['gtcp509b', 'gudp509b']) {
   test(`${dll}: CIP is waited for as a state, not a busy loop`, () => {
     const s = boot(dll, {}, { card: { cipReads: 3 } });
     clean(s);
+  });
+
+  // RX_DISCARD takes its time on the card: until CIP clears the model
+  // still shows the dropped frame in the RX status and throws on a FIFO
+  // read.  GUDP509B (short path) has no wait state for it -- its poll
+  // checks CIP; the other builds wait in ERX_DISC_WAIT.
+  test(`${dll}: a slow RX_DISCARD is waited for: streams in small and large pieces stay intact`, () => {
+    for (const budget of [A.consts.limits.STEP_BODY_MAX_US, 0]) {
+      for (const piece of [8, 22, 60, 300]) {
+        const s = boot(dll, {}, { card: { cipReads: 3 }, ...(budget ? { budget } : {}) });
+        assert.equal(s.open().a, S.OK);
+        s.until(has('CONNECTED'), 20000);
+        const d = bytes(piece * 8, piece);
+        assert.deepEqual(stream(s, d, piece), d, `piece ${piece} budget ${budget || 'default'}`);
+        clean(s);
+      }
+    }
   });
 
   // The first Zh runs (docs/MEASUREMENTS.md): the application's now_ms
