@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "udp_records": true,
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 18.0,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 47202",
+  "wall_s": 18.1,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 29615",
   "steps_per_period": 5,
   "load": {
     "status": 0,

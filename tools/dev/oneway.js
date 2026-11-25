@@ -9,10 +9,11 @@
 //            keeps up (the backlog does not grow).
 // Usage: node tools/dev/oneway.js [dll...] [--dt 20] [--budget 2000]
 //        [--sizes 16,64,512] [--n 60] [--isr us] [--polls n] [--kmax 40]
-//        [--esp-fw 2] [--trigger 1|4|8|14]
+//        [--esp-fw 2] [--trigger 1|4|8|14] [--div n]
 //   --isr     STEP_ISR(TIMER, us) between STEPs, --polls of them per STEP
 //   --esp-fw  2: GUDPESP's transparent UDP (records); --trigger: the UART
-//             RX FIFO trigger of the ESP builds
+//             RX FIFO trigger of the ESP builds; --div: the 16550 divisor
+//             (8 = 115200, 4 = 230400, 2 = 460800)
 'use strict';
 process.env.UG_WAITS = '1';
 const { ethStand, C } = require('../harness/ethnet.js');
@@ -23,7 +24,7 @@ const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args.
 const dt = +opt('--dt', '20'), budget = +opt('--budget', '2000'), N = +opt('--n', '60');
 const sizes = opt('--sizes', '16,64,512').split(',').map(Number);
 const isr = opt('--isr', null), kmax = +opt('--kmax', '40'), polls = +opt('--polls', '1');
-const espFw = +opt('--esp-fw', '1'), trigger = +opt('--trigger', '0');
+const espFw = +opt('--esp-fw', '1'), trigger = +opt('--trigger', '0'), div = +opt('--div', '0');
 const dlls = args.length ? args : ['gudp509b', 'gudprtl', 'gtcp509b', 'gtcprtl', 'gudpesp', 'gtcpesp'];
 const S = C.status;
 const bytes = (n, seed) => Array.from({ length: n }, (_, i) => (i * 31 + seed) & 255);
@@ -32,7 +33,7 @@ const put16 = (a, o, v) => { a[o] = v >> 8; a[o + 1] = v & 255; };
 function boot(dll, peerOpts) {
   const s = ethStand({ dll, peer: { echo: false, rto: 1000, ...peerOpts } });
   s.call('INIT');
-  const esp = s.isEsp ? { esp_fw: espFw, ...(trigger ? { uart_rx_trigger: trigger } : {}) } : {};
+  const esp = s.isEsp ? { esp_fw: espFw, ...(trigger ? { uart_rx_trigger: trigger } : {}), ...(div ? { uart_divisor: div } : {}) } : {};
   const r = s.initConfig(s.defaultConfig({ step_budget_us: budget, ...esp }));
   if (r.a !== S.OK) throw new Error(`${dll}: INIT_CONFIG ${r.a}`);
   if (s.isEsp) s.peer.echo = false;

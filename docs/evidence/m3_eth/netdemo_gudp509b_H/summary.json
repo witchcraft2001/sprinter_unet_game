@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "udp_records": true,
   "scenario": "H card bring-up and SHUTDOWN, no channel",
-  "wall_s": 2.9,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 26985",
+  "wall_s": 3.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 48886",
   "steps_per_period": 5,
   "load": {
     "status": 0,

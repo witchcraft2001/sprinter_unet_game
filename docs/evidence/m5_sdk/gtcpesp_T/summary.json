@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "T latency under the quota profile: 16 x 64 and 16 x 300 bytes, one at a time",
-  "wall_s": 6.2,
+  "wall_s": 4.6,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -34,15 +34,15 @@
     "cost_step_us": 1179,
     "periods": 875,
     "largest_period_debit_us": 8205,
-    "now_ms": 17495,
+    "now_ms": 17497,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 4316,
-      "early": 8947,
-      "frames": 676,
-      "ticks": 8751,
+      "early": 8930,
+      "frames": 677,
+      "ticks": 8752,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -70,7 +70,7 @@
   "timing_us": {
     "tick_isr_max": 317,
     "admitted_ug_step_max": 1127,
-    "largest_tick_gap": 2040,
+    "largest_tick_gap": 2020,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 16.9 s)",
@@ -79,9 +79,9 @@
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 178,
-        "txdone_mean_ms": 173.5,
-        "echo_max_ms": 388,
+        "txdone_max_ms": 176,
+        "txdone_mean_ms": 173.6,
+        "echo_max_ms": 390,
         "echo_mean_ms": 371.5
       },
       {

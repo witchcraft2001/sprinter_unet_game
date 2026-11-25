@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "udp_records": true,
   "scenario": "B T with 2 STEPs of 2000 us per period",
-  "wall_s": 25.1,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 20261",
+  "wall_s": 25.4,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 38009",
   "steps_per_period": 2,
   "load": {
     "status": 0,

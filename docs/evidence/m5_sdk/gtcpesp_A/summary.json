@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "A T with 2 STEPs of 1500 us per period",
-  "wall_s": 6.7,
+  "wall_s": 5.7,
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -34,15 +34,15 @@
     "cost_step_us": 1620,
     "periods": 1072,
     "largest_period_debit_us": 5550,
-    "now_ms": 21431,
+    "now_ms": 21437,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 2144,
-      "early": 10452,
-      "frames": 838,
-      "ticks": 10720,
+      "early": 10457,
+      "frames": 830,
+      "ticks": 10723,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -61,7 +61,7 @@
     "steps_total": 2144,
     "steps_useful": 2144,
     "budget_yields": 709,
-    "max_step_gap_ms": 10,
+    "max_step_gap_ms": 12,
     "tx_frames": 32,
     "rx_frames": 32,
     "tx_bytes": 5824,
@@ -69,8 +69,8 @@
   },
   "timing_us": {
     "tick_isr_max": 317,
-    "admitted_ug_step_max": 1373,
-    "largest_tick_gap": 2040,
+    "admitted_ug_step_max": 1405,
+    "largest_tick_gap": 2023,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 0.997 now_ms per emulated ms, TICK_MS 2.006, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 21.0 s)",
@@ -90,7 +90,7 @@
         "txdone_max_ms": 370,
         "txdone_mean_ms": 333.8,
         "echo_max_ms": 876,
-        "echo_mean_ms": 839.9
+        "echo_mean_ms": 839.6
       }
     ]
   }

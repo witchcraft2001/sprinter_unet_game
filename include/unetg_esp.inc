@@ -20,6 +20,7 @@ U_FCR		EQU	2	; W: FIFO control
 U_LCR		EQU	3
 U_MCR		EQU	4
 U_LSR		EQU	5
+U_MSR		EQU	6	; R: modem status (bit 4 = CTS from the module)
 U_SCR		EQU	7
 
 LCR_8N1		EQU	0x03

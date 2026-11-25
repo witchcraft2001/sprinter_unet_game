@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "E echo 300 bytes",
-  "wall_s": 19.2,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 38019",
+  "wall_s": 18.0,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 35904",
   "info": {
     "min_useful_budget_us": 1071,
     "empty_poll_us": 136,
@@ -20,9 +20,9 @@
     "ctx_state": 1,
     "polls_total": 90,
     "polls_useful": 6,
-    "steps_total": 221,
-    "steps_useful": 221,
-    "budget_yields": 116,
+    "steps_total": 181,
+    "steps_useful": 181,
+    "budget_yields": 115,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
     "tx_frames": 6,
@@ -30,14 +30,14 @@
     "tx_bytes": 300,
     "rx_bytes": 300
   },
-  "clock": "CLOCK_RATE 0.000 now_ms per emulated ms, TICK_MS 128.000, FRAME_MS 20.480, STEP_CALLS_PER_S 0 (over 1.5 s)",
+  "clock": "CLOCK_RATE 0.000 now_ms per emulated ms, TICK_MS 109.714, FRAME_MS 20.480, STEP_CALLS_PER_S 0 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.84,
+  "ticks_missed_ratio": 0.813,
   "step": {
     "max_us": 1223,
-    "mean_us": 798,
-    "steps": 221,
+    "mean_us": 848,
+    "steps": 181,
     "over_budget": 0
   },
   "trivial_call_us": 163

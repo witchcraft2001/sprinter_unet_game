@@ -17,6 +17,12 @@
 ;   DSSENV   the NET* variables of the DSS environment (NETCFG / IFUP of
 ;            the system stack), "DSSENV name=value" or "DSSENV name -" (absent);
 ;            BOOTDSK first, which DSS always has: the control of the read.
+;   NETENV   what the SDK auto-loader (sdk/loader/ugenv.asm UG_NETENV)
+;            makes of these variables, read only, nothing loaded: UGN_*
+;            code, B, hw_profile, isa_slot, io_base, id_port, uart_divisor,
+;            uart_flow, esp_flow, the address fields it set (8 MAC, 4 IP,
+;            2 mask, 1 gateway -- never the addresses), then the UDP DLL
+;            name, or after UGN_E_ENV / UGN_E_FLOW the variable's name.
 ;            tools/measure/parse_hw.py keeps addresses out of the evidence.  Slots and I/O bases come from
 ; probecfg.inc (tools/hw/build_hw.sh from tools/hw/hw.env; run_m.py
 ; writes the M-stand defaults).  Every section prints one
@@ -296,7 +302,7 @@ pr_state
 .env
 	LD	A,(HL)
 	OR	A
-	RET	Z
+	JR	Z,.netenv
 	PUSH	HL
 	LD	HL,s_env
 	CALL	rp_str
@@ -336,6 +342,85 @@ pr_state
 	OR	A
 	JR	NZ,.skip
 	JR	.env
+.netenv
+	LD	IX,pr_netcfg
+	LD	HL,pr_envbuf
+	LD	(pr_netcfg + UNETG_CFG_CTX_PTR),HL
+	LD	HL,0x0100
+	LD	(pr_netcfg + UNETG_CFG_CTX_LEN),HL
+	LD	A,UNETG_TRANSPORT_UDP
+	CALL	UG_NETENV
+	LD	H,A			; UGN_*, B
+	LD	L,B
+	PUSH	HL
+	LD	HL,s_netenv
+	CALL	rp_str
+	POP	HL
+	PUSH	HL
+	LD	A,H
+	CALL	rp_hex8
+	LD	A,L
+	CALL	rp_sp_hex8
+	LD	A,(pr_netcfg + UNETG_CFG_HW_PROFILE)
+	CALL	rp_sp_hex8
+	LD	A,(pr_netcfg + UNETG_CFG_ISA_SLOT)
+	CALL	rp_sp_hex8
+	LD	HL,(pr_netcfg + UNETG_CFG_IO_BASE)
+	CALL	rp_sp_hex16
+	LD	HL,(pr_netcfg + UNETG_CFG_ID_PORT)
+	CALL	rp_sp_hex16
+	LD	HL,(pr_netcfg + UNETG_CFG_UART_DIVISOR)
+	CALL	rp_sp_hex16
+	LD	A,(pr_netcfg + UNETG_CFG_UART_FLOW)
+	CALL	rp_sp_hex8
+	LD	A,(pr_netcfg + UNETG_CFG_ESP_FLOW)
+	CALL	rp_sp_hex8
+	LD	HL,pr_netcfg + UNETG_CFG_MAC
+	LD	B,6
+	CALL	.any
+	LD	HL,pr_netcfg + UNETG_CFG_LOCAL_IP
+	LD	B,4
+	CALL	.any			; IP
+	LD	B,4
+	CALL	.any			; mask
+	LD	B,4
+	CALL	.any			; gateway
+	LD	A,C
+	AND	0x0F
+	CALL	rp_sp_hex8
+	LD	A,' '
+	CALL	rp_char
+	POP	HL			; H = UGN_*, L = B
+	LD	A,H
+	OR	A
+	JR	NZ,.err
+	LD	DE,pr_envbuf
+	PUSH	DE
+	CALL	UG_NETNAME
+	POP	HL
+	JR	NC,.name
+	JP	rp_nl
+.err
+	CP	UGN_E_ENV
+	JR	Z,.var
+	CP	UGN_E_FLOW
+	JP	NZ,rp_nl
+.var
+	LD	A,L
+	CALL	UG_NETVAR
+.name
+	CALL	rp_str
+	JP	rp_nl
+; CF into C: CF = 1 when one of the B bytes at HL is not zero.
+.any
+	XOR	A
+.or
+	OR	(HL)
+	INC	HL
+	DJNZ	.or
+	ADD	A,0xFF
+	RL	C
+	RET
 
 ; pr_select: scen_char = E / R / 3 (anything else -> E); pr_cslot = the
 ; configured ISA slot, pr_e2 = its #E2 I/O page (hw_slot may move it to
@@ -1024,6 +1109,7 @@ at_cmd
 	CALL	uart_send
 	LD	HL,1000
 	CALL	dl_set
+	CALL	at_start
 .rx
 	CALL	isa_open
 	LD	A,(UART_LSR)
@@ -1031,12 +1117,7 @@ at_cmd
 	JR	NC,.none
 	LD	A,(UART)
 	CALL	isa_close
-	CP	10
-	JR	Z,.due
-	OR	A			; a NUL would end the report text
-	JR	Z,.due
-	CALL	rp_char
-	CP	'K'			; "OK" (an ERROR waits for the 1 s end)
+	CALL	at_answer		; ugat.inc: "OK" ends it (an ERROR waits for the 1 s end)
 	JR	Z,.done
 	JR	.due			; a stream without "OK" ends at 1 s too
 .none
@@ -1059,11 +1140,20 @@ rp_sp_hex16
 	LD	A,' '
 	CALL	rp_char
 	JP	rp_hex16
+; rp_sp_hex8: " " + A in hex.  Clobbers A.
+rp_sp_hex8
+	PUSH	AF
+	LD	A,' '
+	CALL	rp_char
+	POP	AF
+	JP	rp_hex8
 
 	INCLUDE	"ugbase.inc"
+	INCLUDE	"ugat.inc"
 UG_CARD		EQU	0		; ughw.inc hw_find: all three card tests
 	INCLUDE	"ughw.inc"
 	INCLUDE	"time/ugtime.asm"
+	INCLUDE	"loader/ugenv.asm"	; NETENV: the SDK's reading of the variables
 
 s_title		DB	"UGPROBE ", 0
 s_scen		DB	"SCEN ", 0
@@ -1071,8 +1161,9 @@ s_cal		DB	"CAL ", 0
 s_result	DB	"RESULT: ", 0
 s_card		DB	"CARD", 0
 s_env		DB	"DSSENV ", 0
+s_netenv	DB	"NETENV ", 0
 pr_envnames	DB	"BOOTDSK", 0		; always there: proves the read itself
-		DB	"NET", 0, "NET_HW", 0, "NET_IDPORT", 0, "NET_MAC", 0
+		DB	"NET", 0, "NET_HW", 0, "NET_RTL_HW", 0, "NET_ESP_HW", 0, "NET_IDPORT", 0, "NET_MAC", 0
 		DB	"NET_IP_SRC", 0, "NET_IP", 0, "NET_MASK", 0, "NET_GW", 0
 		DB	"NET_LEASE_SEC", 0
 		DB	"NET_BAUD", 0, "NET_ESP_FLOW", 0, "NET_ESP_FW", 0, 0
@@ -1094,6 +1185,7 @@ pr_e2		DB	0
 pr_st		DS	8, 0
 PR_ENV_SHOW	EQU	40
 pr_envbuf	DS	256, 0
+pr_netcfg	DS	UNETG_CFG_BYTES, 0	; UG_NETENV's block (card fields only)
 pr_cslot	DW	0		; the configured slot (low byte)
 pr_base		DW	0
 pr_rd_addr	DW	0

@@ -165,8 +165,10 @@ USCH_SEQD	EQU	6	; sched_flags: the sequencer was visited in this STEP
 ; ESP_FAT is called for a running card only).
 TP_FAT_VISIT
 	LD	A,(IY+CX_STATE)
-	CP	UNETG_CTXSTATE_CONFIGURED
-	RET	NZ
+	; CONFIGURED, or STOPPING while a CIPSEND ends (ESP_SEND_LIVE)
+	ASSERT	UNETG_CTXSTATE_CONFIGURED + 1 == UNETG_CTXSTATE_STOPPING
+	CP	UNETG_CTXSTATE_STOPPING + 1
+	RET	NC
 	BIT	ESF_UP,(IY+EX_FLAGS)
 	RET	Z
 	BIT	ESF_OVERRUN,(IY+EX_FLAGS)
@@ -358,6 +360,24 @@ ESP_OVERRUN
 	LD	A,UNETG_STREAM_UART_OVERRUN
 	JP	ESP_STREAM_ERROR
 
+; ESP_SEND_LIVE: CF=1 while a CIPSEND job is in the module's hands (the
+; data mode of esp_fw = 2 aside: NIC_XSTOP ends a record there).
+; AT+CIPSEND=<n> makes the module take the next n bytes as payload
+; whatever they are; a SHUTDOWN that stopped the UART there left it
+; swallowing the next session's AT set-up (Ж, the first ESP series: nine
+; GUDPESP runs ended in FAULT after a soak).  SHUTDOWN therefore keeps
+; the card in UHW_RUN while this holds (lifecycle.asm), as after ABORT
+; (TP_ABORT: EF_DISCARD, the job runs to SEND OK / FAIL / its command
+; deadline), and CLOCK_STEP moves it to UHW_STOP once ESP_JOB_END has
+; cleared UCLK_SENDHOLD (sched.asm; the close deadline from t0 bounds it).
+; Clobbers A, DE, HL.
+ESP_SEND_LIVE
+	IFDEF	UGB_XMODE
+	BIT	EXF_DATA,(IY+EX_XFL)
+	JR	NZ,ESP_TX_COPYING.no
+	ENDIF
+	JR	ESP_TX_COPYING.job
+
 ; ESP_TX_COPYING: CF=1 while a CIPSEND job runs: the pump may still read
 ; its slot, so EV_FLUSH holds the TX_DONE outcomes until the job ends.
 ; Clobbers A, DE, HL.
@@ -365,6 +385,7 @@ ESP_TX_COPYING
 	LD	A,(IY+CX_HW_STATE)	; a stopped UART sends nothing any more
 	CP	UHW_RUN
 	JR	NZ,.no
+.job
 	LD	DE,UCTX_TP + ET_JOB - CTX_BIAS
 	PUSH	IY
 	POP	HL

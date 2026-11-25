@@ -773,6 +773,14 @@ UART_PUMP_FAT
 	; earlier than 16 + 1
 	BIT	6,C			; LSR.TEMT
 	JR	Z,.tx_max
+	; ... and only while CTS is on: the module holds CTS off while its
+	; sending stalls, and with auto-CTS the first byte then stays in the
+	; FIFO, the 17th overruns it (a byte lost: tools/dev/x_cts.js, found
+	; after the third Ж ESP series; the stand's CTS was always on)
+	LD	A,U_MSR
+	CALL	UREG
+	BIT	4,(HL)			; MSR.CTS
+	JR	Z,.tx_max
 	INC	B
 .tx_max
 	LD	A,(IX+ES_TXN+1)

@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "G game profile: 1 STEP of 2000 us and one poll per period (ESP: the poll moves UART bytes), 16 x 16 and 16 x 64 bytes",
-  "wall_s": 29.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 27098",
+  "wall_s": 29.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 37671",
   "steps_per_period": 1,
   "load": {
     "status": 0,

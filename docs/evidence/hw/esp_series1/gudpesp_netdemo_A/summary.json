@@ -1,0 +1,96 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "scenario": "A",
+  "file": "NESPUA.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "FAIL",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 5650
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 3240,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1620,
+    "periods": 600,
+    "largest_period_debit_us": 5555,
+    "now_ms": 12005,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 989,
+      "early": 5239,
+      "frames": 465,
+      "ticks": 6005,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 465,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 256,
+    "steps_total": 989,
+    "steps_useful": 989,
+    "budget_yields": 3,
+    "max_step_gap_ms": 12
+  },
+  "timing_us": {
+    "tick_isr_max": 336,
+    "admitted_ug_step_max": 969,
+    "largest_tick_gap": 2076,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "A",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "cbl": {
+      "n": 466,
+      "max_us": 1985,
+      "mean_us": 1087
+    }
+  },
+  "fail_code": "H",
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": false,
+    "overflow": true,
+    "card_found": true
+  }
+}

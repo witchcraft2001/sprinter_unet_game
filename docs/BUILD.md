@@ -25,7 +25,7 @@
 |---|---|
 | `make gen` | Генерирует `include/UNETGAME.INC`, `include/unetg_ctx.inc`, `include/unetg_jt.inc`, `include/unetg_version.inc`, `tools/harness/abi.json`, `docs/ABI-TABLE.md` из `abi/*.toml` и `VERSION` |
 | `make all` | Собирает семь DLL в `build/` (`tools/build.sh`) и программу стенда приложения (`make sdk`) |
-| `make sdk` | `tools/build_sdk.sh`: `build/ugz.bin` и `build/ugz.sym` (стенд приложения Z, `tests/z/sdk/ugz.asm`) |
+| `make sdk` | `tools/build_sdk.sh`: `build/ugz.bin` и `build/ugz.sym` (стенд приложения Z, `tests/z/sdk/ugz.asm`), `build/ugenvz.bin` и `build/ugenvz.sym` (разбор окружения DSS `sdk/loader/ugenv.asm`), проверочная сборка автозагрузчика `tests/z/sdk/ugnetz.asm` с печатью размеров его частей |
 | `make verify` | `sprinter-mkdll verify --target 1.3` для каждой DLL |
 | `make size` | Отчёт размеров (`tools/size_report.py`, `build/size-report.json`) |
 | `make names` | Проверка имён поставки (`tools/check_names.py`) |
@@ -34,7 +34,7 @@
 | `make profile-check` | Профиль STEP всех сборок на потоке 8 КиБ при шаге 2, 10 и 20 мс (`tools/dev/profile_step.js --check`): ни одного STEP сверх бюджета |
 | `make check` | Всё перечисленное; обязательный шлюз перед сдачей |
 | `make mame` | Стенд M: клон holub/mame в `../../../mame-holub`, патч `tools/mame/patches/sprinter_esp.patch`, сборка драйвера Sprinter (`tools/mame/build_holub.sh`) |
-| `make hw-image` | Стенд Ж: `tools/hw/build_hw.sh` собирает `build/hw/` (UGTEST/NETDEMO с `-DUG_HW=1`, `UGPROBE.EXE`, DLL, `UGRUN*.BAT`, `README.TXT`) , тот же набор архивом `build/hw/UGHW.ZIP` и `build/hw/unetgame_hw.img` по `tools/hw/hw.env` (без него — `hw.env.example`; `hw.env` в git не входит), затем проверяет имена 8.3; хост — `tools/hw/echo_hw.sh` |
+| `make hw-image` | Стенд Ж: `tools/hw/build_hw.sh` собирает `build/hw/` (UGTEST/NETDEMO с `-DUG_HW=1`, `UGPROBE.EXE`, DLL, `UGRUN*.BAT`, `README.TXT`) , по архиву на карту `build/hw/UGHWESP.ZIP`, `UGHWRTL.ZIP`, `UGHW509.ZIP` (программы карты, её две DLL, `UGPROBE.EXE`, её BAT и `README.TXT`) и `build/hw/unetgame_hw.img` по `tools/hw/hw.env` (без него — `hw.env.example`; `hw.env` в git не входит), затем проверяет имена 8.3; хост — `tools/hw/echo_hw.sh`. DLL в наборе шесть: GLOOP — только для стендов Z и M и в набор Ж не входит |
 | `make test-m` | Стенд M: сценарии UGTEST и NETDEMO шести сборок с картами в MAME (`tools/mame/run_m.py`), отчёты в `docs/evidence/m4_esp/`, `docs/evidence/m5_sdk/` и `docs/evidence/m3_eth/`; сетевые сценарии Ethernet требуют пары feth (`sudo tools/mame/net_feth.sh`), без неё — `M SKIP`; в `make check` не входит |
 
 Собственное дерево MAME разработчика (`../../../mame`) стенд M не трогает:

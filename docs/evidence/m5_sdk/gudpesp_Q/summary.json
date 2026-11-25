@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "Q T at the SDK default profile (2 STEPs of the minimum budget per period)",
-  "wall_s": 7.5,
+  "wall_s": 6.0,
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -32,17 +32,17 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 1179,
-    "periods": 1544,
+    "periods": 1551,
     "largest_period_debit_us": 4668,
-    "now_ms": 30884,
+    "now_ms": 31022,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 3088,
-      "early": 15977,
-      "frames": 1201,
-      "ticks": 15448,
+      "early": 16030,
+      "frames": 1256,
+      "ticks": 15517,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 16637,
+    "polls_total": 16706,
     "steps_total": 3088,
     "steps_useful": 3088,
-    "budget_yields": 2790,
+    "budget_yields": 2791,
     "max_step_gap_ms": 12,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -69,8 +69,8 @@
   },
   "timing_us": {
     "tick_isr_max": 317,
-    "admitted_ug_step_max": 1137,
-    "largest_tick_gap": 2040,
+    "admitted_ug_step_max": 1239,
+    "largest_tick_gap": 2027,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 30.2 s)",
@@ -79,18 +79,18 @@
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 458,
-        "txdone_mean_ms": 447.4,
-        "echo_max_ms": 580,
-        "echo_mean_ms": 563.0
+        "txdone_max_ms": 461,
+        "txdone_mean_ms": 449.0,
+        "echo_max_ms": 586,
+        "echo_mean_ms": 565.1
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 642,
-        "txdone_mean_ms": 622.2,
-        "echo_max_ms": 1280,
-        "echo_mean_ms": 1253.1
+        "txdone_max_ms": 641,
+        "txdone_mean_ms": 623.6,
+        "echo_max_ms": 1290,
+        "echo_mean_ms": 1259.1
       }
     ]
   }

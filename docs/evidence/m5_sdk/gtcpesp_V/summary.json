@@ -1,0 +1,71 @@
+{
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "card": "ESP",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "scenario": "V E through the SDK auto-loader: UG_NETAUTO over the DSS environment (mkcfg.js --auto)",
+  "wall_s": 3.4,
+  "steps_per_period": 5,
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 8305
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 5895,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1179,
+    "periods": 72,
+    "largest_period_debit_us": 8205,
+    "now_ms": 1449,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 356,
+      "early": 744,
+      "frames": 60,
+      "ticks": 725,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 685,
+    "steps_total": 356,
+    "steps_useful": 356,
+    "budget_yields": 334,
+    "max_step_gap_ms": 6,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "timing_us": {
+    "tick_isr_max": 315,
+    "admitted_ug_step_max": 1112,
+    "largest_tick_gap": 2020,
+    "late_ticks": 0
+  },
+  "clock": "CLOCK_RATE 0.924 now_ms per emulated ms, TICK_MS 2.169, FRAME_MS 20.480, STEP_CALLS_PER_S 225 (over 1.0 s)",
+  "auto": "00 00 01 01 01 03E8 GTCPESP.DLL"
+}

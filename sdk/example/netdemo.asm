@@ -57,7 +57,16 @@
 ; of the server's latest input - the ms the server held it), one per state.
 ; Its profile is R's (1 STEP of 3000 us and one poll per period; ESP: two
 ; polls of 341 us, tools/mame/run_m.py LAT_PROFILE, build_hw.sh).
-; ESP builds play NETUP first (AT, AT+UART_CUR=115200,8,1,0,3).
+; V is E through the SDK auto-loader (sdk/loader/ugnet.asm UG_NETAUTO):
+; the program asks for its transport only; the card, its slot, base and
+; addresses come from the DSS environment, the DLL name from them, and
+; the block of mkcfg.js --auto leaves every card field empty.  On M the
+; program publishes the environment itself first (DSS #46 B=2, the values
+; of mkcfg.js, as NETUP / NETCFG would); the UG_HW build reads the one the
+; system bring-up left (no hw_slot, no NETUP of its own).  Line
+;   AUTO <UGN_*> <B> <C> <hw_profile> <isa_slot> <io_base> <DLL name>
+; ESP builds play NETUP first (AT, AT+UART_CUR=115200,8,1,0,3), except V
+; on the board.
 ; Memory: tools/mame/mkcfg.js --prog netdemo (WIN2, nothing at >= 0xC000).
 
 	DEVICE	NOSLOT64K
@@ -113,6 +122,14 @@ DSS_EXIT	EQU	0x41		; B = exit code (ughw.inc hw_exit)
 	IFNDEF	UG_HW
 	DEFINE	UG_HW 0
 	ENDIF
+; UG_SETENV: V publishes the environment (and plays NETUP on ESP) itself:
+; on M, also for the UG_HW build run there (UG_HW_MTEST); on the board the
+; system bring-up tools have done both
+	IFDEF	UG_HW_MTEST
+UG_SETENV	EQU	1
+	ELSE
+UG_SETENV	EQU	!UG_HW
+	ENDIF
 
 ; ugstand.lua samples these (CLOCK_RATE line): now_ms of the time adapter,
 ; timer ticks, admitted STEPs
@@ -157,7 +174,7 @@ start
 	; NETUP's own UART accesses and before INIT_CONFIG; a card that only
 	; the other slot answers for is run there (the report shows hw.env
 	; is wrong)
-	IF	UG_CARD != 'L'
+	IF	UG_CARD != 'L' && SCEN != 'V'	; V: the slot of the environment
 	LD	A,UG_CARD
 	LD	HL,0xC000 + UG_IO_BASE
 	LD	DE,0xC000 + UG_ID_PORT
@@ -178,6 +195,12 @@ start
 	LD	A,SH_1FFD
 	LD	E,SH_9FBD
 	CALL	UG_GW_INIT
+	IF	SCEN == 'V'
+	CALL	auto_load		; UG_NETAUTO: environment, load, INIT_CONFIG
+	LD	A,'A'
+	JP	C,fail
+	XOR	A			; the ENV line: INIT_CONFIG answered OK
+	ELSE
 	LD	HL,dll_name
 	CALL	UG_LOAD
 	PUSH	AF
@@ -223,6 +246,7 @@ start
 	LD	IX,cfg_block
 	LD	HL,profile
 	CALL	UG_INIT_ENV
+	ENDIF
 	PUSH	AF
 	LD	HL,s_env
 	CALL	rp_str
@@ -249,7 +273,9 @@ start
 	; the timer and IM2; the time adapter starts at now_ms = 0
 	CALL	irq_start
 	; NETUP (ESP): the module UART, with the ticks running for its deadlines
-	IF	UG_ESP
+	; (V on the board: the system NETUP has done it; on M the program
+	; stands in for it, as for the environment: UG_SETENV)
+	IF	UG_ESP && (SCEN != 'V' || UG_SETENV)
 	CALL	netup
 	ENDIF
 	; bring-up through the gateway, at most 10 s
@@ -545,7 +571,7 @@ scenario
 	RET				; bring-up and SHUTDOWN only, no channel
 	ENDIF
 	CALL	open_wait
-	IF	SCEN == 'E'
+	IF	SCEN == 'E' || SCEN == 'V'
 	LD	HL,300
 	LD	(tx_total),HL
 	CALL	send_all
@@ -697,6 +723,14 @@ send_all
 	JP	rp_nl
 	ENDIF
 
+; UG_PIECE: the bytes per TX slot of a stream (send_one).  The Ж
+; transparent-mode programs pass -DUG_PIECE=500 (build_hw.sh): with 512
+; every record of the pattern (step 31, 512 * 31 = 0 mod 256) is the same
+; bytes, so a record the module or the core put out of place could not be
+; told from the right one (the third Ж ESP series, 2026-11-24).
+	IFNDEF	UG_PIECE
+	DEFINE	UG_PIECE UG_SLOT
+	ENDIF
 	; not IFUSED: the latency scenarios call it only from further down,
 	; and IFUSED then put libman's CALL l_call 256 bytes off (CLAUDE.md)
 	IF	SCEN != 'F'
@@ -706,7 +740,7 @@ send_one
 	OR	A
 	SBC	HL,DE
 	RET	Z
-	LD	DE,UG_SLOT
+	LD	DE,UG_PIECE
 	CALL	min_de_hl		; DE = this piece
 	PUSH	DE
 	LD	B,UNETG_TX_RESERVE
@@ -1062,6 +1096,7 @@ at_cmd
 .sent
 	LD	HL,1000
 	CALL	dl_set
+	CALL	at_start
 .rx
 	CALL	isa_open
 	LD	A,(UART + 5)
@@ -1069,10 +1104,7 @@ at_cmd
 	JR	NC,.none
 	LD	A,(UART)
 	CALL	isa_close
-	CP	10
-	JR	Z,.due
-	CALL	rp_char
-	CP	'K'
+	CALL	at_answer		; ugat.inc: printable bytes, "OK" ends it
 	JR	Z,.done
 	JR	.due			; a stream without "OK" ends at 1 s too
 .none
@@ -1505,6 +1537,7 @@ fl_max
 	INCLUDE	"libman.asm"
 	INCLUDE	"loader/ugload.asm"
 
+
 	IF	LAT_SCEN
 ; the latency scenario's helper and data live here, behind the SDK's
 ; page-aligned tables: the gap in front of those tables is too small for
@@ -1779,7 +1812,108 @@ fl_loopsum	DW	0
 fl_gapmax	DW	0
 FL_WORDS	EQU	($ - fl_rep) / 2
 	ENDIF
+	IF	UG_ESP
+	INCLUDE	"ugat.inc"		; netup's AT answers (behind the SDK's page-aligned tables)
+	ENDIF
 code_end
 	DISPLAY	"netdemo free: ", /D, UG_CODE_END - code_end
 	ASSERT	code_end <= UG_CODE_END, "NETDEMO code runs into the library regions"
+	IF	SCEN == 'V'
+; The auto-loader is start-up code: V places it (ugenv.asm, ugnet.asm and
+; auto_load) in the TX slots, which nothing uses before the first send --
+; INIT_CONFIG writes the context only -- as a game may put it into any
+; region it hands to data later (docs/SDK.md).  The EXE image then runs
+; through the context region (zeros; the core clears it itself) into the
+; slots.  ugload.asm stays resident: UG_FREE runs at the exit.
+	ORG	UG_TXS
+boot_start
+	INCLUDE	"loader/ugenv.asm"
+	INCLUDE	"loader/ugnet.asm"
+; auto_load: what a game does with the SDK auto-loader.  On M (also the
+; UG_HW build run there, UG_HW_MTEST) the program first publishes the
+; environment of mkcfg.js (DSS #46 B=2), as NETUP / NETCFG would on the
+; board.  Then UG_NETAUTO with the build's transport and the line AUTO.
+; Out: CF = 1 when UG_NETAUTO refused (nothing loaded).
+auto_load
+	IF	UG_SETENV
+	LD	HL,env_strs
+.set
+	LD	A,(HL)
+	OR	A
+	JR	Z,.auto
+	PUSH	HL
+	LD	BC,0x0246		; ENVIRON, B = 2: set "NAME=VALUE"
+	RST	0x10
+	POP	HL
+	RET	C
+.skip
+	LD	A,(HL)
+	INC	HL
+	OR	A
+	JR	NZ,.skip
+	JR	.set
+.auto
+	ENDIF
+	IF	UG_UDP
+	LD	A,UNETG_TRANSPORT_UDP
+	ELSE
+	LD	A,UNETG_TRANSPORT_TCP
+	ENDIF
+	LD	IX,cfg_block
+	LD	HL,profile
+	CALL	UG_NETAUTO
+	PUSH	AF
+	JR	C,.report
+	LD	A,1
+	LD	(loaded),A
+.report
+	LD	HL,s_auto
+	CALL	rp_str
+	POP	AF
+	PUSH	AF
+	CALL	rp_hex8			; UGN_*
+	LD	A,' '
+	CALL	rp_char
+	LD	A,B
+	CALL	rp_hex8
+	LD	A,' '
+	CALL	rp_char
+	LD	A,C
+	CALL	rp_hex8
+	LD	A,' '
+	CALL	rp_char
+	LD	A,(cfg_block + UNETG_CFG_HW_PROFILE)
+	CALL	rp_hex8
+	LD	A,' '
+	CALL	rp_char
+	LD	A,(cfg_block + UNETG_CFG_ISA_SLOT)
+	CALL	rp_hex8
+	ADD	A,A			; the program's own ISA accesses use this slot
+	OR	0xD4
+	LD	(isa_page),A
+	LD	A,' '
+	CALL	rp_char
+	LD	HL,(cfg_block + UNETG_CFG_IO_BASE)
+	CALL	rp_hex16
+	LD	A,' '
+	CALL	rp_char
+	LD	IX,cfg_block
+	LD	DE,auto_name
+	CALL	UG_NETNAME
+	LD	HL,auto_name
+	CALL	NC,rp_str
+	CALL	rp_nl
+	POP	AF
+	RET
+s_auto		DB	"AUTO ", 0
+auto_name	DS	13, 0
+	IF	UG_SETENV
+env_strs	UG_ENV_SET		; "NAME=VALUE", 0 ... 0 (mkcfg.js --auto)
+	ENDIF
+boot_end
+	DISPLAY	"netdemo boot (in the TX slots): ", /D, boot_end - boot_start
+	ASSERT	boot_end <= UG_TXS + UG_TX_N * UG_SLOT, "the auto-loader overruns the TX slots"
+	SAVEBIN	"netdemo.exe", exe_header, boot_end - exe_header
+	ELSE
 	SAVEBIN	"netdemo.exe", exe_header, code_end - exe_header
+	ENDIF

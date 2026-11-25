@@ -29,6 +29,13 @@ class EspCard {
     this.present = opts.present !== false;
     this.afe = opts.afe !== false;          // TL16C550C auto-RTS (false: NS16550)
     this.inflight = opts.inflight ?? 1;     // bytes the module still sends after RTS drops
+    // CTS from the module (default: always active).  ctsGate(t) = the first
+    // time >= t at which CTS is active; with auto flow (MCR AFE) the
+    // transmitter checks CTS before every character and a character waits
+    // in the FIFO until then -- the shift register does not take it either
+    // (the pessimistic reading of TL16C550C auto-CTS), so a THR write that
+    // counts on the idle transmitter (TEMT) overruns the FIFO
+    this.ctsGate = opts.ctsGate || null;
     this.errors = [];                       // model-detected misuse (asserted empty)
     // UART registers
     this.ier = 0; this.lcr = 0; this.mcr = 0; this.scr = 0; this.dl = 0; this.fcr = 0;
@@ -153,7 +160,7 @@ class EspCard {
         this.lsrErr = 0;
         return v;
       }
-      case 6: return 0x10;                  // CTS from the module
+      case 6: return this.ctsActive(t) ? 0x10 : 0x00;   // CTS from the module
       default: return this.scr;
     }
   }
@@ -199,11 +206,14 @@ class EspCard {
     const queued = this.txq.filter((x) => x.done - bu > t).length;   // not yet started
     if (queued >= 16) { this.errors.push('TX FIFO overrun (THR written while full)'); return; }
     if ((this.lcr & 0x7f) !== 0x03) this.errors.push(`TX with LCR=0x${this.lcr.toString(16)} (not 8N1)`);
-    const done = Math.max(this.txFree, t) + bu;
+    let start = Math.max(this.txFree, t);
+    if (this.ctsGate && this.afe && (this.mcr & 0x20)) start = this.ctsGate(start);
+    const done = start + bu;
     this.txFree = done;
     this.txq.push({ b: v, done });
   }
 
+  ctsActive(t) { return !this.ctsGate || this.ctsGate(t) <= t; }
   pending() { return this.out.length + (this.cur ? 1 : 0); }
 }
 

@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "udp_records": true,
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 17.7,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 23422",
+  "wall_s": 17.9,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 29255",
   "info": {
     "min_useful_budget_us": 1047,
     "empty_poll_us": 136,
@@ -19,10 +19,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 181,
+    "polls_total": 147,
     "polls_useful": 2,
-    "steps_total": 217,
-    "steps_useful": 217,
+    "steps_total": 173,
+    "steps_useful": 173,
     "budget_yields": 40,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
@@ -31,15 +31,15 @@
     "tx_bytes": 100,
     "rx_bytes": 100
   },
-  "clock": "CLOCK_RATE 0.208 now_ms per emulated ms, TICK_MS 128.000, FRAME_MS 20.480, STEP_CALLS_PER_S 36 (over 1.5 s)",
-  "cpu_mhz": 21.0,
+  "clock": "CLOCK_RATE 0.247 now_ms per emulated ms, TICK_MS 96.000, FRAME_MS 20.480, STEP_CALLS_PER_S 29 (over 1.5 s)",
+  "cpu_mhz": 20.94,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.84,
+  "ticks_missed_ratio": 0.787,
   "step": {
-    "max_us": 1139,
-    "mean_us": 790,
-    "steps": 217,
+    "max_us": 1141,
+    "mean_us": 810,
+    "steps": 173,
     "over_budget": 0
   },
-  "trivial_call_us": 174
+  "trivial_call_us": 175
 }

@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { transportScenarios, boot: bootAt, clean, has, bytes, stream, isUdp, peerGot, UHW_RUN } = require('../eth_scenarios.js');
-const { C } = require('../../../../tools/harness/ethnet.js');
+const { C, US } = require('../../../../tools/harness/ethnet.js');
 const A = require('../../../../tools/harness/abi.json');
 
 const S = C.status;
@@ -215,6 +215,38 @@ for (const [L, FAT] of [['', 0], [' (fat STEP)', 2000]]) for (const dll of ['gtc
     assert.deepEqual(udp ? s.peer.udpIn[0] : s.peer.received, d, 'the whole payload went out');
     assert.equal(s.esp.cmds[s.esp.cmds.length - 1], 'AT+CIPCLOSE=0');
     clean(s);
+  });
+
+  // Ж, the first ESP series: SHUTDOWN cut a CIPSEND off (the command out,
+  // the payload not yet); the module took the next session's AT set-up as
+  // payload and nine GUDPESP runs ended in FAULT.  tools/dev/esp_shut_send.js
+  // sweeps every STEP; here: before the prompt, at it, inside the payload.
+  test(`${dll}${L}: SHUTDOWN during a CIPSEND lets the module take the whole payload; the next session sets it up`, () => {
+    const d = bytes(udp ? 512 : 536, 9);
+    for (const at of ['command', 'prompt', 'payload']) {
+      const s = boot(dll);
+      connect(s);
+      assert.equal(s.send(d, 1).commit.a, S.OK);
+      const cut = { command: () => s.esp.cmds.some((c) => c.startsWith('AT+CIPSEND')),
+        prompt: () => s.esp.dataLeft === d.length, payload: () => s.esp.dataLeft > 0 && s.esp.dataLeft < d.length / 2 }[at];
+      for (let i = 0; i < 400 && !cut(); i++) s.run(1);
+      assert.ok(cut(), `SHUTDOWN at the ${at}`);
+      let r;
+      const ev = [];
+      for (let i = 0; i < 2000; i++) { r = s.call('SHUTDOWN'); if (r.a === S.OK) break; s.run(1); ev.push(...s.events()); }
+      assert.equal(r.a, S.OK, `SHUTDOWN at the ${at}`);
+      assert.equal(s.esp.dataLeft, 0, `the module waits for no payload (${at})`);
+      assert.deepEqual(udp ? s.peer.udpIn[0] : s.peer.received, d, `the whole payload went out (${at})`);
+      assert.equal(named(ev, 'TX_DONE').length, 1, `one TX_DONE (${at})`);
+      // a new session on the same module: its AT set-up is answered
+      for (let i = 0; i < s.layout().ctxLen; i++) s.m.poke(s.layout().ctx + i, 0);
+      assert.equal(s.initConfig(s.defaultConfig({ step_budget_us: FAT || US(500) })).a, S.OK);
+      for (let i = 0; i < 3000 && s.ctx('hw_state') !== UHW_RUN; i++) s.run(1);
+      assert.equal(s.ctx('hw_state'), UHW_RUN, `the next bring-up (${at})`);
+      connect(s);
+      assert.deepEqual(echo(s, bytes(20, 3), 2), bytes(20, 3));
+      clean(s);
+    }
   });
 
   test(`${dll}${L}: a lost CIPSEND reply ends in TIMEOUT(TX), the module is set up again`, () => {
@@ -715,3 +747,18 @@ for (const dll of ['gtcpesp', 'gudpesp']) {
     clean(s);
   });
 }
+
+// The module holds CTS off while its sending stalls (the Ж series of
+// 2026-11-24; the UART model kept CTS on until then).  With auto-CTS the
+// transmitter waits, and a pump that counted on the idle shift register
+// (17 bytes on TEMT) overran the TX FIFO: the stream lost bytes at the fat
+// budgets.  tools/dev/x_cts.js: every byte the module took is the records.
+test('gudpesp: transparent stream with CTS off (60 of every 200 ms), plain and fat STEP: the module gets every record exactly', () => {
+  const { execFileSync } = require('node:child_process');
+  const path = require('node:path');
+  const tool = path.join(__dirname, '../../../../tools/dev/x_cts.js');
+  for (const b of ['1280', '3000']) {
+    const out = execFileSync(process.execPath, [tool, '--total', '2048', '--phases', '3', '--budget', b], { encoding: 'utf8' });
+    assert.match(out, /x_cts: every run exact/, out);
+  }
+});

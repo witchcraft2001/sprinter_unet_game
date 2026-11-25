@@ -243,8 +243,17 @@ EXP_STEP
 
 TP_IF_RUNNING
 	LD	A,(IY+CX_STATE)
+	IFDEF	UGB_HW_ESP
+	; STOPPING too: a CIPSEND in the module's hands runs to its end with
+	; the card still in UHW_RUN (tp_esp.asm ESP_SEND_LIVE); TP_STEP itself
+	; runs only for a card in INIT / RUN
+	ASSERT	UNETG_CTXSTATE_CONFIGURED + 1 == UNETG_CTXSTATE_STOPPING
+	CP	UNETG_CTXSTATE_STOPPING + 1
+	RET	NC
+	ELSE
 	CP	UNETG_CTXSTATE_CONFIGURED
 	RET	NZ
+	ENDIF
 	JP	TP_STEP
 
 ; ----------------------------------------------------------------------
@@ -384,7 +393,23 @@ CLOCK_STEP
 	; recorded before any ISA access; deadline t0 + close_timeout_ms.
 	LD	A,(IY+CX_HW_STATE)
 	CP	UHW_STOP
+	IFDEF	UGB_HW_ESP
+	JR	Z,.stop_hw
+	; a CIPSEND that SHUTDOWN let run (ESP_SEND_LIVE): the card stays in
+	; RUN until it ends, under the same t0 and close deadline
+	; (one flag test: this branch is base time of every such STEP)
+	CP	UHW_RUN
 	RET	NZ
+	BIT	7,(IY+CX_CLK_FLAGS)	; UCLK_SENDHOLD: the job has not ended
+	JR	Z,.hold_end
+	SET	2,(IY+CX_WORK)		; UWK_MORE: the stop is not done
+	JR	.stop_hw
+.hold_end
+	LD	(IY+CX_HW_STATE),UHW_STOP
+.stop_hw
+	ELSE
+	RET	NZ
+	ENDIF
 	BIT	1,(IY+CX_CLK_FLAGS)	; UCLK_T0_SET
 	JR	NZ,.stop_due
 	SET	1,(IY+CX_CLK_FLAGS)

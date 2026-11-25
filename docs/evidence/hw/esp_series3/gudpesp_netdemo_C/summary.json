@@ -1,0 +1,77 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "scenario": "C",
+  "file": "NESPUC.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "FAIL",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 4530
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 5850,
+    "steps_total": 557,
+    "steps_useful": 557,
+    "budget_yields": 100,
+    "max_step_gap_ms": 22,
+    "tx_frames": 13,
+    "rx_frames": 12,
+    "tx_bytes": 832,
+    "rx_bytes": 768
+  },
+  "timing_us": {
+    "tick_isr_max": 395,
+    "admitted_ug_step_max": 2230,
+    "largest_tick_gap": 2064,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "C",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "bring": {
+      "ms": 575,
+      "scratch": 0
+    },
+    "cbl": {
+      "n": 438,
+      "max_us": 1944,
+      "mean_us": 1102
+    }
+  },
+  "fail_code": "E",
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": false,
+    "overflow": true,
+    "card_found": true
+  }
+}

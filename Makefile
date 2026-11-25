@@ -80,6 +80,9 @@ profile-check: dlls
 	UG_RECORDS=1 tools/dev/profile_small.sh $(REC_ETH)
 	@$(PF) for d in $(REC_ETH); do for sc in broadcast shutdown lone; do UG_RECORDS=1 node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
 	@$(PF) for d in $(SCEN_CARD); do for sc in shutdown lone; do node tools/dev/scenario_budget.js $$d $$sc --check | tail -1 || exit 1; done; done
+	@# SHUTDOWN in a send at 500 units too: on ESP the stop lets the CIPSEND
+	@# end (ESP_SEND_LIVE) with more work per STEP than at the minimum
+	@$(PF) for d in $(SCEN_CARD); do node tools/dev/scenario_budget.js $$d shutdown 500 --check | tail -1 || exit 1; done
 
 # M stand (MAME): not part of check -- it needs the MAME builds
 # (tools/mame/build_holub.sh; 3C509B: the user's ../../../mame/mame, read-only)
@@ -89,19 +92,20 @@ mame:
 	tools/mame/build_holub.sh
 
 # UGTEST (M4: libman l_call) and NETDEMO (M5: the SDK) scenarios; the
-# Ethernet cards (M3) run both programs, H (bring-up only) needs no network
+# Ethernet cards (M3) run both programs, H (bring-up only) needs no network;
+# V: the SDK auto-loader (environment -> DLL -> INIT_CONFIG) on every card
 M_RUNS = gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gudpesp:E gudpesp:S gudpesp:D \
          gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gudprtl:E gudprtl:S gudprtl:D \
          gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gudp509b:E gudp509b:S gudp509b:D
-N_RUNS = gtcpesp:L gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gtcpesp:W gtcpesp:T gtcpesp:Q gtcpesp:A gtcpesp:B gtcpesp:C gtcpesp:G gtcpesp:R \
-         gudpesp:L gudpesp:E gudpesp:S gudpesp:D gudpesp:W gudpesp:T gudpesp:Q gudpesp:A gudpesp:B gudpesp:C gudpesp:G gudpesp:R gudpesp:F \
-         gtcprtl:H gtcprtl:L gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gtcprtl:W gtcprtl:T gtcprtl:Q gtcprtl:A gtcprtl:B gtcprtl:C gtcprtl:G gtcprtl:R \
-         gudprtl:H gudprtl:E gudprtl:S gudprtl:D gudprtl:W gudprtl:T gudprtl:Q gudprtl:A gudprtl:B gudprtl:C gudprtl:G gudprtl:R gudprtl:F \
-         gtcp509b:H gtcp509b:L gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gtcp509b:W gtcp509b:T gtcp509b:Q gtcp509b:A gtcp509b:B gtcp509b:C gtcp509b:G gtcp509b:R \
-         gudp509b:H gudp509b:E gudp509b:S gudp509b:D gudp509b:W gudp509b:T gudp509b:Q gudp509b:A gudp509b:B gudp509b:C gudp509b:G gudp509b:R gudp509b:F
+N_RUNS = gtcpesp:L gtcpesp:E gtcpesp:S gtcpesp:P gtcpesp:D gtcpesp:W gtcpesp:T gtcpesp:Q gtcpesp:A gtcpesp:B gtcpesp:C gtcpesp:G gtcpesp:R gtcpesp:V \
+         gudpesp:L gudpesp:E gudpesp:S gudpesp:D gudpesp:W gudpesp:T gudpesp:Q gudpesp:A gudpesp:B gudpesp:C gudpesp:G gudpesp:R gudpesp:F gudpesp:V \
+         gtcprtl:H gtcprtl:L gtcprtl:E gtcprtl:S gtcprtl:P gtcprtl:D gtcprtl:W gtcprtl:T gtcprtl:Q gtcprtl:A gtcprtl:B gtcprtl:C gtcprtl:G gtcprtl:R gtcprtl:V \
+         gudprtl:H gudprtl:E gudprtl:S gudprtl:D gudprtl:W gudprtl:T gudprtl:Q gudprtl:A gudprtl:B gudprtl:C gudprtl:G gudprtl:R gudprtl:F gudprtl:V \
+         gtcp509b:H gtcp509b:L gtcp509b:E gtcp509b:S gtcp509b:P gtcp509b:D gtcp509b:W gtcp509b:T gtcp509b:Q gtcp509b:A gtcp509b:B gtcp509b:C gtcp509b:G gtcp509b:R gtcp509b:V \
+         gudp509b:H gudp509b:E gudp509b:S gudp509b:D gudp509b:W gudp509b:T gudp509b:Q gudp509b:A gudp509b:B gudp509b:C gudp509b:G gudp509b:R gudp509b:F gudp509b:V
 # GUDPESP in the transparent mode (esp_fw = 2: records, echo_server.py --framed)
 X_RUNS = E S D
-XN_RUNS = E S D W C G R F
+XN_RUNS = E S D W C G R F V
 M_ONE = r=$$?; if [ $$r = 0 ]; then echo "M PASS $$p $$d $$s"; elif [ $$r = 77 ]; then echo "M SKIP $$p $$d $$s (no feth0)"; \
 	else echo "M FAIL $$p $$d $$s ($$log)"; fail=1; fi
 test-m: dlls libman

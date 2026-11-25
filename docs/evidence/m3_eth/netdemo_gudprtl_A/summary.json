@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "A T with 2 STEPs of 1500 us per period",
   "wall_s": 23.4,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 42756",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 32434",
   "steps_per_period": 2,
   "load": {
     "status": 0,

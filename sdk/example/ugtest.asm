@@ -556,6 +556,14 @@ send_all
 	CALL	rp_hex16
 	JP	rp_nl
 
+; UG_PIECE: the bytes per TX slot of a stream (send_one).  The Ж
+; transparent-mode programs pass -DUG_PIECE=500 (build_hw.sh): with 512
+; every record of the pattern (step 31, 512 * 31 = 0 mod 256) is the same
+; bytes, so a record the module or the core put out of place could not be
+; told from the right one (the third Ж ESP series, 2026-11-24).
+	IFNDEF	UG_PIECE
+	DEFINE	UG_PIECE UG_SLOT
+	ENDIF
 ; send_one: one TX slot of the pattern when there is room
 send_one
 	LD	HL,(tx_total)
@@ -563,7 +571,7 @@ send_one
 	OR	A
 	SBC	HL,DE
 	RET	Z
-	LD	DE,UG_SLOT
+	LD	DE,UG_PIECE
 	CALL	min_de_hl		; DE = this piece
 	PUSH	DE
 	LD	B,UNETG_TX_RESERVE
@@ -1427,6 +1435,7 @@ soak_tick0	DB	0
 	ENDIF
 
 	INCLUDE	"ugbase.inc"		; frame hook, CTC durations, deadlines, report
+	INCLUDE	"ugat.inc"		; NETUP's AT answers in the report
 
 ; ----------------------------------------------------------------------
 ; NETUP role (ESP): module UART at 115200 8N1 with RTS/CTS, as
@@ -1491,8 +1500,7 @@ at_cmd
 .sent
 	LD	HL,1000
 	CALL	dl_set
-	XOR	A
-	LD	(at_ok),A
+	CALL	at_start
 .rx
 	CALL	isa_open
 	LD	A,(UART + 5)
@@ -1500,10 +1508,7 @@ at_cmd
 	JR	NC,.none
 	LD	A,(UART)
 	CALL	isa_close
-	CP	10
-	JR	Z,.due
-	CALL	rp_char
-	CP	'K'			; "OK" (an ERROR waits for the 1 s end)
+	CALL	at_answer		; ugat.inc: "OK" ends it (an ERROR waits for the 1 s end)
 	JR	Z,.done
 	JR	.due			; a stream without "OK" ends at 1 s too
 .none
@@ -1602,7 +1607,6 @@ rx_bad		DB	0
 ev_connected	DB	0
 ev_closed	DB	0
 ev_peer		DB	0
-at_ok		DB	0
 isa_e2		DB	0
 isa_page	DB	0xD4 | (UG_ISA_SLOT << 1)	; #E2 of the card's slot (UG_HW: hw_slot)
 evbuf		DS	8, 0

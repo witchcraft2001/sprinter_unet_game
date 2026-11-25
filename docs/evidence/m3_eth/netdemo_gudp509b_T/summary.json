@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "T latency under the quota profile: 16 x 64 and 16 x 300 bytes, one at a time",
   "wall_s": 25.8,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 34441",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 30972",
   "steps_per_period": 5,
   "load": {
     "status": 0,

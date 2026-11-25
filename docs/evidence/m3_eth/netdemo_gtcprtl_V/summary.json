@@ -1,0 +1,73 @@
+{
+  "prog": "netdemo",
+  "dll": "gtcprtl",
+  "card": "RTL",
+  "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
+  "scenario": "V E through the SDK auto-loader: UG_NETAUTO over the DSS environment (mkcfg.js --auto)",
+  "wall_s": 19.0,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 22111",
+  "steps_per_period": 5,
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 8365
+  },
+  "info": {
+    "min_useful_budget_us": 1071,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 5955,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1191,
+    "periods": 25,
+    "largest_period_debit_us": 8265,
+    "now_ms": 507,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 125,
+      "early": 256,
+      "frames": 20,
+      "ticks": 254,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 0,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 258,
+    "polls_useful": 6,
+    "steps_total": 125,
+    "steps_useful": 125,
+    "budget_yields": 113,
+    "max_step_gap_ms": 6,
+    "arp_requests": 1,
+    "tx_frames": 5,
+    "rx_frames": 6,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "timing_us": {
+    "tick_isr_max": 305,
+    "admitted_ug_step_max": 1038,
+    "largest_tick_gap": 2018,
+    "late_ticks": 0
+  },
+  "auto": "00 00 01 02 01 0300 GTCPRTL.DLL"
+}

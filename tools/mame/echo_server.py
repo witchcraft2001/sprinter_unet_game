@@ -38,6 +38,7 @@ import socket
 import struct
 import sys
 import time
+import zlib
 
 
 XREC_MAX = 512
@@ -60,6 +61,7 @@ class XDecoder:
 
     def __init__(self):
         self.buf, self.skip, self.bad, self.last = b'', False, 0, 0.0
+        self.why = ''
 
     def feed(self, d, now):
         if now - self.last > 1.0:
@@ -73,6 +75,10 @@ class XDecoder:
             n = ((self.buf[0] & 3) << 8) | self.buf[1]
             if n > XREC_MAX or (self.buf[0] >> 2) != xcheck(n):
                 self.bad += 1
+                # for the log: where in the stream it failed and the bytes
+                # there (the first Ж ESP series lost three and eight records
+                # of 512 bytes to a bad header with every byte delivered)
+                self.why = 'gathered %d head %s' % (len(self.buf), self.buf[:8].hex())
                 self.buf, self.skip = b'', True
                 break
             if len(self.buf) < 2 + n:
@@ -191,8 +197,12 @@ def main():
                 recs = dec.feed(d, time.time())
                 for r in recs:
                     udp.sendto(xencode(r), peer)
-                note('udp framed', peer, len(d), 'records', [len(r) for r in recs],
-                     'bad header' if dec.bad > bad else '')
+                # every datagram whole (and its crc): the stream the module put
+                # out can be rebuilt byte for byte and set against what the
+                # client sent (the Ж ESP series of 2026-11-24: 82 bytes of a
+                # record replaced, a packet lost and the next one twice)
+                note('udp framed', peer, len(d), 'crc %08x' % zlib.crc32(d), 'records', [len(r) for r in recs],
+                     ('bad header ' + dec.why) if dec.bad > bad else '', 'datagram', d.hex())
             else:
                 c = key.fileobj
                 try:

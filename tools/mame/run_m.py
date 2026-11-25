@@ -75,8 +75,9 @@ SCENARIOS = {'E': 'echo 300 bytes', 'S': '8 KiB stream', 'P': 'peer closes', 'D'
              'C': 'T with 1 STEP of 2000 us per period',
              'G': 'game profile: 1 STEP of 2000 us and one poll per period (ESP: the poll moves UART bytes), 16 x 16 and 16 x 64 bytes',
              'R': 'G with 1 STEP of 3000 us (the STEP limit) and one poll per period',
-             'F': "game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile"}
-NETDEMO_ONLY = ('W', 'L', 'H', 'T', 'Q', 'A', 'B', 'C', 'G', 'R', 'F')
+             'F': "game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile",
+             'V': 'E through the SDK auto-loader: UG_NETAUTO over the DSS environment (mkcfg.js --auto)'}
+NETDEMO_ONLY = ('W', 'L', 'H', 'T', 'Q', 'A', 'B', 'C', 'G', 'R', 'F', 'V')
 # latency scenarios with their own quota: scen -> (STEPs per period, STEP
 # budget in real us; 0 = the minimum, ticks between the guaranteed polls)
 LAT_PROFILE = {'Q': (2, 0, 1), 'A': (2, 1500, 1), 'B': (2, 2000, 1), 'C': (1, 2000, 1), 'G': (1, 2000, 10), 'R': (1, 3000, 10),
@@ -153,6 +154,8 @@ def main():
                      help='build -DUG_HW=1 (the Ж program): scen goes on the DSS command line '
                           'instead of -DSCEN, and the saved report is pulled off the floppy and '
                           'compared to the in-memory one')
+    ap.add_argument('--piece', type=int, default=0,
+                    help='-DUG_PIECE: bytes per TX slot of a stream (build_hw.sh: 500 for the transparent mode)')
     ap.add_argument('--arg', type=int, help='UG_HW: extra numeric argument after scen (K minutes)')
     ap.add_argument('--budget', type=int, default=0,
                     help='NETDEMO: STEP budget of the profile in us (0 = GET_INFO.min_useful)')
@@ -222,7 +225,7 @@ def main():
     # its own local port.
     lport = '7001' if card == 'ESP' else str(random.randint(20000, 48999))
     mk_opts = (['--esp-fw', str(a.esp_fw)] if a.esp_fw != 1 else []) + (['--trigger', str(a.trigger)] if a.trigger else []) + \
-        (['--records', '0'] if a.raw else [])
+        (['--records', '0'] if a.raw else []) + (['--auto'] if a.scen == 'V' else [])
     run('node', ROOT / 'tools/mame/mkcfg.js', '--prog', prog, *mk_opts, a.dll, work / 'ugcfg.inc', peer, '7000', lport)
     # UGTEST picks the scenario at runtime under --hw (hw_args, the DSS
     # command line); NETDEMO's scattered per-scenario IF SCEN==... blocks
@@ -231,6 +234,8 @@ def main():
     scen_define = [f'-DSCEN={ord(a.scen)}']
     if a.hw:
         scen_define += ['-DUG_HW=1', '-DUG_HW_MTEST=1']
+    if a.piece:
+        scen_define += [f'-DUG_PIECE={a.piece}']
     run('sjasmplus', '--nologo', '-I', ROOT / 'include', '-I', ROOT / 'sdk', '-I', work, '-I', LIBMAN,
         *scen_define, f'-DUG_STEPS={a.steps}', f'-DUG_STEP_BUDGET={a.budget}', f'-DUG_POLL_TICKS={a.polls}', f'-DUG_ISR_BUDGET={a.isr}', f'--sym={work / (prog + ".sym")}',
         ROOT / 'sdk/example' / f'{prog}.asm', cwd=work, stdout=subprocess.DEVNULL)
@@ -286,6 +291,12 @@ def main():
         summary['steps_per_period'] = a.steps
     summary.update(ugreport.parse_report(lines))
     ok = 'RESULT: PASS' in text
+    if a.scen == 'V':
+        # the auto-loader must have chosen this build's DLL, with code 00
+        auto = next((ln.split() for ln in lines if ln.startswith('AUTO ')), None)
+        summary['auto'] = ' '.join(auto[1:]) if auto else None
+        if not auto or auto[1] != '00' or auto[-1] != f'{a.dll.upper()}.DLL':
+            ok = False
     if a.hw:
         prog_letter = 'N' if prog == 'netdemo' else 'U'
         trans_letter = 'X' if a.esp_fw == 2 else 'U' if a.dll.startswith('gudp') else 'T'

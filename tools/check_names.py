@@ -7,7 +7,8 @@
 - built files (when present) carry the same name in the L1 header;
 - the Ж stand set (tools/hw/build_hw.sh): every program, BAT and report
   name is DOS 8.3 and unique, and build/hw/ (when present) holds exactly
-  the expected files.
+  the expected files -- the six card DLLs, never GLOOP (a Z / M stand
+  library only).
 """
 from __future__ import annotations
 
@@ -72,9 +73,9 @@ def hw_names(dlls):
     files, reports = {"UGPROBE.EXE", "README.TXT"}, {"PROBEE.TXT", "PROBER.TXT", "PROBE3.TXT",
                                                       "STATAE.TXT", "STATAR.TXT", "STATA3.TXT"}
     for d in dlls:
-        files.add(d["file"])
         if d["hw"] == "LOOP":
-            continue
+            continue                # GLOOP stays on the Z and M stands
+        files.add(d["file"])
         code, tp = HW_CODE[d["hw"]], d["transport"][0]
         files.add(f"UGRUN{code}.BAT")
         files.add(f"UGT{code}{tp}.EXE")
@@ -85,7 +86,7 @@ def hw_names(dlls):
             ug.append("P")
             nd.append("P")
         else:
-            nd.append("F")          # the game flow: datagrams
+            nd += ["F", "V"]        # the game flow: datagrams; the SDK auto-loader
         reports |= {f"U{code}{tp}{s}.TXT" for s in ug}
         for s in nd:
             files.add(f"N{code}{tp}{s}.EXE")
@@ -110,7 +111,8 @@ def check_hw(dlls):
         errors.append(f"hw: a report would overwrite a delivered file: {sorted(files & reports)}")
     out = ROOT / "build" / "hw"
     if out.is_dir():
-        have = {p.name for p in out.iterdir()} - {"unetgame_hw.img", "UGHW.ZIP"}
+        have = {p.name for p in out.iterdir()
+                if p.name != "unetgame_hw.img" and not re.fullmatch(r"UGHW(ESP|RTL|509)\.ZIP", p.name)}
         if have != files:
             errors.append(f"hw: build/hw differs: missing {sorted(files - have)}, extra {sorted(have - files)}")
     return errors

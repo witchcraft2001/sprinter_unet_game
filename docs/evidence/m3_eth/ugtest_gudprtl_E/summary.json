@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "udp_records": true,
   "scenario": "E echo 300 bytes",
-  "wall_s": 18.3,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 27360",
+  "wall_s": 17.8,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 25018",
   "info": {
     "min_useful_budget_us": 1047,
     "empty_poll_us": 136,
@@ -31,13 +31,13 @@
     "tx_bytes": 300,
     "rx_bytes": 300
   },
-  "clock": "CLOCK_RATE 0.208 now_ms per emulated ms, TICK_MS 118.154, FRAME_MS 20.480, STEP_CALLS_PER_S 35 (over 1.5 s)",
+  "clock": "CLOCK_RATE 0.221 now_ms per emulated ms, TICK_MS 109.714, FRAME_MS 20.480, STEP_CALLS_PER_S 35 (over 1.5 s)",
   "cpu_mhz": 21.0,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.827,
+  "ticks_missed_ratio": 0.813,
   "step": {
-    "max_us": 1143,
-    "mean_us": 852,
+    "max_us": 1137,
+    "mean_us": 851,
     "steps": 86,
     "over_budget": 0
   },

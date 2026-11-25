@@ -33,9 +33,12 @@ src/core/esp/  AT byte parser, sequencer, TP_* of passive TCP / active UDP
 src/core/loop/ loopback transport
 src/hw/{esp,rtl,el3,loop}/  hardware access layer, one per card
 src/dll/    seven 20-line entry files: DEFINEs + ORG + INCLUDE core/main.inc
-sdk/        source-included SDK: loader/ugload.asm (over libman), gateway/
-            ugate.inc + ugate.asm, time/ugtime.asm; example/netdemo.asm (the
-            ТЗ §7 example, M stand), example/ugtest.asm (M4 libman tester)
+sdk/        source-included SDK: loader/ugload.asm (over libman),
+            loader/ugenv.asm (card fields + DLL name from the DSS
+            environment), loader/ugnet.asm (UG_NETAUTO: environment -> load
+            -> INIT_CONFIG), gateway/ugate.inc + ugate.asm, time/ugtime.asm;
+            example/netdemo.asm (the ТЗ §7 example, M stand),
+            example/ugtest.asm (M4 libman tester)
 third_party/libman/  git submodule (libman + sprinter-mkdll), never copied
 tools/      build.sh, build_sdk.sh, size_report.py, gen_abi.py, check_names.py,
             measure/ (ugprobe.asm platform probe, parse_hw.py Ж reports),
@@ -61,7 +64,8 @@ of the same name. Never fork the core per card: hardware differences live in
 ```sh
 make gen          # regenerate UNETGAME.INC / ctx include / abi.json / ABI table
 make all          # build the seven DLLs into build/ + build/ugz.bin (make sdk)
-make sdk          # the Z application stand program (tests/z/sdk/ugz.asm)
+make sdk          # the Z stand programs (tests/z/sdk/ugz.asm, ugenvz.asm) and
+                  # the auto-loader assembly check (ugnetz.asm, sizes printed)
 make verify       # sprinter-mkdll verify --target 1.3 for every DLL
 make size         # size report: image, reloc, sum, prefix, free bytes
 make names        # delivery names: 8.3, unique, not UNET<tag>, defines match
@@ -79,7 +83,7 @@ make mame         # M stand: build holub/mame + Sprinter-WiFi card (once)
 make test-m       # M stand: UGTEST + NETDEMO scenarios of all six card builds in MAME,
                   # plus GUDPESP --esp-fw 2 (not in check; Ethernet needs the
                   # feth pair, else M SKIP)
-make hw-image     # Ж stand file set build/hw/ (+ UGHW.ZIP, .img) from tools/hw/hw.env
+make hw-image     # Ж stand file set build/hw/ (+ UGHW<card>.ZIP per card, .img) from tools/hw/hw.env
 ```
 
 Single DLL by hand (what `tools/build.sh` does):
@@ -358,6 +362,19 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   `UG_BLOCK` is 256-aligned; `UG_OVH_*`, `UG_BUSY_PATH_US` and `UGT_READ_US`
   are measured on the application stand and checked by tests/z/sdk; libman
   is the submodule only, its `lib_table` layout pinned by `LIBMAN.VERSION`.
+- SDK auto-loader (docs/SDK.md «Автозагрузка по окружению DSS»,
+  sdk/loader/ugenv.asm + ugnet.asm): it reads only the NET* variables the
+  system bring-up tools publish (NETUP, NETCFG / IFUP, the 3C509B kit),
+  never probes ISA, checks syntax only (ranges are INIT_CONFIG's) and
+  never picks GLOOP; the game passes only the transport in A.  No memory
+  of its own: the value buffer is the first 256 bytes of the context
+  region (free until INIT_CONFIG, which clears it itself).  It writes
+  `cpu_khz` = 21000 (the Sprinter has one speed: consumers never fill it)
+  and derives esp_fw / the UART trigger / no ring on Ethernet
+  (UG_NETFIX).  The core still reads no environment.  Z: ugenvz.asm with
+  the DSS stub tools/harness/dss.js (Estex-DSS GETENV semantics, clobbers
+  BC/HL/IX/IY); M / Ж: NETDEMO V (mkcfg.js --auto, line AUTO), UGPROBE
+  line NETENV.  GLOOP never leaves the Z / M stands (not in build/hw).
 
 - IX-base macros (`TP_IX`, `HWSM_IX`, `ARP_IX`, `TXH_IX`, `TP_IX_HL`) preserve
   DE; helpers that clobber DE (`TX_BUF`, `RX_BUF`, `TX_*_PTR`, `IY_PTR`,
@@ -550,6 +567,40 @@ and `04_port_map.md` are wrong about ISA (no `#1FFD` step, swapped bits).
   run Ethernet UDP with records (mkcfg.js sets the flag, `echo_server.py
   --framed`, Ж ports HW_PORT_X / HW_PORT_GX); `run_m.py --raw` keeps the
   old datagrams.
+- SHUTDOWN of an ESP build never cuts a CIPSEND off (2026-11-24,
+  `ESP_SEND_LIVE`, tp_esp.asm): `AT+CIPSEND=0,<n>` makes the module take
+  the next n bytes as payload whatever they are, so a stop between the
+  command and the end of its payload left the module swallowing the next
+  session's `AT` set-up -- nine GUDPESP runs ended in FAULT after a soak
+  on the first ESP board series, until n bytes had come.  SHUTDOWN applies
+  ABORT and, while the SEND job is in the module's hands, leaves the card
+  in UHW_RUN with `UCLK_SENDHOLD` (ESP_JOB_END clears it); CLOCK_STEP
+  records t0, checks the close deadline and moves the card to UHW_STOP
+  once the flag is clear; TP_IF_RUNNING / TP_FAT_VISIT accept STOPPING.
+  So STEP_ISR may meet a STOPPING context with UHW_RUN: still safe, the
+  context is the core's until SHUTDOWN answers OK (which needs
+  UHW_STOPPED).  A first version ran the transport from UHW_STOP: the stop
+  path's own checks cost 31..43 units of base, a share set aside for them
+  starved the largest item at the minimum budget (SHUTDOWN never ended) --
+  the RUN path after ABORT is already priced.  `scenario_budget.js
+  shutdown` is gated at the minimum and at 500 units;
+  `tools/dev/esp_shut_send.js` sweeps the STEP the SHUTDOWN lands on.  Ask
+  of every stop what the module (or card) still expects from us.
+- A module answer can carry what a past session left in it (held reads,
+  datagrams behind RTS): the stand programs' at_cmd echoes printable bytes
+  only, at most 48, and ends at "OK", not at the first 'K'
+  (`sdk/example/ugat.inc`); a binary answer filled NETDEMO's report.
+- The module holds CTS off while its sending stalls (Ж ESP series,
+  2026-11-24); the Z UART model had CTS always on, so the core's TX under
+  CTS never ran.  `EspCard` `ctsGate` (tools/harness/devices/esp.js)
+  models auto-CTS pessimistically: a character waits in the FIFO and the
+  shift register does not take it.  The fat pump's 17-byte write on TEMT
+  overran the FIFO then (bytes lost at 2000 / 3000 us, tools/dev/x_cts.js):
+  17 only with MSR.CTS on.  What a stand model never does (CTS off, a
+  stalled peer) is a path the core has never run -- model it before
+  blaming the module, and never claim a third-party fault without a run
+  that tells it from ours (transparent stream: records of 500 bytes on Ж,
+  echo_server logs every datagram, tools/dev/xstream.py).
 - UART FIFO trigger 14 overruns in MAME (auto-RTS only at the 16th
   character, the module sends one more): ESP game profiles use trigger
   8 with two byte-moving polls per period.  A slack in one item's

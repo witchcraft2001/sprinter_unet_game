@@ -156,6 +156,7 @@ ESP_JOB_END
 	LD	(IX+ET_CST),A
 	RES	EF_DISCARD,(IX+ET_FL)
 	RES	EF_PROMPT,(IX+ET_FL)
+	RES	7,(IY+CX_CLK_FLAGS)	; UCLK_SENDHOLD: a SHUTDOWN may stop the card now
 	RET
 
 ; ESP_JOB: start job A at its first command.  IX = tp.

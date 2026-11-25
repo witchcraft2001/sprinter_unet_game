@@ -1,0 +1,93 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "scenario": "E",
+  "file": "NESPTE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "none",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 8305
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 5895,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1179,
+    "periods": 76,
+    "largest_period_debit_us": 8210,
+    "now_ms": 1519,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 368,
+      "early": 764,
+      "frames": 62,
+      "ticks": 760,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 62,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 721,
+    "steps_total": 368,
+    "steps_useful": 368,
+    "budget_yields": 340,
+    "max_step_gap_ms": 6,
+    "tx_frames": 1,
+    "rx_frames": 1,
+    "tx_bytes": 300,
+    "rx_bytes": 300
+  },
+  "hw": {
+    "scen": "E",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "bring": {
+      "ms": 503,
+      "scratch": 0
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": true,
+  "criteria": {
+    "result": false,
+    "overflow": true,
+    "card_found": true
+  }
+}

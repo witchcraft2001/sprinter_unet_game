@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "B T with 2 STEPs of 2000 us per period",
-  "wall_s": 27.0,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 22565",
+  "wall_s": 26.7,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 30781",
   "steps_per_period": 2,
   "load": {
     "status": 0,

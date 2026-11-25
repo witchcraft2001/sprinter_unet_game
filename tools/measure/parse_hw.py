@@ -31,6 +31,8 @@ Criteria (ТЗ §6, §8.3; an absent measurement is "не измерено", nev
   probe_uart  UGPROBE E: no UART overrun at the configured trigger
   flow        NETDEMO F: at least FLOW_MIN_SHARE of the offered inputs at the
               server and no state lost (the game flow of Headball)
+  auto        NETDEMO V: the SDK auto-loader (AUTO line) answered 00 and
+              chose this build's DLL from the DSS environment
   card_found  SLOT: some ISA slot answered as the card (ughw.inc hw_slot);
               a card found only in the other slot is not a failure of the
               run (the program used that slot) but a wrong HW_SLOT_* in
@@ -110,6 +112,9 @@ def judge(prog, s):
         c['isr'] = costs['isr']['per_call_us'] - trivial <= ISR_BUDGET_US
     if 'busy' in costs and costs['busy']['per_call_us'] is not None and 'info' in s:
         c['bus_busy'] = costs['busy']['per_call_us'] - trivial <= s['info']['bus_busy_us']
+    auto = s.get('auto')
+    if prog == 'netdemo' and s.get('scenario') == 'V':
+        c['auto'] = bool(auto) and auto['code'] == 'OK' and auto['dll'] == f"{s['dll'].upper()}.DLL"
     slot = hw.get('slot')
     if slot:
         c['card_found'] = bool(slot['found'])
@@ -132,14 +137,46 @@ ENV_PRIVATE = {'NET_MAC', 'NET_IP', 'NET_MASK', 'NET_GW'}
 ENV_ADDR = re.compile(r'\d+(\.\d+){1,3}$|[0-9A-Fa-f]{2}([:-][0-9A-Fa-f]{2}){2,5}$')
 
 
+# UGN_* codes of sdk/loader/ugenv.asm / ugnet.asm and the variables of its
+# table (UG_NETVAR), for the NETENV (UGPROBE) and AUTO (NETDEMO V) lines
+UGN = {0: 'OK', 1: 'E_CFG', 2: 'E_NONET', 3: 'E_ENV', 4: 'E_FLOW', 5: 'E_LOAD', 6: 'E_DLL', 7: 'E_INIT'}
+HW_NAME = {1: 'ESP', 2: 'RTL', 3: 'EL3'}
+
+
+def netenv_of(body):
+    """NETENV code B hw slot base id div uflow eflow addr [name] (ugprobe.asm):
+    what UG_NETENV made of the variables; no address is in the line."""
+    f = body.split()
+    if len(f) < 11:
+        return None
+    v = [int(x, 16) for x in f[1:11]]
+    addr = v[9]
+    return {'code': UGN.get(v[0], v[0]), 'var': v[1], 'hw': HW_NAME.get(v[2], v[2]), 'isa_slot': v[3],
+            'io_base': f'0x{v[4]:X}', 'id_port': f'0x{v[5]:X}', 'uart_divisor': v[6], 'uart_flow': v[7], 'esp_flow': v[8],
+            'set': [n for b, n in ((8, 'mac'), (4, 'local_ip'), (2, 'netmask'), (1, 'gateway_ip')) if addr & b],
+            'name': f[11] if len(f) > 11 else None}
+
+
+def auto_of(lines):
+    """AUTO code B C hw slot base [name] (netdemo.asm auto_load) or None."""
+    ln = next((x.split() for x in lines if x.startswith('AUTO ')), None)
+    if not ln or len(ln) < 7:
+        return None
+    v = [int(x, 16) for x in ln[1:7]]
+    return {'code': UGN.get(v[0], v[0]), 'b': v[1], 'c': v[2], 'hw': HW_NAME.get(v[3], v[3]), 'isa_slot': v[4],
+            'io_base': f'0x{v[5]:X}', 'dll': ln[7] if len(ln) > 7 else None}
+
+
 def state_of(text):
-    """(text without private values, state dict or None): the CARD and
-    DSSENV lines of UGPROBE (tools/measure/ugprobe.asm pr_state)."""
-    out, card, env = [], None, {}
+    """(text without private values, state dict or None): the CARD,
+    DSSENV and NETENV lines of UGPROBE (tools/measure/ugprobe.asm pr_state)."""
+    out, card, env, netenv = [], None, {}, None
     for ln in text.splitlines(keepends=True):
         body = ln.rstrip('\r\n')
         if body.startswith('CARD ') and card is None:
             card = body.split()[1:]
+        elif body.startswith('NETENV ') and netenv is None:
+            netenv = netenv_of(body)
         elif body.startswith('DSSENV '):
             rest = body[7:]
             if '=' in rest:
@@ -151,12 +188,16 @@ def state_of(text):
             else:
                 env[rest.split()[0]] = None
         out.append(ln)
-    return ''.join(out), ({'card_regs': card, 'env': env} if card is not None or env else None)
+    state = {'card_regs': card, 'env': env, **({'netenv': netenv} if netenv else {})}
+    return ''.join(out), (state if card is not None or env else None)
 
 
 def parse_file(path, frame_ms, uart_trigger):
     text, state = state_of(path.read_text(errors='replace'))
     lines = text.splitlines()
+    # a full report buffer (ughw.inc s_hw_full) cuts the line it hit in the
+    # middle: "TIMING 0204 060D 0A8F 00REPORT FULL" -- that line is no data
+    lines = [ln for ln in lines if 'REPORT FULL' not in ln]
     ident = identify(path.name, lines)
     if not ident:
         return None
@@ -168,6 +209,9 @@ def parse_file(path, frame_ms, uart_trigger):
     s.update(ugreport.parse_report(lines, frame_ms=frame_ms))
     if state:
         s['state'] = state
+    auto = auto_of(lines)
+    if auto:
+        s['auto'] = auto
     if prog == 'ugprobe':
         s['probe'] = ugreport.parse_probe(lines, frame_ms)
         s['uart_trigger'] = uart_trigger if dll == 'ESP' else None
@@ -267,6 +311,16 @@ def main(argv=None):
                 continue
             print(f'| {sub} | {s["stats"]["arp_requests"]} | {br["ms"] if br else "—"} | '
                   f'{"%02X" % br["scratch"] if br else "—"} |')
+    # the SDK auto-loader: what UGPROBE's NETENV and NETDEMO V's AUTO made of
+    # the NET* variables of DSS (sdk/loader/ugenv.asm)
+    auto_rows = [(sub, s.get('auto') or (s.get('state') or {}).get('netenv')) for sub, s in rows]
+    auto_rows = [(sub, x) for sub, x in auto_rows if x]
+    if auto_rows:
+        print('\nАвтозагрузка по окружению DSS (UGPROBE NETENV, NETDEMO V AUTO):\n')
+        print('| прогон | код | карта | слот | база | DLL / переменная |')
+        print('|---|---|---|---|---|---|')
+        for sub, x in auto_rows:
+            print(f'| {sub} | {x["code"]} | {x["hw"]} | {x["isa_slot"]} | {x["io_base"]} | {x.get("dll") or x.get("name") or "—"} |')
     # the state the series left to the system stack: UGPROBE (before) against
     # UGPROBE <card> 1 (after, STATA<card>.TXT)
     by = dict(rows)

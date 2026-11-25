@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "udp_records": true,
   "scenario": "F game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile",
-  "wall_s": 32.5,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 31518",
+  "wall_s": 32.9,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 48829",
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -42,8 +42,8 @@
       "busy": 0,
       "isr": 0,
       "step": 722,
-      "early": 7064,
-      "frames": 631,
+      "early": 7061,
+      "frames": 630,
       "ticks": 7218,
       "unknown": 0,
       "mask": 0,
@@ -59,7 +59,7 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 885,
+    "polls_total": 882,
     "polls_useful": 102,
     "steps_total": 722,
     "steps_useful": 722,
@@ -73,7 +73,7 @@
   },
   "timing_us": {
     "tick_isr_max": 312,
-    "admitted_ug_step_max": 3080,
+    "admitted_ug_step_max": 3082,
     "largest_tick_gap": 2318,
     "late_ticks": 0
   },
@@ -89,8 +89,8 @@
       "states": 100,
       "states_lost": 0,
       "txdone_max_ms": 56,
-      "loop_max_ms": 114,
-      "loop_mean_ms": 56.3,
+      "loop_max_ms": 113,
+      "loop_mean_ms": 56.6,
       "state_gap_max_ms": 140
     }
   }

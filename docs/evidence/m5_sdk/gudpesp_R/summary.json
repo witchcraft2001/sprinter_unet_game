@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "R G with 1 STEP of 3000 us (the STEP limit) and one poll per period",
-  "wall_s": 5.4,
+  "wall_s": 3.8,
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -40,8 +40,8 @@
       "busy": 0,
       "isr": 0,
       "step": 295,
-      "early": 2831,
-      "frames": 256,
+      "early": 2837,
+      "frames": 258,
       "ticks": 2949,
       "unknown": 0,
       "mask": 0,
@@ -57,8 +57,8 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 701,
-    "polls_useful": 156,
+    "polls_total": 705,
+    "polls_useful": 152,
     "steps_total": 295,
     "steps_useful": 295,
     "budget_yields": 116,
@@ -70,7 +70,7 @@
   },
   "timing_us": {
     "tick_isr_max": 475,
-    "admitted_ug_step_max": 2743,
+    "admitted_ug_step_max": 2763,
     "largest_tick_gap": 2289,
     "late_ticks": 0
   },
@@ -81,9 +81,9 @@
         "bytes": 16,
         "n": 16,
         "txdone_max_ms": 98,
-        "txdone_mean_ms": 79.6,
+        "txdone_mean_ms": 79.9,
         "echo_max_ms": 118,
-        "echo_mean_ms": 100.9
+        "echo_mean_ms": 101.1
       },
       {
         "bytes": 64,

@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 4.8,
+  "wall_s": 3.5,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -40,8 +40,8 @@
       "busy": 0,
       "isr": 0,
       "step": 201,
-      "early": 420,
-      "frames": 33,
+      "early": 417,
+      "frames": 34,
       "ticks": 409,
       "unknown": 0,
       "mask": 0,
@@ -66,7 +66,7 @@
   "timing_us": {
     "tick_isr_max": 314,
     "admitted_ug_step_max": 1019,
-    "largest_tick_gap": 2040,
+    "largest_tick_gap": 2042,
     "late_ticks": 0
   }
 }

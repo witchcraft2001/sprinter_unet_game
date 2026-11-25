@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "E echo 300 bytes",
   "wall_s": 22.6,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 41951",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 35582",
   "info": {
     "min_useful_budget_us": 1059,
     "empty_poll_us": 136,
@@ -19,10 +19,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 3905,
+    "polls_total": 3903,
     "polls_useful": 2,
-    "steps_total": 4118,
-    "steps_useful": 4118,
+    "steps_total": 4186,
+    "steps_useful": 4186,
     "budget_yields": 97,
     "max_step_gap_ms": 20,
     "arp_requests": 4,
@@ -31,15 +31,15 @@
     "tx_bytes": 300,
     "rx_bytes": 300
   },
-  "clock": "CLOCK_RATE 0.706 now_ms per emulated ms, TICK_MS 28.710, FRAME_MS 20.480, STEP_CALLS_PER_S 625 (over 6.1 s)",
-  "cpu_mhz": 21.0,
+  "clock": "CLOCK_RATE 0.694 now_ms per emulated ms, TICK_MS 29.322, FRAME_MS 20.480, STEP_CALLS_PER_S 630 (over 6.7 s)",
+  "cpu_mhz": 20.93,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.287,
+  "ticks_missed_ratio": 0.302,
   "step": {
-    "max_us": 1230,
-    "mean_us": 727,
-    "steps": 4118,
-    "over_budget": 0
+    "max_us": 1281,
+    "mean_us": 728,
+    "steps": 4186,
+    "over_budget": 1
   },
-  "trivial_call_us": 174
+  "trivial_call_us": 175
 }

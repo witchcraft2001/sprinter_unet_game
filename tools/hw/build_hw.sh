@@ -8,6 +8,9 @@
 #   UGT<card>TP.EXE       the same for TCP scenario P, peer port HW_PORT_P
 #                         (the echo server that closes after 64 bytes)
 #   N<card><T|U><s>.EXE   NETDEMO, UG_HW, one per scenario s (-DSCEN)
+#   N<card>UV.EXE         NETDEMO V: the SDK auto-loader (UG_NETAUTO) over
+#                         the NET* variables the system bring-up left
+#                         (mkcfg.js --auto: the block has no card field)
 #   UGTESPX.EXE, NESPX<s>.EXE  GUDPESP in its transparent mode (esp_fw = 2,
 #                         records), peer HW_HOST_IP:HW_PORT_X (echo_hw.sh
 #                         runs echo_server.py --framed there)
@@ -16,11 +19,15 @@
 #   The Ethernet UDP programs (UGTRTLU, UGT509U, NRTLU<s>, N509U<s>) use
 #   UDP records (mkcfg.js) and so the record servers HW_PORT_X / HW_PORT_GX.
 #   UGPROBE.EXE           platform probe (argument E, R or 3)
-#   G*.DLL                the seven libraries
+#   G*.DLL                the six card libraries (GLOOP is a Z / M stand
+#                         library only and never leaves them)
 #   UGRUN<card>.BAT       the run sequence of one card
 #   README.TXT            the operator's checklist (ASCII)
 #   unetgame_hw.img       the same files on a 1.44 MB FAT12 image
-#   UGHW.ZIP              the same files in one flat zip archive
+#   UGHW<card>.ZIP        one flat zip archive per card: its programs,
+#                         its two DLLs, UGPROBE, its BAT and README.TXT
+#                         (one big archive is slow to copy over the ESP
+#                         link and to unpack on the Sprinter)
 # card = ESP, RTL or 509.  Every program writes its report next to itself
 # (<prog letter><card><T|U><scen>.TXT, PROBE<c>.TXT); bring those back and
 # run tools/measure/parse_hw.py on them.
@@ -53,7 +60,7 @@ WORK="$ROOT/build/hw-work"
 LIBMAN="$ROOT/third_party/libman/libman"
 rm -rf "$OUT" "$WORK"
 mkdir -p "$OUT" "$WORK"
-for d in GTCPESP GUDPESP GTCPRTL GUDPRTL GTCP509B GUDP509B GLOOP; do
+for d in GTCPESP GUDPESP GTCPRTL GUDPRTL GTCP509B GUDP509B; do
 	[ -f "$ROOT/build/$d.DLL" ] || { echo "build_hw: build/$d.DLL missing (make dlls)" >&2; exit 1; }
 	cp "$ROOT/build/$d.DLL" "$OUT/"
 done
@@ -111,14 +118,15 @@ for dll in gtcpesp gudpesp gtcprtl gudprtl gtcp509b gudp509b; do
 	scens="L E S D W T Q A B C"
 	[ "$tp" = T ] && scens="$scens P"
 	scens="$scens G R"
-	[ "$tp" = U ] && scens="$scens F"
+	[ "$tp" = U ] && scens="$scens F V"
 	[ "$code" != ESP ] && scens="H $scens"
 	for s in $scens; do
 		port=$HW_PORT; [ "$s" = P ] && port=$HW_PORT_P; [ "$s" = F ] && port=$HW_PORT_G
 		# Ethernet UDP: UDP records (mkcfg.js) against the record servers
 		if [ "$tp" = U ] && [ "$code" != ESP ]; then port=$HW_PORT_X; [ "$s" = F ] && port=$HW_PORT_GX; fi
 		w="$WORK/netdemo_${dll}_$s"; mkdir -p "$w"
-		cfg netdemo $dll "$w/ugcfg.inc" "$port"
+		auto=""; [ "$s" = V ] && auto=--auto
+		cfg netdemo $dll "$w/ugcfg.inc" "$port" $auto
 		ord=$(printf '%d' "'$s")
 		netdemo_profile $s $code
 		asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$ord" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget" -DUG_POLL_TICKS="$polls" -DUG_ISR_BUDGET="$isr"
@@ -129,14 +137,15 @@ done
 # GUDPESP in the transparent mode: transport letter X (mkcfg.js UG_HWPFX)
 w="$WORK/ugtest_gudpesp_x"; mkdir -p "$w"
 cfg ugtest gudpesp "$w/ugcfg.inc" "$HW_PORT_X" --esp-fw 2
-asm "$w" "$ROOT/sdk/example/ugtest.asm" -DUG_HW=1 -DSCEN=69
+# records of 500 bytes: no two alike (sdk/example/ugtest.asm UG_PIECE)
+asm "$w" "$ROOT/sdk/example/ugtest.asm" -DUG_HW=1 -DSCEN=69 -DUG_PIECE=500
 cp "$w/ugtest.exe" "$OUT/UGTESPX.EXE"
 for s in E S D W C G R F; do
 	w="$WORK/netdemo_gudpesp_x_$s"; mkdir -p "$w"
 	port=$HW_PORT_X; [ "$s" = F ] && port=$HW_PORT_GX
 	cfg netdemo gudpesp "$w/ugcfg.inc" "$port" --esp-fw 2
 	netdemo_profile $s ESP
-	asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$(printf '%d' "'$s")" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget" -DUG_POLL_TICKS="$polls" -DUG_ISR_BUDGET="$isr"
+	asm "$w" "$ROOT/sdk/example/netdemo.asm" -DUG_HW=1 -DSCEN="$(printf '%d' "'$s")" -DUG_STEPS="$steps" -DUG_STEP_BUDGET="$budget" -DUG_POLL_TICKS="$polls" -DUG_ISR_BUDGET="$isr" -DUG_PIECE=500
 	cp "$w/netdemo.exe" "$OUT/NESPX$s.EXE"
 done
 
@@ -169,7 +178,7 @@ bat() {	# bat <card code>
 			[ "$tp" = T ] && echo "UGT${code}TP P"
 			echo "UGT$code$tp D"
 			echo "UGT$code$tp K 10"
-			for sc in L H E S P D W T Q A B C G R F; do
+			for sc in L H E S P D W T Q A B C G R F V; do
 				[ -f "$OUT/N$code$tp$sc.EXE" ] && echo "N$code$tp$sc"
 			done
 		done
@@ -200,7 +209,8 @@ ISA slots are numbered 0 and 1 (as -s of the old drivers).
 Before the runs
  1. Host: tools/hw/echo_hw.sh (both servers; logs build/hw-server/).
  2. Copy this folder to the Sprinter (any directory, 8.3 names as is),
-    or UGHW.ZIP and unpack it there (flat: no subdirectories).
+    or the archive of the card, UGHW<card>.ZIP (UGHWESP, UGHWRTL,
+    UGHW509), and unpack it there (flat: no subdirectories).
  3. ESP: the module is already on Wi-Fi with ESP-AT 2.2.x (NETUP / your
     usual tools); the programs only send AT and AT+UART_CUR.
     Ethernet: the cable is in, the card is in the slot written above.
@@ -240,6 +250,13 @@ Runs (one card at a time, the others may stay in their slots)
                            polls): an input of 20 bytes every 40 ms up,
                            a state of 88 bytes every 100 ms down from
                            the game server; line FLOW)
+    N<card>UV              echo 300 bytes like E, but the program knows
+                           only its transport: the SDK auto-loader reads
+                           the NET* variables of DSS (NETUP / NETCFG / the
+                           3C509B tools must have run in this session),
+                           picks the card, its slot and addresses and the
+                           DLL and configures it; line AUTO (code 00 =
+                           loaded, then card, slot, I/O base, DLL name)
   card = ESP, RTL or 509; T = TCP build, U = UDP build.
     UGTESPX E|S|D, NESPX<s> (s = E S D W C G R F)
                            GUDPESP in the transparent UDP mode of ESP-AT
@@ -255,8 +272,8 @@ After the runs
  the rest when it ends, and saves it here as <name>.TXT
  (e.g. UESPTS.TXT, NRTLUE.TXT, PROBEE.TXT); "SAVE FAIL xx" on the screen
  means the file could not be written: take a photo of the screen instead.
- (unetgame_hw.img holds the same files for a floppy, UGHW.ZIP in one
- archive: do not copy them over together with the folder.)
+ (unetgame_hw.img holds all the files for a floppy, UGHW<card>.ZIP one
+ card's set: do not copy them over together with the folder.)
  Bring all .TXT files back and on the host run
     python3 tools/measure/parse_hw.py <folder with the .TXT files>
  Note the board, card revisions, ESP-AT version (AT+GMR in PROBEE.TXT),
@@ -276,10 +293,22 @@ mformat -C -i "$IMG" -f 1440 ::
 for f in "$OUT"/*; do
 	[ "$f" = "$IMG" ] || mcopy -i "$IMG" "$f" "::$(basename "$f")"
 done
-# and in one archive for the trip to the Sprinter: flat (no directories,
-# unpacks into the current one), 8.3 name, plain deflate, no macOS extra
-# fields; neither the image nor the archive itself goes in
-ZIP="$OUT/UGHW.ZIP"
-(cd "$OUT" && ls | grep -v -e '^unetgame_hw\.img$' -e '^UGHW\.ZIP$' | zip -q -X -D -j "$ZIP" -@)
+# and one archive per card for the trip to the Sprinter: flat (no
+# directories, unpacks into the current one), 8.3 names, plain deflate, no
+# macOS extra fields; the card's programs, its two DLLs, UGPROBE, its BAT
+# and README.TXT
 n=$(ls "$OUT" | wc -l | tr -d ' ')
-echo "build_hw: $n files in build/hw/ (image unetgame_hw.img, archive UGHW.ZIP: $(unzip -Z1 "$ZIP" | wc -l | tr -d ' ') files)"
+zips=""
+for code in ESP RTL 509; do
+	case $code in
+	ESP) dlls="GTCPESP.DLL GUDPESP.DLL" ;;
+	RTL) dlls="GTCPRTL.DLL GUDPRTL.DLL" ;;
+	509) dlls="GTCP509B.DLL GUDP509B.DLL" ;;
+	esac
+	ZIP="$OUT/UGHW$code.ZIP"
+	(cd "$OUT" && { ls | grep -e "^UGT$code" -e "^N$code" ; \
+		echo $dlls UGPROBE.EXE UGRUN$code.BAT README.TXT | tr ' ' '\n'; } \
+		| zip -q -X -D -j "$ZIP" -@)
+	zips="$zips UGHW$code.ZIP: $(unzip -Z1 "$ZIP" | wc -l | tr -d ' ') files, $(($(wc -c <"$ZIP") / 1024)) KiB;"
+done
+echo "build_hw: $n files in build/hw/ (image unetgame_hw.img;$zips)"

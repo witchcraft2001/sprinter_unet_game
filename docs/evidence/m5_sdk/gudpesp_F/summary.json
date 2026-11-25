@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "F game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile",
-  "wall_s": 29.2,
+  "wall_s": 29.0,
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -34,15 +34,15 @@
     "cost_step_us": 3120,
     "periods": 541,
     "largest_period_debit_us": 3942,
-    "now_ms": 10833,
+    "now_ms": 10827,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 542,
-      "early": 5139,
-      "frames": 456,
-      "ticks": 5419,
+      "early": 5036,
+      "frames": 466,
+      "ticks": 5416,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,12 +57,12 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 1790,
-    "polls_useful": 946,
+    "polls_total": 1795,
+    "polls_useful": 925,
     "steps_total": 542,
     "steps_useful": 542,
-    "budget_yields": 343,
-    "max_step_gap_ms": 22,
+    "budget_yields": 356,
+    "max_step_gap_ms": 20,
     "tx_frames": 51,
     "rx_frames": 100,
     "tx_bytes": 1020,
@@ -70,11 +70,11 @@
   },
   "timing_us": {
     "tick_isr_max": 475,
-    "admitted_ug_step_max": 2816,
-    "largest_tick_gap": 2306,
+    "admitted_ug_step_max": 2805,
+    "largest_tick_gap": 2313,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 10.2 s)",
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 50 (over 10.2 s)",
   "hw": {
     "flow": {
       "seconds": 10,
@@ -86,8 +86,8 @@
       "states": 100,
       "states_lost": 0,
       "txdone_max_ms": 219,
-      "loop_max_ms": 250,
-      "loop_mean_ms": 194.4,
+      "loop_max_ms": 252,
+      "loop_mean_ms": 183.9,
       "state_gap_max_ms": 120
     }
   }

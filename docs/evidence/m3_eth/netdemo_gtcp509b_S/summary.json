@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "S 8 KiB stream",
-  "wall_s": 27.0,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 28796",
+  "wall_s": 26.1,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 23963",
   "steps_per_period": 5,
   "load": {
     "status": 0,

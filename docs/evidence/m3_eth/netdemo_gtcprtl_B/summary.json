@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "B T with 2 STEPs of 2000 us per period",
-  "wall_s": 23.6,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 41414",
+  "wall_s": 23.1,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 38958",
   "steps_per_period": 2,
   "load": {
     "status": 0,

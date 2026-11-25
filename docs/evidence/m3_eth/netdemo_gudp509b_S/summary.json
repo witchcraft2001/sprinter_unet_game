@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "udp_records": true,
   "scenario": "S 8 KiB stream",
-  "wall_s": 25.8,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 42165",
+  "wall_s": 26.5,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 37122",
   "steps_per_period": 5,
   "load": {
     "status": 0,

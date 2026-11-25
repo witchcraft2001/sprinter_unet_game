@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "Q T at the SDK default profile (2 STEPs of the minimum budget per period)",
   "wall_s": 26.8,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 22244",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 44215",
   "steps_per_period": 2,
   "load": {
     "status": 0,

@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "W pause 2 s between two echoes",
   "wall_s": 24.8,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 21050",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 37008",
   "steps_per_period": 5,
   "load": {
     "status": 0,

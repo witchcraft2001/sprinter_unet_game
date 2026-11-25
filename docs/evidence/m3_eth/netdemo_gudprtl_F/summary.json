@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "F game flow (Headball): input 20 B every 40 ms, a state of 88 B every 100 ms from the server, R's profile",
   "wall_s": 28.0,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 37805",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 33822",
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -42,8 +42,8 @@
       "busy": 0,
       "isr": 0,
       "step": 508,
-      "early": 4571,
-      "frames": 415,
+      "early": 4578,
+      "frames": 417,
       "ticks": 5071,
       "unknown": 0,
       "mask": 0,
@@ -59,11 +59,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 706,
+    "polls_total": 701,
     "polls_useful": 102,
     "steps_total": 508,
     "steps_useful": 508,
-    "budget_yields": 448,
+    "budget_yields": 447,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
     "tx_frames": 250,
@@ -88,10 +88,10 @@
       "inputs_per_s": 24.6,
       "states": 100,
       "states_lost": 0,
-      "txdone_max_ms": 42,
-      "loop_max_ms": 118,
-      "loop_mean_ms": 95.5,
-      "state_gap_max_ms": 122
+      "txdone_max_ms": 40,
+      "loop_max_ms": 117,
+      "loop_mean_ms": 95.6,
+      "state_gap_max_ms": 140
     }
   }
 }

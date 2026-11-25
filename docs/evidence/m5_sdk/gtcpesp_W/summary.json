@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "W pause 2 s between two echoes",
-  "wall_s": 6.1,
+  "wall_s": 3.4,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -34,15 +34,15 @@
     "cost_step_us": 1179,
     "periods": 238,
     "largest_period_debit_us": 8205,
-    "now_ms": 4764,
+    "now_ms": 4766,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 1176,
-      "early": 2455,
-      "frames": 189,
-      "ticks": 2383,
+      "early": 2452,
+      "frames": 187,
+      "ticks": 2384,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -68,9 +68,9 @@
     "rx_bytes": 900
   },
   "timing_us": {
-    "tick_isr_max": 314,
-    "admitted_ug_step_max": 1126,
-    "largest_tick_gap": 2040,
+    "tick_isr_max": 315,
+    "admitted_ug_step_max": 1127,
+    "largest_tick_gap": 2020,
     "late_ticks": 0
   },
   "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 247 (over 4.1 s)"

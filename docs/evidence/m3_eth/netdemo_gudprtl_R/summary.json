@@ -6,7 +6,7 @@
   "udp_records": true,
   "scenario": "R G with 1 STEP of 3000 us (the STEP limit) and one poll per period",
   "wall_s": 20.2,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 27897",
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 44935",
   "steps_per_period": 1,
   "load": {
     "status": 0,
@@ -63,7 +63,7 @@
     "polls_useful": 33,
     "steps_total": 119,
     "steps_useful": 119,
-    "budget_yields": 51,
+    "budget_yields": 52,
     "max_step_gap_ms": 20,
     "arp_requests": 1,
     "tx_frames": 33,
@@ -73,7 +73,7 @@
   },
   "timing_us": {
     "tick_isr_max": 308,
-    "admitted_ug_step_max": 2788,
+    "admitted_ug_step_max": 2794,
     "largest_tick_gap": 2140,
     "late_ticks": 0
   },
@@ -84,7 +84,7 @@
         "bytes": 16,
         "n": 16,
         "txdone_max_ms": 40,
-        "txdone_mean_ms": 39.5,
+        "txdone_mean_ms": 39.2,
         "echo_max_ms": 62,
         "echo_mean_ms": 60.0
       },

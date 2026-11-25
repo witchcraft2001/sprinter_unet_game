@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "P peer closes",
-  "wall_s": 4.7,
+  "wall_s": 3.1,
   "steps_per_period": 5,
   "load": {
     "status": 0,
@@ -34,15 +34,15 @@
     "cost_step_us": 1179,
     "periods": 54,
     "largest_period_debit_us": 8205,
-    "now_ms": 1087,
+    "now_ms": 1091,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 268,
-      "early": 557,
-      "frames": 43,
-      "ticks": 544,
+      "early": 558,
+      "frames": 46,
+      "ticks": 546,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,7 +57,7 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 453,
+    "polls_total": 454,
     "steps_total": 268,
     "steps_useful": 268,
     "budget_yields": 255,
@@ -69,9 +69,9 @@
   },
   "timing_us": {
     "tick_isr_max": 314,
-    "admitted_ug_step_max": 1126,
-    "largest_tick_gap": 2040,
+    "admitted_ug_step_max": 1127,
+    "largest_tick_gap": 2020,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 250 (over 0.5 s)"
+  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 2.000, FRAME_MS 20.480, STEP_CALLS_PER_S 248 (over 0.5 s)"
 }

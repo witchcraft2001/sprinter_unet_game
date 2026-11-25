@@ -1,0 +1,95 @@
+{
+  "stand": "Ж",
+  "prog": "ugtest",
+  "dll": "gtcpesp",
+  "scenario": "S",
+  "file": "UESPTS.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 2490,
+    "steps_total": 4004,
+    "steps_useful": 4004,
+    "budget_yields": 3530,
+    "bus_busy": 16,
+    "max_step_gap_ms": 20,
+    "tx_frames": 16,
+    "rx_frames": 16,
+    "tx_bytes": 8192,
+    "rx_bytes": 8192
+  },
+  "cpu_mhz": 21.0,
+  "frame_ms": 20.48,
+  "ticks_missed_ratio": null,
+  "step": {
+    "max_us": 1299,
+    "mean_us": 848,
+    "steps": 3988,
+    "over_budget": 1
+  },
+  "trivial_call_us": 177,
+  "hw": {
+    "scen": "S",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "bring": {
+      "ms": 140,
+      "scratch": 0
+    },
+    "lat": {
+      "txdone": {
+        "n": 3,
+        "max_counts": 65535
+      },
+      "echo": {
+        "n": 3,
+        "max_counts": 65535
+      },
+      "saturated": 6,
+      "saturated_max_frames": 90
+    },
+    "costs16": {
+      "isr": {
+        "counts": 5624,
+        "per_call_us": 267.8
+      },
+      "busy": {
+        "counts": 4340,
+        "per_call_us": 206.7
+      },
+      "empty_step": {
+        "counts": 15316,
+        "per_call_us": 729.4
+      }
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "step": true,
+    "latency": false,
+    "isr": true,
+    "bus_busy": true,
+    "card_found": true
+  }
+}

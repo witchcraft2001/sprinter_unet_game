@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "R G with 1 STEP of 3000 us (the STEP limit) and one poll per period",
-  "wall_s": 27.2,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 48081",
+  "wall_s": 27.1,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 38908",
   "steps_per_period": 1,
   "load": {
     "status": 0,

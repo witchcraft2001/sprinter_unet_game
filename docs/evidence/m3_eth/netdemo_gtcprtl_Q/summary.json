@@ -4,8 +4,8 @@
   "card": "RTL",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "Q T at the SDK default profile (2 STEPs of the minimum budget per period)",
-  "wall_s": 32.7,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 20083",
+  "wall_s": 31.4,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 26217",
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -35,15 +35,15 @@
     "cost_step_us": 1191,
     "periods": 660,
     "largest_period_debit_us": 4692,
-    "now_ms": 13202,
+    "now_ms": 13212,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1321,
-      "early": 6721,
-      "frames": 525,
-      "ticks": 6604,
+      "step": 1322,
+      "early": 6727,
+      "frames": 524,
+      "ticks": 6609,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -58,11 +58,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 6684,
+    "polls_total": 6689,
     "polls_useful": 69,
-    "steps_total": 1321,
-    "steps_useful": 1321,
-    "budget_yields": 1294,
+    "steps_total": 1322,
+    "steps_useful": 1322,
+    "budget_yields": 1295,
     "max_step_gap_ms": 12,
     "drop_foreign": 1,
     "arp_requests": 1,
@@ -73,11 +73,11 @@
   },
   "timing_us": {
     "tick_isr_max": 309,
-    "admitted_ug_step_max": 1288,
-    "largest_tick_gap": 2026,
+    "admitted_ug_step_max": 1312,
+    "largest_tick_gap": 2028,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 0.994 now_ms per emulated ms, TICK_MS 2.012, FRAME_MS 20.480, STEP_CALLS_PER_S 99 (over 12.8 s)",
+  "clock": "CLOCK_RATE 0.994 now_ms per emulated ms, TICK_MS 2.010, FRAME_MS 20.480, STEP_CALLS_PER_S 99 (over 12.8 s)",
   "hw": {
     "latms": [
       {
@@ -92,9 +92,9 @@
         "bytes": 300,
         "n": 16,
         "txdone_max_ms": 360,
-        "txdone_mean_ms": 276.4,
+        "txdone_mean_ms": 277.6,
         "echo_max_ms": 546,
-        "echo_mean_ms": 463.6
+        "echo_mean_ms": 464.9
       }
     ]
   }

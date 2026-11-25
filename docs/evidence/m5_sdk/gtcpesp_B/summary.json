@@ -4,7 +4,7 @@
   "card": "ESP",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame-holub/sprinter",
   "scenario": "B T with 2 STEPs of 2000 us per period",
-  "wall_s": 6.9,
+  "wall_s": 4.6,
   "steps_per_period": 2,
   "load": {
     "status": 0,
@@ -32,17 +32,17 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 2120,
-    "periods": 775,
-    "largest_period_debit_us": 6565,
-    "now_ms": 15512,
+    "periods": 767,
+    "largest_period_debit_us": 6550,
+    "now_ms": 15350,
     "stats": {
-      "refuse": 17,
+      "refuse": 0,
       "busy": 0,
       "isr": 0,
       "step": 1535,
-      "early": 6911,
-      "frames": 598,
-      "ticks": 7759,
+      "early": 6813,
+      "frames": 585,
+      "ticks": 7678,
       "unknown": 0,
       "mask": 0,
       "cbl": 0,
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 9125,
+    "polls_total": 9042,
     "steps_total": 1535,
     "steps_useful": 1535,
-    "budget_yields": 747,
+    "budget_yields": 759,
     "max_step_gap_ms": 12,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -69,28 +69,28 @@
   },
   "timing_us": {
     "tick_isr_max": 317,
-    "admitted_ug_step_max": 2155,
-    "largest_tick_gap": 2239,
+    "admitted_ug_step_max": 2158,
+    "largest_tick_gap": 2248,
     "late_ticks": 0
   },
-  "clock": "CLOCK_RATE 1.000 now_ms per emulated ms, TICK_MS 1.999, FRAME_MS 20.480, STEP_CALLS_PER_S 99 (over 14.8 s)",
+  "clock": "CLOCK_RATE 0.999 now_ms per emulated ms, TICK_MS 2.001, FRAME_MS 20.480, STEP_CALLS_PER_S 100 (over 14.8 s)",
   "hw": {
     "latms": [
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 110,
-        "txdone_mean_ms": 90.3,
-        "echo_max_ms": 272,
-        "echo_mean_ms": 254.9
+        "txdone_max_ms": 108,
+        "txdone_mean_ms": 89.3,
+        "echo_max_ms": 268,
+        "echo_mean_ms": 252.1
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 254,
-        "txdone_mean_ms": 236.5,
-        "echo_max_ms": 688,
-        "echo_mean_ms": 676.0
+        "txdone_max_ms": 252,
+        "txdone_mean_ms": 233.4,
+        "echo_max_ms": 686,
+        "echo_mean_ms": 668.6
       }
     ]
   }

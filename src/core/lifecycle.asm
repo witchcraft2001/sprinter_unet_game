@@ -215,10 +215,32 @@ EXP_SHUTDOWN
 	CALL	CH_ABORT
 	JR	.check
 .stop_cfg
+	IFDEF	UGB_HW_ESP
+	LD	B,A			; B = hw_state before
+	ENDIF
 	LD	(IY+CX_HW_STATE),UHW_STOP
 	LD	(IY+CX_STATE),UNETG_CTXSTATE_STOPPING
+	IFDEF	UGB_HW_ESP
+	PUSH	BC
+	CALL	CH_ABORT
+	POP	BC
+	; a CIPSEND in the module's hands runs to its end first, the card
+	; stays in RUN (tp_esp.asm ESP_SEND_LIVE; STEP_ISR may still poll it:
+	; the context is the core's until SHUTDOWN answers OK, which needs
+	; UHW_STOPPED)
+	RES	7,(IY+CX_CLK_FLAGS)	; UCLK_SENDHOLD
+	LD	A,B
+	CP	UHW_RUN
+	JR	NZ,.stop_t0
+	CALL	ESP_SEND_LIVE
+	JR	NC,.stop_t0
+	LD	(IY+CX_HW_STATE),UHW_RUN
+	SET	7,(IY+CX_CLK_FLAGS)	; UCLK_SENDHOLD: ESP_JOB_END clears it
+	JR	.stop_t0
+	ELSE
 	CALL	CH_ABORT
 	JR	.stop_t0
+	ENDIF
 .retry
 	; The first call after a missed stop deadline reports it; the next
 	; one starts a new attempt with a new t0 (no repeated cancel events).

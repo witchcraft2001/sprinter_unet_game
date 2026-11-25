@@ -1,0 +1,294 @@
+{
+  "stand": "Ж",
+  "prog": "ugprobe",
+  "card": "ESP",
+  "scenario": "E",
+  "file": "PROBEE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "hw": {
+    "scen": "E",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    }
+  },
+  "state": {
+    "card_regs": [
+      "00",
+      "03",
+      "22"
+    ],
+    "env": {
+      "BOOTDSK": "C:",
+      "NET": "WIFI",
+      "NET_HW": null,
+      "NET_IDPORT": null,
+      "NET_MAC": "<set 6a8c>",
+      "NET_IP_SRC": "DHCP",
+      "NET_IP": "<set 8928>",
+      "NET_MASK": "<set f9e2>",
+      "NET_GW": "<set c5eb>",
+      "NET_LEASE_SEC": null,
+      "NET_BAUD": "115200",
+      "NET_ESP_FLOW": "3",
+      "NET_ESP_FW": "<set 485e>"
+    }
+  },
+  "probe": {
+    "raw": {
+      "CPU": [
+        26880,
+        5481,
+        5481,
+        5481
+      ],
+      "ISA_RD": [
+        166,
+        167,
+        166,
+        166,
+        179,
+        178,
+        178,
+        178
+      ],
+      "ISA_WR": [
+        167,
+        168,
+        167,
+        168,
+        179,
+        179,
+        180,
+        179
+      ],
+      "BRACKET": [
+        13029,
+        2805
+      ],
+      "CTC": [
+        458,
+        1517,
+        18198,
+        0
+      ],
+      "MSR": [
+        240,
+        96
+      ],
+      "UART08": [
+        172,
+        22,
+        8,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        21,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "RTS08": [
+        40,
+        "B"
+      ],
+      "UART04": [
+        172,
+        43,
+        4,
+        0,
+        0,
+        0,
+        0,
+        43,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "RTS04": [
+        40,
+        "B"
+      ],
+      "UART0E": [
+        172,
+        11,
+        17,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        9
+      ],
+      "RTS0E": [
+        40,
+        "B"
+      ]
+    },
+    "frame_ms": 20.48,
+    "CPU": {
+      "ctc_clock_mhz": 21.0,
+      "effective_mhz": [
+        9.367,
+        9.367,
+        9.367
+      ],
+      "wait_share": 0.554
+    },
+    "ISA_RD": {
+      "extra_us_per_access_max": -0.131,
+      "extra_us_per_access_mean": -0.143,
+      "portion_64_us_max": 127.2
+    },
+    "ISA_WR": {
+      "extra_us_per_access_max": -0.131,
+      "extra_us_per_access_mean": -0.14,
+      "portion_64_us_max": 128.0
+    },
+    "BRACKET": {
+      "us_per_bracket": 30.429
+    },
+    "CTC": {
+      "sample_us": 31.22,
+      "chain_counts_per_frame": 18198,
+      "chain_counts_expected": 17920,
+      "chain_counting": true,
+      "samples_without_stamp": 0
+    },
+    "UART08": {
+      "trigger": 8,
+      "bytes": 172,
+      "drains": 22,
+      "max_per_drain": 8,
+      "overruns": 0,
+      "hist_1_16plus": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        21,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "RTS08": {
+      "trigger": 8,
+      "reads_before_empty": 40,
+      "resume": "below_trigger"
+    },
+    "UART04": {
+      "trigger": 4,
+      "bytes": 172,
+      "drains": 43,
+      "max_per_drain": 4,
+      "overruns": 0,
+      "hist_1_16plus": [
+        0,
+        0,
+        0,
+        43,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "RTS04": {
+      "trigger": 4,
+      "reads_before_empty": 40,
+      "resume": "below_trigger"
+    },
+    "UART0E": {
+      "trigger": 14,
+      "bytes": 172,
+      "drains": 11,
+      "max_per_drain": 17,
+      "overruns": 0,
+      "hist_1_16plus": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        9
+      ]
+    },
+    "RTS0E": {
+      "trigger": 14,
+      "reads_before_empty": 40,
+      "resume": "below_trigger"
+    }
+  },
+  "uart_trigger": 8,
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "card_found": true,
+    "probe_ctc": true,
+    "probe_uart": true
+  }
+}

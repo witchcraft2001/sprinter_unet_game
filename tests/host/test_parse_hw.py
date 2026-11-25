@@ -167,6 +167,35 @@ class ParseHwTests(unittest.TestCase):
         # seq wraps at 16 bits
         self.assertEqual(self.parse("NRTLUF.TXT", rep("00FB 00FB 00F8 0064 FFF0 0053 0028 0075 239B 0078"))["hw"]["flow"]["states_lost"], 0)
 
+    def test_auto(self) -> None:
+        # NETDEMO V (sdk/example/netdemo.asm auto_load): code 00 and the
+        # build's own DLL pass; another DLL or a refusal fails
+        def rep(auto):
+            return "\r\n".join(["NETDEMO GUDPRTL.DLL", "SCEN V", auto, "ENV 00 00 0640", "HW RUN", "OPEN",
+                                "SHUTDOWN 00", "RESULT: PASS", ""])
+        s = self.parse("NRTLUV.TXT", rep("AUTO 00 00 00 02 01 0300 GUDPRTL.DLL"))
+        self.assertEqual(s["auto"], {"code": "OK", "b": 0, "c": 0, "hw": "RTL", "isa_slot": 1, "io_base": "0x300",
+                                     "dll": "GUDPRTL.DLL"})
+        self.assertTrue(s["criteria"]["auto"])
+        self.assertFalse(self.parse("NRTLUV.TXT", rep("AUTO 00 00 00 03 01 0300 GUDP509B.DLL"))["criteria"]["auto"])
+        s = self.parse("NRTLUV.TXT", rep("AUTO 03 05 00 02 01 0300"))
+        self.assertEqual((s["auto"]["code"], s["auto"]["b"]), ("E_ENV", 5))
+        self.assertFalse(s["criteria"]["auto"])
+        self.assertFalse(self.parse("NRTLUV.TXT", rep("LOAD 00 00 00 21 40"))["criteria"]["auto"])
+        self.assertNotIn("auto", self.parse("NRTLUF.TXT", rep("AUTO 00 00 00 02 01 0300 GUDPRTL.DLL")
+                                            .replace("SCEN V", "SCEN F"))["criteria"])
+        # UGPROBE NETENV: the reading of the variables, no address in it
+        head = ["UGPROBE R", "SCEN R", "CARD 21", "DSSENV NET=RTL", "DSSENV NET_RTL_HW=0/#300",
+                "DSSENV NET_IP=192.168.1.148", "NETENV 00 00 02 00 0300 0000 0000 00 00 0F GUDPRTL.DLL"]
+        s = self.parse("PROBER.TXT", "\r\n".join(head + ["SLOT 0 01 0", "CAL 6400 1000", "RESULT: PASS", ""]))
+        ne = s["state"]["netenv"]
+        self.assertEqual((ne["code"], ne["hw"], ne["isa_slot"], ne["io_base"], ne["name"]), ("OK", "RTL", 0, "0x300", "GUDPRTL.DLL"))
+        self.assertEqual(ne["set"], ["mac", "local_ip", "netmask", "gateway_ip"])
+        self.assertEqual(s["state"]["env"]["NET_RTL_HW"], "0/#300")
+        self.assertNotIn("192.168", json.dumps(s))
+        ne = parse_hw.state_of("CARD 21\r\nNETENV 04 0A 01 01 03E8 0000 0008 00 00 00 NET_ESP_FLOW\r\n")[1]["netenv"]
+        self.assertEqual((ne["code"], ne["var"], ne["name"]), ("E_FLOW", 10, "NET_ESP_FLOW"))
+
     def test_name_mismatch(self) -> None:
         with self.assertRaises(ValueError):
             self.parse("UESPTS.TXT", ugtest_report())          # the report says GTCPRTL

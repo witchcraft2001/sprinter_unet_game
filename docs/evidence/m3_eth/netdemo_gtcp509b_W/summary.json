@@ -4,8 +4,8 @@
   "card": "EL3",
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "scenario": "W pause 2 s between two echoes",
-  "wall_s": 25.4,
-  "network": "pcap feth0 (index 8), peer 192.168.7.1, local port 42469",
+  "wall_s": 25.2,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 37889",
   "steps_per_period": 5,
   "load": {
     "status": 0,

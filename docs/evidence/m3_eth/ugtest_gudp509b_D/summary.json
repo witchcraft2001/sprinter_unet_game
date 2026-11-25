@@ -5,8 +5,8 @@
   "mame": "/Users/dmitry/dev/zx/sprinter/mame/mame",
   "udp_records": true,
   "scenario": "D SHUTDOWN while open",
-  "wall_s": 22.7,
-  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 22899",
+  "wall_s": 22.8,
+  "network": "pcap feth0 (index 9), peer 192.168.7.1, local port 27377",
   "info": {
     "min_useful_budget_us": 1059,
     "empty_poll_us": 136,
@@ -19,11 +19,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 4084,
+    "polls_total": 3979,
     "polls_useful": 2,
-    "steps_total": 4310,
-    "steps_useful": 4310,
-    "budget_yields": 81,
+    "steps_total": 4197,
+    "steps_useful": 4197,
+    "budget_yields": 82,
     "max_step_gap_ms": 20,
     "arp_requests": 4,
     "tx_frames": 5,
@@ -31,15 +31,15 @@
     "tx_bytes": 100,
     "rx_bytes": 100
   },
-  "clock": "CLOCK_RATE 0.703 now_ms per emulated ms, TICK_MS 28.814, FRAME_MS 20.480, STEP_CALLS_PER_S 640 (over 6.7 s)",
-  "cpu_mhz": 21.0,
+  "clock": "CLOCK_RATE 0.715 now_ms per emulated ms, TICK_MS 28.444, FRAME_MS 20.480, STEP_CALLS_PER_S 631 (over 6.7 s)",
+  "cpu_mhz": 20.93,
   "frame_ms": 20.48,
-  "ticks_missed_ratio": 0.289,
+  "ticks_missed_ratio": 0.28,
   "step": {
-    "max_us": 1154,
-    "mean_us": 726,
-    "steps": 4310,
-    "over_budget": 0
+    "max_us": 1280,
+    "mean_us": 729,
+    "steps": 4197,
+    "over_budget": 1
   },
-  "trivial_call_us": 174
+  "trivial_call_us": 175
 }

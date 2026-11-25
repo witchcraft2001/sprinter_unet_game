@@ -39,6 +39,8 @@ UCLK_OP_ARM	EQU	0x10	; arm op_deadline_ms at the next STEP
 UCLK_FAULT_SEEN	EQU	0x20	; DEVICE_FAULT of the last stop attempt reported
 UCLK_EV_FIRST	EQU	0x40	; an event publication was refused for budget: the
 				; next STEP flushes events before the card work
+UCLK_SENDHOLD	EQU	0x80	; ESP: SHUTDOWN keeps the card in RUN while a CIPSEND
+				; ends (tp_esp.asm ESP_SEND_LIVE); ESP_JOB_END clears it
 
 ; UCTX.tmr_flags
 UTMR_VALID	EQU	0x01	; tmr_due holds the earliest deadline
