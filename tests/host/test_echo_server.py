@@ -94,5 +94,42 @@ class GameServerTests(unittest.TestCase):
         self.check(True)
 
 
+class XDecoderTests(unittest.TestCase):
+    """The record stream of one peer, cut by the module wherever it likes."""
+
+    @staticmethod
+    def stream(n_rec: int, size: int = 500) -> tuple[bytes, list[bytes]]:
+        recs = [bytes((7 + 31 * (i * size + k)) & 255 for k in range(size)) for i in range(n_rec)]
+        return b"".join(echo_server.xencode(r) for r in recs), recs
+
+    def test_stall_inside_a_record(self) -> None:
+        # the sixth Ж ESP series, NETDEMO S: 1460 bytes end 456 bytes into a
+        # record, the module stalls 2.8 s, the next datagram completes it
+        s, recs = self.stream(17)
+        cuts = [(0, 3012, 0.0), (3012, 4016, 2.7), (4016, 5476, 2.7), (5476, 6024, 5.5),
+                (6024, 7484, 5.5), (7484, len(s), 6.6)]
+        dec, got = echo_server.XDecoder(), []
+        for a, b, t in cuts:
+            got += dec.feed(s[a:b], 100.0 + t)
+        self.assertEqual(dec.bad, 0)
+        self.assertEqual(got, recs)
+
+    def test_new_session_after_a_cut_one(self) -> None:
+        # a run cut in the middle of a record, the next run from the same
+        # port starts its own stream after a pause
+        s, recs = self.stream(3, 100)
+        dec = echo_server.XDecoder()
+        self.assertEqual(dec.feed(s[:150], 10.0), recs[:1])
+        self.assertEqual(dec.feed(s, 15.0), recs)
+        self.assertEqual(dec.bad, 0)
+
+    def test_bad_header_resyncs_at_a_datagram(self) -> None:
+        s, recs = self.stream(2, 100)
+        dec = echo_server.XDecoder()
+        self.assertEqual(dec.feed(b"\xff\xff" + s[:10], 1.0), [])
+        self.assertEqual(dec.bad, 1)
+        self.assertEqual(dec.feed(s, 1.1), recs)
+
+
 if __name__ == "__main__":
     unittest.main()

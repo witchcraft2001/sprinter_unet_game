@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 1179,
-    "periods": 54,
+    "periods": 57,
     "largest_period_debit_us": 8210,
-    "now_ms": 1087,
+    "now_ms": 1157,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 268,
-      "early": 555,
-      "frames": 40,
-      "ticks": 544,
+      "step": 284,
+      "early": 596,
+      "frames": 46,
+      "ticks": 579,
       "unknown": 0,
       "mask": 0,
-      "cbl": 40,
+      "cbl": 46,
       "key": 0,
       "late": 0
     }
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 478,
-    "steps_total": 268,
-    "steps_useful": 268,
-    "budget_yields": 250,
+    "polls_total": 525,
+    "steps_total": 284,
+    "steps_useful": 284,
+    "budget_yields": 259,
     "max_step_gap_ms": 6,
     "tx_frames": 1,
     "rx_frames": 1,
@@ -68,9 +68,9 @@
     "rx_bytes": 64
   },
   "timing_us": {
-    "tick_isr_max": 388,
+    "tick_isr_max": 392,
     "admitted_ug_step_max": 1105,
-    "largest_tick_gap": 2027,
+    "largest_tick_gap": 2029,
     "late_ticks": 0
   },
   "hw": {
@@ -83,13 +83,13 @@
       "used": 0
     },
     "bring": {
-      "ms": 441,
+      "ms": 447,
       "scratch": 0
     },
     "cbl": {
-      "n": 41,
-      "max_us": 1823,
-      "mean_us": 1107
+      "n": 46,
+      "max_us": 1926,
+      "mean_us": 1095
     }
   },
   "fail_code": null,

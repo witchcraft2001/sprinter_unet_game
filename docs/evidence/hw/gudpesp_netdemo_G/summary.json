@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 411,
     "cost_step_us": 2120,
-    "periods": 426,
+    "periods": 420,
     "largest_period_debit_us": 2686,
-    "now_ms": 8534,
+    "now_ms": 8406,
     "stats": {
-      "refuse": 2054,
+      "refuse": 1994,
       "busy": 0,
       "isr": 0,
-      "step": 427,
-      "early": 4147,
-      "frames": 366,
-      "ticks": 4269,
+      "step": 421,
+      "early": 4078,
+      "frames": 362,
+      "ticks": 4205,
       "unknown": 0,
       "mask": 0,
-      "cbl": 366,
+      "cbl": 362,
       "key": 0,
       "late": 0
     }
@@ -57,20 +57,20 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 825,
-    "polls_useful": 216,
-    "steps_total": 427,
-    "steps_useful": 427,
-    "budget_yields": 186,
-    "max_step_gap_ms": 22,
+    "polls_total": 791,
+    "polls_useful": 235,
+    "steps_total": 421,
+    "steps_useful": 421,
+    "budget_yields": 231,
+    "max_step_gap_ms": 20,
     "tx_frames": 32,
     "rx_frames": 32,
     "tx_bytes": 1280,
     "rx_bytes": 1280
   },
   "timing_us": {
-    "tick_isr_max": 530,
-    "admitted_ug_step_max": 2146,
+    "tick_isr_max": 534,
+    "admitted_ug_step_max": 1967,
     "largest_tick_gap": 2056,
     "late_ticks": 0
   },
@@ -84,7 +84,7 @@
       "used": 0
     },
     "bring": {
-      "ms": 575,
+      "ms": 567,
       "scratch": 0
     },
     "latms": [
@@ -92,23 +92,23 @@
         "bytes": 16,
         "n": 16,
         "txdone_max_ms": 180,
-        "txdone_mean_ms": 116.2,
+        "txdone_mean_ms": 121.2,
         "echo_max_ms": 200,
-        "echo_mean_ms": 163.7
+        "echo_mean_ms": 158.7
       },
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 178,
-        "txdone_mean_ms": 159.2,
+        "txdone_max_ms": 278,
+        "txdone_mean_ms": 166.8,
         "echo_max_ms": 378,
-        "echo_mean_ms": 310.4
+        "echo_mean_ms": 305.5
       }
     ],
     "cbl": {
-      "n": 366,
-      "max_us": 19918,
-      "mean_us": 10891
+      "n": 362,
+      "max_us": 19876,
+      "mean_us": 10454
     }
   },
   "fail_code": null,

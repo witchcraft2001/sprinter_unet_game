@@ -40,12 +40,12 @@
       "busy": 0,
       "isr": 0,
       "step": 213,
-      "early": 442,
-      "frames": 32,
+      "early": 443,
+      "frames": 35,
       "ticks": 433,
       "unknown": 0,
       "mask": 0,
-      "cbl": 32,
+      "cbl": 35,
       "key": 0,
       "late": 0
     }
@@ -57,18 +57,16 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 339,
+    "polls_total": 340,
     "steps_total": 213,
     "steps_useful": 213,
-    "budget_yields": 195,
-    "max_step_gap_ms": 6,
-    "tx_frames": 1,
-    "tx_bytes": 100
+    "budget_yields": 194,
+    "max_step_gap_ms": 6
   },
   "timing_us": {
-    "tick_isr_max": 357,
-    "admitted_ug_step_max": 994,
-    "largest_tick_gap": 2030,
+    "tick_isr_max": 389,
+    "admitted_ug_step_max": 985,
+    "largest_tick_gap": 2050,
     "late_ticks": 0
   },
   "hw": {
@@ -85,9 +83,9 @@
       "scratch": 0
     },
     "cbl": {
-      "n": 33,
-      "max_us": 1926,
-      "mean_us": 1102
+      "n": 35,
+      "max_us": 1944,
+      "mean_us": 1064
     }
   },
   "fail_code": null,

@@ -18,10 +18,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2483,
-    "steps_total": 3996,
-    "steps_useful": 3996,
-    "budget_yields": 3525,
+    "polls_total": 2545,
+    "steps_total": 4052,
+    "steps_useful": 4052,
+    "budget_yields": 3547,
     "bus_busy": 16,
     "max_step_gap_ms": 20,
     "tx_frames": 16,
@@ -33,12 +33,12 @@
   "frame_ms": 20.48,
   "ticks_missed_ratio": null,
   "step": {
-    "max_us": 1299,
-    "mean_us": 849,
-    "steps": 3980,
+    "max_us": 1343,
+    "mean_us": 847,
+    "steps": 4036,
     "over_budget": 1
   },
-  "trivial_call_us": 177,
+  "trivial_call_us": 184,
   "hw": {
     "scen": "S",
     "slot": {
@@ -62,20 +62,20 @@
         "max_counts": 65535
       },
       "saturated": 6,
-      "saturated_max_frames": 98
+      "saturated_max_frames": 95
     },
     "costs16": {
       "isr": {
-        "counts": 5624,
-        "per_call_us": 267.8
+        "counts": 5625,
+        "per_call_us": 267.9
       },
       "busy": {
         "counts": 4340,
         "per_call_us": 206.7
       },
       "empty_step": {
-        "counts": 15316,
-        "per_call_us": 729.3
+        "counts": 15317,
+        "per_call_us": 729.4
       }
     }
   },

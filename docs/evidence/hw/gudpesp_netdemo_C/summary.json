@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 2120,
-    "periods": 1485,
+    "periods": 1475,
     "largest_period_debit_us": 4435,
-    "now_ms": 29706,
+    "now_ms": 29500,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1486,
-      "early": 14381,
-      "frames": 1187,
-      "ticks": 14859,
+      "step": 1476,
+      "early": 14274,
+      "frames": 1185,
+      "ticks": 14756,
       "unknown": 0,
       "mask": 0,
-      "cbl": 1187,
+      "cbl": 1185,
       "key": 0,
       "late": 0
     }
@@ -57,20 +57,20 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 16088,
-    "steps_total": 1486,
-    "steps_useful": 1486,
-    "budget_yields": 697,
-    "max_step_gap_ms": 22,
+    "polls_total": 15974,
+    "steps_total": 1476,
+    "steps_useful": 1476,
+    "budget_yields": 717,
+    "max_step_gap_ms": 20,
     "tx_frames": 32,
     "rx_frames": 32,
     "tx_bytes": 5824,
     "rx_bytes": 5824
   },
   "timing_us": {
-    "tick_isr_max": 405,
-    "admitted_ug_step_max": 2278,
-    "largest_tick_gap": 2064,
+    "tick_isr_max": 402,
+    "admitted_ug_step_max": 2302,
+    "largest_tick_gap": 2072,
     "late_ticks": 0
   },
   "hw": {
@@ -90,24 +90,24 @@
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 218,
-        "txdone_mean_ms": 215.5,
-        "echo_max_ms": 480,
-        "echo_mean_ms": 443.7
+        "txdone_max_ms": 456,
+        "txdone_mean_ms": 224.3,
+        "echo_max_ms": 500,
+        "echo_mean_ms": 447.6
       },
       {
         "bytes": 300,
         "n": 16,
         "txdone_max_ms": 514,
-        "txdone_mean_ms": 499.6,
-        "echo_max_ms": 1438,
-        "echo_mean_ms": 1353.9
+        "txdone_mean_ms": 500.9,
+        "echo_max_ms": 1378,
+        "echo_mean_ms": 1335.1
       }
     ],
     "cbl": {
-      "n": 1188,
-      "max_us": 1947,
-      "mean_us": 1103
+      "n": 1186,
+      "max_us": 1979,
+      "mean_us": 1101
     }
   },
   "fail_code": null,

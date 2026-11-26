@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 1179,
-    "periods": 226,
+    "periods": 217,
     "largest_period_debit_us": 8210,
-    "now_ms": 4532,
+    "now_ms": 4352,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1116,
-      "early": 2318,
-      "frames": 173,
-      "ticks": 2267,
+      "step": 1072,
+      "early": 2226,
+      "frames": 171,
+      "ticks": 2177,
       "unknown": 0,
       "mask": 0,
-      "cbl": 173,
+      "cbl": 171,
       "key": 0,
       "late": 0
     }
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2915,
-    "steps_total": 1116,
-    "steps_useful": 1116,
-    "budget_yields": 814,
+    "polls_total": 2792,
+    "steps_total": 1072,
+    "steps_useful": 1072,
+    "budget_yields": 781,
     "max_step_gap_ms": 10,
     "tx_frames": 3,
     "rx_frames": 3,
@@ -69,7 +69,7 @@
   },
   "timing_us": {
     "tick_isr_max": 395,
-    "admitted_ug_step_max": 1169,
+    "admitted_ug_step_max": 1070,
     "largest_tick_gap": 2040,
     "late_ticks": 0
   },
@@ -83,13 +83,13 @@
       "used": 0
     },
     "bring": {
-      "ms": 425,
+      "ms": 415,
       "scratch": 0
     },
     "cbl": {
-      "n": 174,
+      "n": 172,
       "max_us": 1916,
-      "mean_us": 1095
+      "mean_us": 1089
     }
   },
   "fail_code": null,

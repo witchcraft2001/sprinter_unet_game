@@ -192,12 +192,20 @@ def state_of(text):
     return ''.join(out), (state if card is not None or env else None)
 
 
+# report line names a fail path writes after an unfinished line
+GLUED = re.compile(r'([0-9A-F])(GW|STATS|EV|SHUTDOWN|TIMING|HW_STATE|HWSM|UNKNOWN_IRQ) ')
+
+
 def parse_file(path, frame_ms, uart_trigger):
     text, state = state_of(path.read_text(errors='replace'))
     lines = text.splitlines()
     # a full report buffer (ughw.inc s_hw_full) cuts the line it hit in the
     # middle: "TIMING 0204 060D 0A8F 00REPORT FULL" -- that line is no data
     lines = [ln for ln in lines if 'REPORT FULL' not in ln]
+    # a stand program's fail path can start its report lines in the middle
+    # of a line it never ended: NETDEMO C lost an echo of the 300-byte series
+    # and wrote "LATMS 0040 10 0064 0622 0208 1464GW 0001..." -- split it
+    lines = [x for ln in lines for x in GLUED.sub(r'\1\n\2 ', ln).split('\n')]
     ident = identify(path.name, lines)
     if not ident:
         return None

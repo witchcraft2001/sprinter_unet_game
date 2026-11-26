@@ -1,0 +1,56 @@
+{
+  "stand": "Ж",
+  "prog": "ugstate",
+  "card": "ESP",
+  "scenario": "E",
+  "file": "STATAE.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "hw": {
+    "scen": "E"
+  },
+  "state": {
+    "card_regs": [
+      "00",
+      "03",
+      "00"
+    ],
+    "env": {
+      "BOOTDSK": "C:",
+      "NET": "WIFI",
+      "NET_HW": null,
+      "NET_RTL_HW": null,
+      "NET_ESP_HW": "0/#3E8",
+      "NET_IDPORT": null,
+      "NET_MAC": "<set 6a8c>",
+      "NET_IP_SRC": "DHCP",
+      "NET_IP": "<set 8928>",
+      "NET_MASK": "<set f9e2>",
+      "NET_GW": "<set c5eb>",
+      "NET_LEASE_SEC": null,
+      "NET_BAUD": "115200",
+      "NET_ESP_FLOW": "3",
+      "NET_ESP_FW": "<set 485e>"
+    },
+    "netenv": {
+      "code": "OK",
+      "var": 146,
+      "hw": "ESP",
+      "isa_slot": 0,
+      "io_base": "0x3E8",
+      "id_port": "0x0",
+      "uart_divisor": 8,
+      "uart_flow": 1,
+      "esp_flow": 3,
+      "set": [],
+      "name": "GUDPESP.DLL"
+    }
+  },
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true
+  }
+}

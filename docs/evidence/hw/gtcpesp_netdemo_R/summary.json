@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 411,
     "cost_step_us": 3120,
-    "periods": 437,
+    "periods": 415,
     "largest_period_debit_us": 3686,
-    "now_ms": 8746,
+    "now_ms": 8306,
     "stats": {
-      "refuse": 2037,
+      "refuse": 1908,
       "busy": 0,
       "isr": 0,
-      "step": 438,
-      "early": 4264,
-      "frames": 369,
-      "ticks": 4375,
+      "step": 416,
+      "early": 4016,
+      "frames": 352,
+      "ticks": 4155,
       "unknown": 0,
       "mask": 0,
-      "cbl": 369,
+      "cbl": 352,
       "key": 0,
       "late": 0
     }
@@ -57,11 +57,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 992,
-    "polls_useful": 236,
-    "steps_total": 438,
-    "steps_useful": 438,
-    "budget_yields": 112,
+    "polls_total": 933,
+    "polls_useful": 230,
+    "steps_total": 416,
+    "steps_useful": 416,
+    "budget_yields": 104,
     "max_step_gap_ms": 20,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -69,9 +69,9 @@
     "rx_bytes": 1280
   },
   "timing_us": {
-    "tick_isr_max": 530,
-    "admitted_ug_step_max": 2678,
-    "largest_tick_gap": 2251,
+    "tick_isr_max": 534,
+    "admitted_ug_step_max": 2798,
+    "largest_tick_gap": 2250,
     "late_ticks": 0
   },
   "hw": {
@@ -91,24 +91,24 @@
       {
         "bytes": 16,
         "n": 16,
-        "txdone_max_ms": 98,
-        "txdone_mean_ms": 81.0,
-        "echo_max_ms": 220,
-        "echo_mean_ms": 197.2
+        "txdone_max_ms": 100,
+        "txdone_mean_ms": 81.1,
+        "echo_max_ms": 200,
+        "echo_mean_ms": 183.6
       },
       {
         "bytes": 64,
         "n": 16,
         "txdone_max_ms": 138,
-        "txdone_mean_ms": 137.9,
-        "echo_max_ms": 320,
-        "echo_mean_ms": 299.8
+        "txdone_mean_ms": 138.0,
+        "echo_max_ms": 340,
+        "echo_mean_ms": 286.1
       }
     ],
     "cbl": {
-      "n": 370,
-      "max_us": 19775,
-      "mean_us": 9637
+      "n": 352,
+      "max_us": 19676,
+      "mean_us": 9576
     }
   },
   "fail_code": null,

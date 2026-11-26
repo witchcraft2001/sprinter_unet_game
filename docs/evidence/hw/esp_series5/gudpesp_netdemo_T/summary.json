@@ -1,0 +1,122 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gudpesp",
+  "scenario": "T",
+  "file": "NESPUT.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "env": {
+    "init_config": 0,
+    "env": 1,
+    "quota_sum_us": 8305
+  },
+  "info": {
+    "min_useful_budget_us": 1059,
+    "empty_poll_us": 136,
+    "bus_busy_us": 62
+  },
+  "gateway": {
+    "quota_full": {
+      "poll": 2310,
+      "card": 0,
+      "main": 5895,
+      "service": 100
+    },
+    "cost_poll_us": 231,
+    "cost_step_us": 1179,
+    "periods": 681,
+    "largest_period_debit_us": 8210,
+    "now_ms": 13616,
+    "stats": {
+      "refuse": 0,
+      "busy": 0,
+      "isr": 0,
+      "step": 3356,
+      "early": 6879,
+      "frames": 537,
+      "ticks": 6811,
+      "unknown": 0,
+      "mask": 0,
+      "cbl": 537,
+      "key": 0,
+      "late": 0
+    }
+  },
+  "stats": {
+    "abi_version": 256,
+    "size": 80,
+    "mode_actual": 1,
+    "avail": 1,
+    "timing_mode": 2,
+    "ctx_state": 1,
+    "polls_total": 8521,
+    "steps_total": 3356,
+    "steps_useful": 3356,
+    "budget_yields": 3043,
+    "max_step_gap_ms": 10,
+    "tx_frames": 32,
+    "rx_frames": 32,
+    "tx_bytes": 5824,
+    "rx_bytes": 5824
+  },
+  "timing_us": {
+    "tick_isr_max": 395,
+    "admitted_ug_step_max": 1202,
+    "largest_tick_gap": 2051,
+    "late_ticks": 0
+  },
+  "hw": {
+    "scen": "T",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    },
+    "bring": {
+      "ms": 377,
+      "scratch": 0
+    },
+    "latms": [
+      {
+        "bytes": 64,
+        "n": 16,
+        "txdone_max_ms": 186,
+        "txdone_mean_ms": 178.2,
+        "echo_max_ms": 348,
+        "echo_mean_ms": 260.6
+      },
+      {
+        "bytes": 300,
+        "n": 16,
+        "txdone_max_ms": 258,
+        "txdone_mean_ms": 250.3,
+        "echo_max_ms": 554,
+        "echo_mean_ms": 542.6
+      }
+    ],
+    "cbl": {
+      "n": 538,
+      "max_us": 1952,
+      "mean_us": 1112
+    }
+  },
+  "fail_code": null,
+  "init_config": "OK",
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "overflow": true,
+    "card_found": true
+  }
+}

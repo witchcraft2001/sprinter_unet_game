@@ -19,6 +19,8 @@
       "BOOTDSK": "C:",
       "NET": "WIFI",
       "NET_HW": null,
+      "NET_RTL_HW": null,
+      "NET_ESP_HW": "0/#3E8",
       "NET_IDPORT": null,
       "NET_MAC": "<set 6a8c>",
       "NET_IP_SRC": "DHCP",
@@ -29,6 +31,19 @@
       "NET_BAUD": "115200",
       "NET_ESP_FLOW": "3",
       "NET_ESP_FW": "<set 485e>"
+    },
+    "netenv": {
+      "code": "OK",
+      "var": 146,
+      "hw": "ESP",
+      "isa_slot": 0,
+      "io_base": "0x3E8",
+      "id_port": "0x0",
+      "uart_divisor": 8,
+      "uart_flow": 1,
+      "esp_flow": 3,
+      "set": [],
+      "name": "GUDPESP.DLL"
     }
   },
   "fail_code": null,

@@ -18,10 +18,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 244,
-    "steps_total": 312,
-    "steps_useful": 312,
-    "budget_yields": 238,
+    "polls_total": 278,
+    "steps_total": 343,
+    "steps_useful": 343,
+    "budget_yields": 251,
     "bus_busy": 16,
     "max_step_gap_ms": 20,
     "tx_frames": 1,
@@ -33,9 +33,9 @@
   "frame_ms": 20.48,
   "ticks_missed_ratio": null,
   "step": {
-    "max_us": 1148,
-    "mean_us": 794,
-    "steps": 296,
+    "max_us": 1184,
+    "mean_us": 790,
+    "steps": 327,
     "over_budget": 0
   },
   "trivial_call_us": 190,
@@ -49,7 +49,7 @@
       "used": 0
     },
     "bring": {
-      "ms": 120,
+      "ms": 60,
       "scratch": 0
     },
     "lat": {
@@ -66,16 +66,16 @@
     },
     "costs16": {
       "isr": {
-        "counts": 5625,
-        "per_call_us": 267.9
+        "counts": 5624,
+        "per_call_us": 267.8
       },
       "busy": {
-        "counts": 4341,
+        "counts": 4340,
         "per_call_us": 206.7
       },
       "empty_step": {
         "counts": 15438,
-        "per_call_us": 735.2
+        "per_call_us": 735.1
       }
     }
   },

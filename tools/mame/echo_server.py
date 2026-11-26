@@ -63,28 +63,53 @@ class XDecoder:
         self.buf, self.skip, self.bad, self.last = b'', False, 0, 0.0
         self.why = ''
 
+    @staticmethod
+    def head_ok(b):
+        if len(b) < 2:
+            return False
+        n = ((b[0] & 3) << 8) | b[1]
+        return n <= XREC_MAX and (b[0] >> 2) == xcheck(n)
+
+    @staticmethod
+    def parse(buf):
+        """Whole records of buf: (records, the rest, False at a bad header)."""
+        out = []
+        while len(buf) >= 2:
+            if not XDecoder.head_ok(buf):
+                return out, buf, False
+            n = ((buf[0] & 3) << 8) | buf[1]
+            if len(buf) < 2 + n:
+                break
+            out.append(buf[2:2 + n])
+            buf = buf[2 + n:]
+        return out, buf, True
+
     def feed(self, d, now):
-        if now - self.last > 1.0:
-            self.buf = b''
+        stale = now - self.last > 1.0
         self.last = now
         if self.skip:                       # a datagram start: look again
             self.skip, self.buf = False, b''
-        self.buf += d
-        out = []
-        while len(self.buf) >= 2:
-            n = ((self.buf[0] & 3) << 8) | self.buf[1]
-            if n > XREC_MAX or (self.buf[0] >> 2) != xcheck(n):
-                self.bad += 1
-                # for the log: where in the stream it failed and the bytes
-                # there (the first Ж ESP series lost three and eight records
-                # of 512 bytes to a bad header with every byte delivered)
-                self.why = 'gathered %d head %s' % (len(self.buf), self.buf[:8].hex())
-                self.buf, self.skip = b'', True
-                break
-            if len(self.buf) < 2 + n:
-                break
-            out.append(self.buf[2:2 + n])
-            self.buf = self.buf[2 + n:]
+        if stale and self.buf:
+            # A record begun before a pause: the module stalls in the middle
+            # of a stream for seconds (2.8 s in the sixth Ж ESP series, where
+            # dropping the head after 1 s threw away 5 of 17 records that
+            # had all arrived), or a new session from the same port follows
+            # a cut one.  Keep it when this datagram completes it into whole
+            # records; start over here when the datagram starts a record.
+            out, rest, ok = self.parse(self.buf + d)
+            if ok and out:
+                self.buf = rest
+                return out
+            if self.head_ok(d):
+                self.buf = b''
+        out, self.buf, ok = self.parse(self.buf + d)
+        if not ok:
+            self.bad += 1
+            # for the log: where in the stream it failed and the bytes
+            # there (the first Ж ESP series lost three and eight records
+            # of 512 bytes to a bad header with every byte delivered)
+            self.why = 'gathered %d head %s' % (len(self.buf), self.buf[:8].hex())
+            self.buf, self.skip = b'', True
         return out
 
 

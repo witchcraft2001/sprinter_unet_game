@@ -32,22 +32,22 @@
     },
     "cost_poll_us": 411,
     "cost_step_us": 3120,
-    "periods": 540,
+    "periods": 536,
     "largest_period_debit_us": 4067,
-    "now_ms": 10805,
+    "now_ms": 10725,
     "stats": {
-      "refuse": 1387,
+      "refuse": 1355,
       "busy": 0,
       "isr": 0,
-      "step": 541,
-      "early": 5066,
-      "frames": 420,
-      "ticks": 5405,
+      "step": 537,
+      "early": 4999,
+      "frames": 426,
+      "ticks": 5365,
       "unknown": 0,
       "mask": 0,
-      "cbl": 420,
+      "cbl": 426,
       "key": 0,
-      "late": 51
+      "late": 50
     }
   },
   "stats": {
@@ -57,11 +57,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 1796,
-    "polls_useful": 1019,
-    "steps_total": 541,
-    "steps_useful": 541,
-    "budget_yields": 393,
+    "polls_total": 1775,
+    "polls_useful": 1012,
+    "steps_total": 537,
+    "steps_useful": 537,
+    "budget_yields": 385,
     "max_step_gap_ms": 20,
     "tx_frames": 45,
     "rx_frames": 99,
@@ -70,8 +70,8 @@
   },
   "timing_us": {
     "tick_isr_max": 534,
-    "admitted_ug_step_max": 3192,
-    "largest_tick_gap": 2254,
+    "admitted_ug_step_max": 3057,
+    "largest_tick_gap": 2264,
     "late_ticks": 0
   },
   "hw": {
@@ -96,15 +96,15 @@
       "inputs_per_s": 4.4,
       "states": 99,
       "states_lost": 0,
-      "txdone_max_ms": 300,
-      "loop_max_ms": 369,
-      "loop_mean_ms": 276.0,
-      "state_gap_max_ms": 140
+      "txdone_max_ms": 362,
+      "loop_max_ms": 378,
+      "loop_mean_ms": 267.6,
+      "state_gap_max_ms": 120
     },
     "cbl": {
-      "n": 421,
-      "max_us": 17920,
-      "mean_us": 4915
+      "n": 427,
+      "max_us": 17854,
+      "mean_us": 4928
     }
   },
   "fail_code": null,

@@ -57,18 +57,18 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 330,
+    "polls_total": 329,
     "steps_total": 198,
     "steps_useful": 198,
-    "budget_yields": 182,
+    "budget_yields": 181,
     "max_step_gap_ms": 6,
     "tx_frames": 1,
     "tx_bytes": 100
   },
   "timing_us": {
     "tick_isr_max": 395,
-    "admitted_ug_step_max": 992,
-    "largest_tick_gap": 2062,
+    "admitted_ug_step_max": 1016,
+    "largest_tick_gap": 2057,
     "late_ticks": 0
   },
   "hw": {
@@ -81,13 +81,13 @@
       "used": 0
     },
     "bring": {
-      "ms": 381,
+      "ms": 383,
       "scratch": 0
     },
     "cbl": {
       "n": 34,
-      "max_us": 1934,
-      "mean_us": 1100
+      "max_us": 1856,
+      "mean_us": 1090
     }
   },
   "fail_code": null,

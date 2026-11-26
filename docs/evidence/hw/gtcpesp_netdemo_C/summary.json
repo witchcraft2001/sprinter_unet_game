@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 2120,
-    "periods": 1687,
+    "periods": 1683,
     "largest_period_debit_us": 4435,
-    "now_ms": 33739,
+    "now_ms": 33661,
     "stats": {
       "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1688,
-      "early": 16334,
-      "frames": 1280,
-      "ticks": 16876,
+      "step": 1684,
+      "early": 16317,
+      "frames": 1341,
+      "ticks": 16837,
       "unknown": 0,
       "mask": 0,
-      "cbl": 1280,
+      "cbl": 1341,
       "key": 0,
       "late": 0
     }
@@ -57,11 +57,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 18256,
-    "steps_total": 1688,
-    "steps_useful": 1688,
-    "budget_yields": 356,
-    "max_step_gap_ms": 20,
+    "polls_total": 18217,
+    "steps_total": 1684,
+    "steps_useful": 1684,
+    "budget_yields": 361,
+    "max_step_gap_ms": 22,
     "tx_frames": 32,
     "rx_frames": 32,
     "tx_bytes": 5824,
@@ -69,8 +69,8 @@
   },
   "timing_us": {
     "tick_isr_max": 400,
-    "admitted_ug_step_max": 2206,
-    "largest_tick_gap": 2037,
+    "admitted_ug_step_max": 2256,
+    "largest_tick_gap": 2067,
     "late_ticks": 0
   },
   "hw": {
@@ -90,24 +90,24 @@
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 238,
-        "txdone_mean_ms": 200.6,
-        "echo_max_ms": 600,
-        "echo_mean_ms": 557.2
+        "txdone_max_ms": 278,
+        "txdone_mean_ms": 218.0,
+        "echo_max_ms": 618,
+        "echo_mean_ms": 557.3
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 531,
-        "txdone_mean_ms": 494.6,
-        "echo_max_ms": 1517,
-        "echo_mean_ms": 1476.8
+        "txdone_max_ms": 532,
+        "txdone_mean_ms": 499.6,
+        "echo_max_ms": 1537,
+        "echo_mean_ms": 1478.1
       }
     ],
     "cbl": {
-      "n": 1281,
-      "max_us": 1926,
-      "mean_us": 1096
+      "n": 1342,
+      "max_us": 1944,
+      "mean_us": 1108
     }
   },
   "fail_code": null,

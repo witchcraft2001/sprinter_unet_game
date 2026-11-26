@@ -26,6 +26,8 @@
       "BOOTDSK": "C:",
       "NET": "WIFI",
       "NET_HW": null,
+      "NET_RTL_HW": null,
+      "NET_ESP_HW": "0/#3E8",
       "NET_IDPORT": null,
       "NET_MAC": "<set 6a8c>",
       "NET_IP_SRC": "DHCP",
@@ -36,6 +38,19 @@
       "NET_BAUD": "115200",
       "NET_ESP_FLOW": "3",
       "NET_ESP_FW": "<set 485e>"
+    },
+    "netenv": {
+      "code": "OK",
+      "var": 146,
+      "hw": "ESP",
+      "isa_slot": 0,
+      "io_base": "0x3E8",
+      "id_port": "0x0",
+      "uart_divisor": 8,
+      "uart_flow": 1,
+      "esp_flow": 3,
+      "set": [],
+      "name": "GUDPESP.DLL"
     }
   },
   "probe": {
@@ -50,14 +65,14 @@
         167,
         166,
         166,
-        166,
-        179,
+        167,
         178,
         178,
-        178
+        178,
+        179
       ],
       "ISA_WR": [
-        177,
+        168,
         167,
         167,
         168,
@@ -73,7 +88,7 @@
       "CTC": [
         458,
         1517,
-        18188,
+        18192,
         0
       ],
       "MSR": [
@@ -81,15 +96,15 @@
         96
       ],
       "UART08": [
-        172,
+        173,
         22,
         8,
         0,
         0,
         0,
         0,
-        1,
         0,
+        1,
         0,
         0,
         21,
@@ -107,11 +122,11 @@
         "B"
       ],
       "UART04": [
-        172,
-        43,
+        173,
+        44,
         4,
         0,
-        0,
+        1,
         0,
         0,
         43,
@@ -133,7 +148,7 @@
         "B"
       ],
       "UART0E": [
-        172,
+        173,
         11,
         17,
         0,
@@ -142,14 +157,14 @@
         0,
         0,
         0,
-        1,
-        0,
-        0,
-        0,
-        0,
         0,
         0,
         1,
+        0,
+        0,
+        0,
+        1,
+        0,
         0,
         0,
         9
@@ -170,28 +185,28 @@
       "wait_share": 0.554
     },
     "ISA_RD": {
-      "extra_us_per_access_max": -0.143,
-      "extra_us_per_access_mean": -0.143,
+      "extra_us_per_access_max": -0.131,
+      "extra_us_per_access_mean": -0.14,
       "portion_64_us_max": 127.2
     },
     "ISA_WR": {
-      "extra_us_per_access_max": -0.024,
-      "extra_us_per_access_mean": -0.113,
-      "portion_64_us_max": 134.9
+      "extra_us_per_access_max": -0.131,
+      "extra_us_per_access_mean": -0.14,
+      "portion_64_us_max": 128.0
     },
     "BRACKET": {
       "us_per_bracket": 30.429
     },
     "CTC": {
       "sample_us": 31.22,
-      "chain_counts_per_frame": 18188,
+      "chain_counts_per_frame": 18192,
       "chain_counts_expected": 17920,
       "chain_counting": true,
       "samples_without_stamp": 0
     },
     "UART08": {
       "trigger": 8,
-      "bytes": 172,
+      "bytes": 173,
       "drains": 22,
       "max_per_drain": 8,
       "overruns": 0,
@@ -199,8 +214,8 @@
         0,
         0,
         0,
-        1,
         0,
+        1,
         0,
         0,
         21,
@@ -221,12 +236,12 @@
     },
     "UART04": {
       "trigger": 4,
-      "bytes": 172,
-      "drains": 43,
+      "bytes": 173,
+      "drains": 44,
       "max_per_drain": 4,
       "overruns": 0,
       "hist_1_16plus": [
-        0,
+        1,
         0,
         0,
         43,
@@ -251,7 +266,7 @@
     },
     "UART0E": {
       "trigger": 14,
-      "bytes": 172,
+      "bytes": 173,
       "drains": 11,
       "max_per_drain": 17,
       "overruns": 0,
@@ -261,14 +276,14 @@
         0,
         0,
         0,
-        1,
-        0,
-        0,
-        0,
-        0,
         0,
         0,
         1,
+        0,
+        0,
+        0,
+        1,
+        0,
         0,
         0,
         9

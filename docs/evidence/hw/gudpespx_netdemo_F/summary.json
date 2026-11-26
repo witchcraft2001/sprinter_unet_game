@@ -34,20 +34,20 @@
     "cost_step_us": 3120,
     "periods": 710,
     "largest_period_debit_us": 4067,
-    "now_ms": 14208,
+    "now_ms": 14210,
     "stats": {
-      "refuse": 1850,
+      "refuse": 1825,
       "busy": 0,
       "isr": 0,
       "step": 711,
-      "early": 6762,
-      "frames": 540,
-      "ticks": 7107,
+      "early": 6773,
+      "frames": 528,
+      "ticks": 7108,
       "unknown": 0,
       "mask": 0,
-      "cbl": 540,
+      "cbl": 528,
       "key": 0,
-      "late": 67
+      "late": 66
     }
   },
   "stats": {
@@ -57,21 +57,21 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 2093,
-    "polls_useful": 906,
+    "polls_total": 2126,
+    "polls_useful": 871,
     "steps_total": 711,
     "steps_useful": 711,
-    "budget_yields": 284,
+    "budget_yields": 292,
     "max_step_gap_ms": 22,
     "tx_frames": 188,
-    "rx_frames": 99,
+    "rx_frames": 100,
     "tx_bytes": 3760,
-    "rx_bytes": 8712
+    "rx_bytes": 8800
   },
   "timing_us": {
-    "tick_isr_max": 532,
-    "admitted_ug_step_max": 2921,
-    "largest_tick_gap": 2264,
+    "tick_isr_max": 533,
+    "admitted_ug_step_max": 2940,
+    "largest_tick_gap": 2288,
     "late_ticks": 0
   },
   "hw": {
@@ -84,7 +84,7 @@
       "used": 0
     },
     "bring": {
-      "ms": 2511,
+      "ms": 2513,
       "scratch": 0
     },
     "flow": {
@@ -92,19 +92,19 @@
       "offered": 250,
       "sent": 188,
       "skipped": 62,
-      "at_server": 185,
-      "inputs_per_s": 18.5,
+      "at_server": 184,
+      "inputs_per_s": 18.4,
       "states": 99,
       "states_lost": 0,
       "txdone_max_ms": 60,
-      "loop_max_ms": 239,
-      "loop_mean_ms": 177.9,
+      "loop_max_ms": 197,
+      "loop_mean_ms": 159.2,
       "state_gap_max_ms": 122
     },
     "cbl": {
-      "n": 540,
-      "max_us": 18072,
-      "mean_us": 4608
+      "n": 529,
+      "max_us": 18018,
+      "mean_us": 4582
     }
   },
   "fail_code": null,

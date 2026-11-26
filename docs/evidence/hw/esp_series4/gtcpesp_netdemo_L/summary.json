@@ -1,0 +1,34 @@
+{
+  "stand": "Ж",
+  "prog": "netdemo",
+  "dll": "gtcpesp",
+  "scenario": "L",
+  "file": "NESPTL.TXT",
+  "frame_ms_assumed": 20.48,
+  "result": "PASS",
+  "load": {
+    "status": 0,
+    "libman_reason": 0,
+    "handle": 0,
+    "page": 234,
+    "base": "0x4000"
+  },
+  "hw": {
+    "scen": "L",
+    "slot": {
+      "configured": 0,
+      "found": [
+        0
+      ],
+      "used": 0
+    }
+  },
+  "fail_code": null,
+  "init_config": null,
+  "save_failed": false,
+  "report_full": false,
+  "criteria": {
+    "result": true,
+    "card_found": true
+  }
+}

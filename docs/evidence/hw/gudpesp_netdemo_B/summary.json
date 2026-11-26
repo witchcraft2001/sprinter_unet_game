@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 231,
     "cost_step_us": 2120,
-    "periods": 765,
-    "largest_period_debit_us": 6570,
-    "now_ms": 15302,
+    "periods": 751,
+    "largest_period_debit_us": 6555,
+    "now_ms": 15018,
     "stats": {
-      "refuse": 2,
+      "refuse": 0,
       "busy": 0,
       "isr": 0,
-      "step": 1514,
-      "early": 6829,
-      "frames": 607,
-      "ticks": 7654,
+      "step": 1502,
+      "early": 6656,
+      "frames": 595,
+      "ticks": 7512,
       "unknown": 0,
       "mask": 0,
-      "cbl": 607,
+      "cbl": 595,
       "key": 0,
       "late": 0
     }
@@ -57,10 +57,10 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 9050,
-    "steps_total": 1514,
-    "steps_useful": 1514,
-    "budget_yields": 699,
+    "polls_total": 8896,
+    "steps_total": 1502,
+    "steps_useful": 1502,
+    "budget_yields": 727,
     "max_step_gap_ms": 12,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -68,9 +68,9 @@
     "rx_bytes": 5824
   },
   "timing_us": {
-    "tick_isr_max": 395,
-    "admitted_ug_step_max": 2280,
-    "largest_tick_gap": 2062,
+    "tick_isr_max": 400,
+    "admitted_ug_step_max": 2547,
+    "largest_tick_gap": 2028,
     "late_ticks": 0
   },
   "hw": {
@@ -90,24 +90,24 @@
       {
         "bytes": 64,
         "n": 16,
-        "txdone_max_ms": 112,
-        "txdone_mean_ms": 103.8,
-        "echo_max_ms": 278,
-        "echo_mean_ms": 235.3
+        "txdone_max_ms": 226,
+        "txdone_mean_ms": 113.1,
+        "echo_max_ms": 270,
+        "echo_mean_ms": 224.6
       },
       {
         "bytes": 300,
         "n": 16,
-        "txdone_max_ms": 258,
-        "txdone_mean_ms": 249.2,
-        "echo_max_ms": 716,
-        "echo_mean_ms": 689.9
+        "txdone_max_ms": 254,
+        "txdone_mean_ms": 245.2,
+        "echo_max_ms": 738,
+        "echo_mean_ms": 681.0
       }
     ],
     "cbl": {
-      "n": 608,
-      "max_us": 1946,
-      "mean_us": 1103
+      "n": 596,
+      "max_us": 1947,
+      "mean_us": 1132
     }
   },
   "fail_code": null,

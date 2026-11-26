@@ -32,20 +32,20 @@
     },
     "cost_poll_us": 411,
     "cost_step_us": 3120,
-    "periods": 309,
+    "periods": 298,
     "largest_period_debit_us": 3686,
-    "now_ms": 6187,
+    "now_ms": 5967,
     "stats": {
-      "refuse": 1410,
+      "refuse": 1399,
       "busy": 0,
       "isr": 0,
-      "step": 310,
-      "early": 2970,
-      "frames": 261,
-      "ticks": 3095,
+      "step": 299,
+      "early": 2854,
+      "frames": 254,
+      "ticks": 2985,
       "unknown": 0,
       "mask": 0,
-      "cbl": 261,
+      "cbl": 254,
       "key": 0,
       "late": 0
     }
@@ -57,11 +57,11 @@
     "avail": 1,
     "timing_mode": 2,
     "ctx_state": 1,
-    "polls_total": 756,
-    "polls_useful": 183,
-    "steps_total": 310,
-    "steps_useful": 310,
-    "budget_yields": 79,
+    "polls_total": 719,
+    "polls_useful": 182,
+    "steps_total": 299,
+    "steps_useful": 299,
+    "budget_yields": 84,
     "max_step_gap_ms": 20,
     "tx_frames": 32,
     "rx_frames": 32,
@@ -69,9 +69,9 @@
     "rx_bytes": 1280
   },
   "timing_us": {
-    "tick_isr_max": 534,
-    "admitted_ug_step_max": 2694,
-    "largest_tick_gap": 2261,
+    "tick_isr_max": 530,
+    "admitted_ug_step_max": 2744,
+    "largest_tick_gap": 2254,
     "late_ticks": 0
   },
   "hw": {
@@ -92,23 +92,23 @@
         "bytes": 16,
         "n": 16,
         "txdone_max_ms": 98,
-        "txdone_mean_ms": 79.6,
-        "echo_max_ms": 138,
-        "echo_mean_ms": 108.4
+        "txdone_mean_ms": 79.5,
+        "echo_max_ms": 180,
+        "echo_mean_ms": 105.8
       },
       {
         "bytes": 64,
         "n": 16,
         "txdone_max_ms": 138,
-        "txdone_mean_ms": 137.8,
+        "txdone_mean_ms": 137.9,
         "echo_max_ms": 298,
-        "echo_mean_ms": 235.1
+        "echo_mean_ms": 223.2
       }
     ],
     "cbl": {
-      "n": 262,
-      "max_us": 19614,
-      "mean_us": 9665
+      "n": 254,
+      "max_us": 19659,
+      "mean_us": 9773
     }
   },
   "fail_code": null,

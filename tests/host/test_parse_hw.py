@@ -196,6 +196,17 @@ class ParseHwTests(unittest.TestCase):
         ne = parse_hw.state_of("CARD 21\r\nNETENV 04 0A 01 01 03E8 0000 0008 00 00 00 NET_ESP_FLOW\r\n")[1]["netenv"]
         self.assertEqual((ne["code"], ne["var"], ne["name"]), ("E_FLOW", 10, "NET_ESP_FLOW"))
 
+    def test_glued_line(self) -> None:
+        # the fail path of NETDEMO C wrote GW into the unfinished LATMS line
+        # (fifth ESP series): the complete 64-byte group still counts
+        rep = "\r\n".join(["NETDEMO GUDPESP.DLL", "SCEN C", "SLOT 0 01 0", "OPEN", "EV 01/00",
+                           "LATMS 0040 10 0064 0622 0208 1464GW 000100A3", "STATS 0001", "SHUTDOWN 00",
+                           "RESULT: FAIL E", ""])
+        s = self.parse("NESPXC.TXT", rep)
+        self.assertEqual(s["hw"]["latms"], [{"bytes": 64, "n": 16, "txdone_max_ms": 100, "txdone_mean_ms": 98.1,
+                                             "echo_max_ms": 520, "echo_mean_ms": 326.2}])
+        self.assertEqual(s["result"], "FAIL")
+
     def test_name_mismatch(self) -> None:
         with self.assertRaises(ValueError):
             self.parse("UESPTS.TXT", ugtest_report())          # the report says GTCPRTL
